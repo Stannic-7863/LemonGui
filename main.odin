@@ -2,28 +2,38 @@ package main
 
 import "core:fmt"
 import "core:hash"
-import "core:mem"
+import "core:time"
 
 import rl "vendor:raylib"
 
 Vec2f32 :: [2]f32
+Vec4f32 :: [4]f32 // for corners and padding : top right bottom left 
 Color :: [4]u8
 
-// TODO : Clipping rects 
-// TODO : Style strcut + its placement, is it local to each widget or is it a global ctx thing? 
-// TODO : Separate Flags into render flags and events flags 
-// TODO : Support for floating elements
-// TODO : Support for free elements that will be dragged and set by the user
-// TODO : Allow overgrowing elements. (They will probably need some special handling to having the correct draw order)
-// TODO : Add more events in widget events and time tracking for events like double click
-// TODO : Keyboard Interface directly from core. Add helpers to map events. Add focus events or focus state  
-// TODO : Errors for the primitive functions 
-// TODO : Good defaults, or leave that to builder code 
-// TODO : Padding and child gap calc in Layout alg 
-// TODO : Max size constraint 
-// TODO : Support for free elements and elements with position set to mouse + offset
+Sides :: struct {
+	left, right, top, bottom: f32,
+}
 
-// TODO : Add root node in init context proc. Write deinit ctx proc 
+// Passes : 
+// Widget creation + event checks from last frame 
+// Layout pass 
+// Style pass (This will handle anims and styling for hot and active widgets) 
+// Render command pass
+// Render pass 
+
+// API
+// Main Task : Collapse feature flags into Layout, Layout styling, styling
+// Keyboard Interface directly from core. Add helpers to map events. Add focus events or focus state  
+// Errors for the primitive functions 
+
+// LAYOUT 
+// Support clipping rects 
+// Support max size constraint 
+// Support for floating elements
+// Support for free elements that are rendered on top of everything else. Position set by user
+// Support for justify and related layout styling options 
+// Support vertical text (example : Jap)
+// Support overgrowing elements (They will probably need some special handling to having the correct draw order)
 
 /*
    Check events against widgets from prev frame.
@@ -32,18 +42,30 @@ Color :: [4]u8
 */
 
 Core_Context :: struct {
-	widgets_added:      int,
-	commands_added:     int,
-	current_parent:     ^Widget,
-	last_widget:        ^Widget, // last widget index 
-	hot_widget_id:      uint, //id, widget currently under mouse 😩  
-	active_widget_id:   uint, //id, widget currently being interacted with 
-	mouse_position:     Vec2f32, // position of cursor
-	mouse_delta:        Vec2f32, // change in position per frame 
-	widgets:            []Widget, // array of widgets
-	render_commands:    []Render_Command,
-	mouse_events:       bit_set[Mouse_Events],
-	last_frame_widgets: map[uint]Widget, // widgets from last frame. Used to query events. Accessed by widget.id
+	window_height, window_width: f32,
+	widgets_added:               int,
+	commands_added:              int,
+	hot_widget_id:               uint, //id, widget currently under mouse  
+	active_widget_id:            uint, //id, widget currently being interacted with 
+	current_parent:              ^Widget,
+	last_widget:                 ^Widget,
+	mouse:                       Mouse_Context,
+	widgets:                     []Widget,
+	render_commands:             []Render_Command,
+	last_frame_widgets:          map[uint]Widget, // widgets from last frame. Used to query events. Accessed by widget.id
+}
+
+Mouse_Context :: struct {
+	old_position:         Vec2f32,
+	position:             Vec2f32,
+	scroll:               f32,
+	last_left_click:      time.Time,
+	last_right_click:     time.Time,
+	left_down_start:      time.Time,
+	right_down_start:     time.Time,
+	long_down_timeout:    time.Duration,
+	double_click_timeout: time.Duration,
+	events:               bit_set[Mouse_Event],
 }
 
 Render_Command :: struct {
@@ -52,14 +74,16 @@ Render_Command :: struct {
 }
 
 // The rendering flags should probably be baked into styling instead of here, More control per widget + no push pop ???
-
+// Push pop system should be builder code responsibilty 
 Widget_Flags :: enum {
-	Left_Clickable,
-	Right_Clickable,
-	Double_Left_Clickable,
-	Dobule_Right_Clickable,
 	Dragable,
 	No_Event_Cull, // Child will not cull event from parent (If mouse over child, parent will recieve the event instead)
+}
+
+Border_Style :: struct {
+	color:     Color,
+	radius:    Vec4f32,
+	thickness: Vec4f32,
 }
 
 Style :: struct {
@@ -67,35 +91,47 @@ Style :: struct {
 	default_color: Color,
 	hover_color:   Color,
 	press_color:   Color,
+	border:        Border_Style,
 }
 
-// TODO : clean this struct 
 Widget :: struct {
 	next:                  ^Widget,
 	prev:                  ^Widget,
 	parent:                ^Widget,
 	last_child:            ^Widget,
 	first_child:           ^Widget,
-	id:                    uint,
 	index, total_children: int,
+	id:                    uint,
 	size, position:        Vec2f32, // computed positions and sizes
 	layout:                Layout, // describe how the widget should be placed along x, y axis 
-	flags:                 bit_set[Widget_Flags],
 	style:                 Style,
+	flags:                 bit_set[Widget_Flags],
 }
 
 init_core_context :: proc(widget_arr_backing_length: int) -> Core_Context {
 	ctx := Core_Context{}
 	ctx.widgets = make([]Widget, widget_arr_backing_length)
+	ctx.render_commands = make([]Render_Command, widget_arr_backing_length)
 	return ctx
+}
+
+deinit_core_context :: proc(ctx: ^Core_Context) {
+	delete(ctx.widgets)
+	delete(ctx.render_commands)
+	delete(ctx.last_frame_widgets)
 }
 
 begin_ui :: proc(ctx: ^Core_Context) {
 	ctx.widgets_added = 0
 	ctx.commands_added = 0
-	ctx.current_parent = nil
+	root := create_widget(ctx, {}, layout({fixed(ctx.window_width), fixed(ctx.window_height)}, 16, 16, .Row), {})
+	push_parent(ctx, root)
+}
+
+end_ui :: proc(ctx: ^Core_Context) {
 	ctx.last_widget = nil
-	ctx.mouse_events = {}
+	ctx.mouse.events = {}
+	ctx.current_parent = nil
 }
 
 push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) {
@@ -109,7 +145,7 @@ pop_parent :: proc(ctx: ^Core_Context) {
 create_widget :: proc(ctx: ^Core_Context, flags: bit_set[Widget_Flags], layout_config: Layout, style: Style) -> ^Widget {
 	w: ^Widget = &ctx.widgets[ctx.widgets_added]
 
-	w^ = {}
+	w^ = {} // zero out 
 
 	w.index = ctx.widgets_added
 	w.flags = flags
@@ -167,8 +203,6 @@ create_widget :: proc(ctx: ^Core_Context, flags: bit_set[Widget_Flags], layout_c
 	return w
 }
 
-
-import t "core:time"
 get_render_commands :: proc(ctx: ^Core_Context) {
 
 	/*
@@ -179,7 +213,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 		Fit size along x axes -> post order traversal. Childs will propagate their sizes to parents. Post order ensures childs have valid sizes
 		Grow size along x axes -> pre order traversal. Parents will give remaining space to growable childs
 
-		Text wrap -> Any widget containing text will have the text wrapped along its x axes. Need to add handling for vertical text (Jap)
+		Text wrap -> Any widget containing text will have the text wrapped along its x axes. 
 		
 		Fit size along y axes -> post order traversal 
 		Grow size along y axes -> pre order traversal 
@@ -211,6 +245,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 	append(&temp_stack, &ctx.widgets[0])
 
 	for {
+
 		node := pop_safe(&temp_stack) or_break
 
 		append(&stack_pre_order, node)
@@ -234,7 +269,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 	// 2nd pass : Fit sizing along x axis 
 	#reverse for node in reverse_stack_post_order {
 		if node.layout.sizing.x.kind == .Grow {
-			node.size.x = max(node.layout.min.x, node.layout.sizing.x.min)
+			node.size.x = max(node.layout._min.x, node.layout.sizing.x.min)
 		} // Tree is walked from leaf nodes. 
 
 		layout_fit(0, node)
@@ -242,7 +277,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 
 		if node.layout.sizing.x.kind == .Fit {
 			padding := node.layout.padding
-			node.size.x += padding.left + padding.right
+			node.size.x += padding[3] + padding[1]
 			if node.layout.direction == .Row {
 				node.size.x += f32(node.total_children - 1) * node.layout.child_gap
 			}
@@ -265,7 +300,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 
 	#reverse for node in reverse_stack_post_order {
 		if node.layout.sizing.y.kind == .Grow {
-			node.size.y = max(node.layout.min.y, node.layout.sizing.y.min)
+			node.size.y = max(node.layout._min.y, node.layout.sizing.y.min)
 		}
 
 		layout_fit(1, node)
@@ -273,7 +308,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 		padding := node.layout.padding
 
 		if node.layout.sizing.y.kind == .Fit {
-			node.size.y += padding.top + padding.bottom
+			node.size.y += padding[0] + padding[2]
 			if node.layout.direction == .Colom {
 				node.size.y += f32(node.total_children - 1) * node.layout.child_gap
 			}
@@ -298,12 +333,12 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 		padding := node.layout.padding
 
 		if along_axis == 0 {
-			position_increment[along_axis] += padding.left
-			position_increment[across_axis] += padding.top
+			position_increment[along_axis] += padding[3]
+			position_increment[across_axis] += padding[0]
 		}
 		if along_axis == 1 {
-			position_increment[along_axis] += padding.top
-			position_increment[across_axis] += padding.left
+			position_increment[along_axis] += padding[0]
+			position_increment[across_axis] += padding[3]
 		}
 
 		for child := node.first_child; child != nil; child = child.next {
@@ -313,7 +348,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 		}
 
 		if node.flags & {.No_Event_Cull} == {} {
-			if is_point_in_rect(node.position, node.size, ctx.mouse_position) && ctx.active_widget_id == 0 {
+			if is_point_in_rect(node.position, node.size, ctx.mouse.position) && ctx.active_widget_id == 0 {
 				ctx.hot_widget_id = node.id
 			}
 		}
@@ -333,7 +368,6 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 	for w in ctx.widgets {
 		ctx.last_frame_widgets[w.id] = w
 	}
-
 }
 
 
@@ -342,30 +376,33 @@ main :: proc() {
 	rl.InitWindow(700, 700, "Balls?")
 	defer rl.CloseWindow()
 
-	rl.SetTargetFPS(60)
-
 	ctx := init_core_context(32)
-	ctx.render_commands = make([]Render_Command, 32)
+	ctx.mouse.double_click_timeout = time.Millisecond * 300
+	ctx.mouse.long_down_timeout = time.Millisecond * 1000
+
 	defer delete(ctx.last_frame_widgets)
 	defer delete(ctx.render_commands)
 	defer delete(ctx.widgets)
 
 	for !rl.WindowShouldClose() {
+		ctx.window_width = cast(f32)rl.GetScreenWidth()
+		ctx.window_height = cast(f32)rl.GetScreenHeight()
 
 		defer free_all(context.temp_allocator)
 		begin_ui(&ctx)
 
-		if rl.IsMouseButtonDown(.LEFT) {ctx.mouse_events |= {.Left_Down}}
-		if rl.IsMouseButtonDown(.RIGHT) {ctx.mouse_events |= {.Right_Down}}
-		if rl.IsMouseButtonDown(.MIDDLE) {ctx.mouse_events |= {.Middle_Down}}
-		if rl.IsMouseButtonPressed(.LEFT) {ctx.mouse_events |= {.Left_Pressed}}
-		if rl.IsMouseButtonPressed(.RIGHT) {ctx.mouse_events |= {.Right_Pressed}}
-		if rl.IsMouseButtonPressed(.MIDDLE) {ctx.mouse_events |= {.Middle_Pressed}}
-		if rl.IsMouseButtonReleased(.LEFT) {ctx.mouse_events |= {.Left_Released}}
-		if rl.IsMouseButtonReleased(.RIGHT) {ctx.mouse_events |= {.Right_Released}}
-		if rl.IsMouseButtonReleased(.MIDDLE) {ctx.mouse_events |= {.Middle_Released}}
+		if rl.IsMouseButtonDown(.LEFT) {ctx.mouse.events += {.Left_Down}}
+		if rl.IsMouseButtonDown(.RIGHT) {ctx.mouse.events += {.Right_Down}}
+		if rl.IsMouseButtonDown(.MIDDLE) {ctx.mouse.events += {.Middle_Down}}
+		if rl.IsMouseButtonPressed(.LEFT) {ctx.mouse.events += {.Left_Pressed}}
+		if rl.IsMouseButtonPressed(.RIGHT) {ctx.mouse.events += {.Right_Pressed}}
+		if rl.IsMouseButtonPressed(.MIDDLE) {ctx.mouse.events += {.Middle_Pressed}}
+		if rl.IsMouseButtonReleased(.LEFT) {ctx.mouse.events += {.Left_Released}}
+		if rl.IsMouseButtonReleased(.RIGHT) {ctx.mouse.events += {.Right_Released}}
+		if rl.IsMouseButtonReleased(.MIDDLE) {ctx.mouse.events += {.Middle_Released}}
 
-		ctx.mouse_position = rl.GetMousePosition()
+		ctx.mouse.old_position = ctx.mouse.position
+		ctx.mouse.position = rl.GetMousePosition()
 
 		style := Style {
 			press_color   = {0, 0, 0, 255},
@@ -373,51 +410,42 @@ main :: proc() {
 			default_color = {75, 75, 75, 255},
 		}
 
-		papa_widget := create_widget(
-			&ctx,
-			{},
-			{
-				sizing = {fixed(cast(f32)rl.GetScreenWidth()), fixed(cast(f32)rl.GetScreenHeight())},
-				direction = .Colom,
-				padding = {16, 16, 16, 16},
-				child_gap = 16,
-			},
-			style,
-		)
-		push_parent(&ctx, papa_widget)
-
 		style.default_color = {255, 255, 150, 255}
-		w_1 := create_widget(&ctx, {.Left_Clickable}, {sizing = {fixed(50), fixed(50)}}, style)
-		w_2 := create_widget(&ctx, {.Left_Clickable}, {sizing = {fit(0, 0), fit(0, 0)}, padding = {16, 16, 16, 16}}, style)
-		get_widget_events(&ctx, w_1)
-		get_widget_events(&ctx, w_2)
+		w_1 := create_widget(&ctx, {}, {sizing = {fixed(50), fixed(50)}}, style)
+		w_2 := create_widget(&ctx, {}, {sizing = {grow(100, 0), grow(100, 0)}, padding = 16}, style)
+		e, _ := get_widget_events(&ctx, w_1)
+		if e != {} && e != {.Hovered} {
+			fmt.println(e)
+		}
+
 		push_parent(&ctx, w_2)
-		style.default_color = {255, 0, 150, 255}
-		w_21 := create_widget(&ctx, {.Left_Clickable}, {sizing = {fixed(50), fixed(50)}}, style)
-		get_widget_events(&ctx, w_21)
+		{
+			style.default_color = {255, 0, 150, 255}
+			w_21 := create_widget(&ctx, {}, {sizing = {fixed(50), fixed(50)}}, style)
+			get_widget_events(&ctx, w_21)
+		}
 		pop_parent(&ctx)
 
 		style.default_color = {255, 255, 150, 255}
-		w_3 := create_widget(
-			&ctx,
-			{.Left_Clickable, .Dragable, .Right_Clickable},
-			{sizing = {fit(0, 0), fit(0, 0)}, child_gap = 16, padding = {16, 16, 16, 16}, direction = .Row},
-			style,
-		)
+		w_3 := create_widget(&ctx, {.Dragable}, {sizing = {fit(0, 0), fit(0, 0)}, child_gap = 16, padding = 16, direction = .Row}, style)
 		get_widget_events(&ctx, w_3)
+
 		push_parent(&ctx, w_3)
-		style.default_color = {255, 0, 150, 255}
-		w_31 := create_widget(&ctx, {.No_Event_Cull}, {sizing = {grow(50, 50), grow(50, 50)}}, style)
-		get_widget_events(&ctx, w_31)
-		w_32 := create_widget(&ctx, {.Left_Clickable}, {sizing = {grow(50, 50), grow(50, 50)}}, style)
-		get_widget_events(&ctx, w_32)
+		{
+			style.default_color = {255, 0, 150, 255}
+			w_31 := create_widget(&ctx, {.No_Event_Cull}, {sizing = {grow(50, 50), grow(50, 50)}}, style)
+			get_widget_events(&ctx, w_31)
+			w_32 := create_widget(&ctx, {}, {sizing = {grow(50, 50), grow(50, 50)}}, style)
+			get_widget_events(&ctx, w_32)
+		}
 		pop_parent(&ctx)
 
 		style.default_color = {255, 255, 150, 255}
-		w_6 := create_widget(&ctx, {.Left_Clickable, .Right_Clickable}, {sizing = {grow(50, 50), grow(50, 50)}}, style)
+		w_6 := create_widget(&ctx, {}, {sizing = {grow(50, 50), grow(50, 50)}}, style)
 		get_widget_events(&ctx, w_6)
-		get_render_commands(&ctx)
 
+		end_ui(&ctx)
+		get_render_commands(&ctx)
 
 		rl.BeginDrawing()
 		rl.ClearBackground({45, 60, 70, 255})
@@ -430,4 +458,5 @@ render :: proc(ctx: Core_Context) {
 	for cmd in ctx.render_commands[:ctx.commands_added] {
 		rl.DrawRectangleV(cmd.position, cmd.size, cast(rl.Color)cmd.color)
 	}
+	rl.DrawFPS(10, 10)
 }
