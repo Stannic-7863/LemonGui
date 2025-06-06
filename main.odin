@@ -43,22 +43,25 @@ Sides :: struct {
 
 Core_Context :: struct {
 	window_height, window_width: f32,
-	widgets_added:               int,
-	commands_added:              int,
 	hot_widget_id:               uint, //id, widget currently under mouse  
 	active_widget_id:            uint, //id, widget currently being interacted with 
 	current_parent:              ^Widget,
 	last_widget:                 ^Widget,
 	mouse:                       Mouse_Context,
-	widgets:                     []Widget,
-	render_commands:             []Render_Command,
+	widgets:                     [dynamic]Widget,
+	render_commands:             [dynamic]Render_Command,
+	layout_stack:                struct {
+		reverse_post_order: [dynamic]^Widget,
+		pre_order:          [dynamic]^Widget,
+		temp:               [dynamic]^Widget,
+	},
 	last_frame_widgets:          map[uint]Widget, // widgets from last frame. Used to query events. Accessed by widget.id
 }
 
 Mouse_Context :: struct {
-	old_position:         Vec2f32,
-	position:             Vec2f32,
 	scroll:               f32,
+	position:             Vec2f32,
+	old_position:         Vec2f32,
 	last_left_click:      time.Time,
 	last_right_click:     time.Time,
 	left_down_start:      time.Time,
@@ -69,29 +72,27 @@ Mouse_Context :: struct {
 }
 
 Render_Command :: struct {
-	size, position: Vec2f32,
-	color:          [4]u8,
+	type: Render_Command_Type,
 }
 
-// The rendering flags should probably be baked into styling instead of here, More control per widget + no push pop ???
-// Push pop system should be builder code responsibilty 
-Widget_Flags :: enum {
-	Dragable,
-	No_Event_Cull, // Child will not cull event from parent (If mouse over child, parent will recieve the event instead)
+Render_Command_Type :: union {
+	Command_Rect,
 }
 
-Border_Style :: struct {
-	color:     Color,
-	radius:    Vec4f32,
-	thickness: Vec4f32,
+Command_Rect :: struct {
+	size, position:   Vec2f32,
+	border_radius:    Vec4f32,
+	border_thickness: Vec4f32,
+	color:            [4]u8,
 }
 
 Style :: struct {
-	current_color: Color,
-	default_color: Color,
-	hover_color:   Color,
-	press_color:   Color,
-	border:        Border_Style,
+	current_color:    Color,
+	default_color:    Color,
+	hover_color:      Color,
+	press_color:      Color,
+	border_radius:    Vec4f32,
+	border_thickness: Vec4f32,
 }
 
 Widget :: struct {
@@ -108,10 +109,20 @@ Widget :: struct {
 	flags:                 bit_set[Widget_Flags],
 }
 
+// The rendering flags should probably be baked into styling instead of here, More control per widget + no push pop ???
+// Push pop system should be builder code responsibilty 
+Widget_Flags :: enum {
+	Draw_Text,
+	No_Event_Cull, // Child will not cull event from parent (If mouse over child, parent will recieve the event instead)
+}
+
 init_core_context :: proc(widget_arr_backing_length: int) -> Core_Context {
 	ctx := Core_Context{}
-	ctx.widgets = make([]Widget, widget_arr_backing_length)
-	ctx.render_commands = make([]Render_Command, widget_arr_backing_length)
+	ctx.widgets = make([dynamic]Widget, widget_arr_backing_length)
+	ctx.render_commands = make([dynamic]Render_Command, widget_arr_backing_length)
+	ctx.layout_stack.temp = make([dynamic]^Widget, 0, widget_arr_backing_length)
+	ctx.layout_stack.pre_order = make([dynamic]^Widget, 0, widget_arr_backing_length)
+	ctx.layout_stack.reverse_post_order = make([dynamic]^Widget, 0, widget_arr_backing_length)
 	return ctx
 }
 
@@ -122,8 +133,8 @@ deinit_core_context :: proc(ctx: ^Core_Context) {
 }
 
 begin_ui :: proc(ctx: ^Core_Context) {
-	ctx.widgets_added = 0
-	ctx.commands_added = 0
+	clear(&ctx.render_commands)
+	clear(&ctx.widgets)
 	root := create_widget(ctx, {}, layout({fixed(ctx.window_width), fixed(ctx.window_height)}, 16, 16, .Row), {})
 	push_parent(ctx, root)
 }
@@ -143,17 +154,17 @@ pop_parent :: proc(ctx: ^Core_Context) {
 }
 
 create_widget :: proc(ctx: ^Core_Context, flags: bit_set[Widget_Flags], layout_config: Layout, style: Style) -> ^Widget {
-	w: ^Widget = &ctx.widgets[ctx.widgets_added]
+	append(&ctx.widgets, Widget{})
+	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
 
 	w^ = {} // zero out 
 
-	w.index = ctx.widgets_added
+	w.index = len(ctx.widgets) - 1
 	w.flags = flags
 	w.parent = ctx.current_parent
 	w.layout = layout_config
 	w.style = style
 	w.style.current_color = w.style.default_color
-	ctx.widgets_added += 1
 
 	if ctx.current_parent != nil {
 		ctx.current_parent.total_children += 1
@@ -224,41 +235,38 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 
 	*/
 
-	reverse_stack_post_order: [dynamic]^Widget = make([dynamic]^Widget, 0, len(ctx.widgets), context.temp_allocator)
-	stack_pre_order: [dynamic]^Widget = make([dynamic]^Widget, 0, len(ctx.widgets), context.temp_allocator)
-	temp_stack: [dynamic]^Widget = make([dynamic]^Widget, 0, len(ctx.widgets), context.temp_allocator)
 
-	append(&temp_stack, &ctx.widgets[0]) // append root node 
+	append(&ctx.layout_stack.temp, &ctx.widgets[0]) // append root node 
 
 	for {
-		node := pop_safe(&temp_stack) or_break
+		node := pop_safe(&ctx.layout_stack.temp) or_break
 
-		append(&reverse_stack_post_order, node)
+		append(&ctx.layout_stack.reverse_post_order, node)
 
 		for node_child := node.first_child; node_child != nil; node_child = node_child.next {
-			append(&temp_stack, node_child)
+			append(&ctx.layout_stack.temp, node_child)
 		}
 	}
 
 
-	clear(&temp_stack)
-	append(&temp_stack, &ctx.widgets[0])
+	clear(&ctx.layout_stack.temp)
+	append(&ctx.layout_stack.temp, &ctx.widgets[0])
 
 	for {
 
-		node := pop_safe(&temp_stack) or_break
+		node := pop_safe(&ctx.layout_stack.temp) or_break
 
-		append(&stack_pre_order, node)
+		append(&ctx.layout_stack.pre_order, node)
 
 		for node_child := node.last_child; node_child != nil; node_child = node_child.prev {
-			append(&temp_stack, node_child)
+			append(&ctx.layout_stack.temp, node_child)
 		}
 	}
 
-	clear(&temp_stack)
+	clear(&ctx.layout_stack.temp)
 
 	// 1st pass : Fixed Size 
-	#reverse for node in reverse_stack_post_order {
+	#reverse for node in ctx.layout_stack.reverse_post_order {
 		for i in 0 ..= 1 {
 			if node.layout.sizing[i].kind == .Fixed {
 				node.size[i] = node.layout.sizing[i].max
@@ -267,7 +275,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 	}
 
 	// 2nd pass : Fit sizing along x axis 
-	#reverse for node in reverse_stack_post_order {
+	#reverse for node in ctx.layout_stack.reverse_post_order {
 		if node.layout.sizing.x.kind == .Grow {
 			node.size.x = max(node.layout._min.x, node.layout.sizing.x.min)
 		} // Tree is walked from leaf nodes. 
@@ -288,7 +296,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 
 	growables := make([dynamic]^Widget, 0, 16, context.temp_allocator)
 	// 3rd pass : Grow sizing along x axis 
-	for node in stack_pre_order {
+	for node in ctx.layout_stack.pre_order {
 		if node.layout.direction == .Row {
 			layout_grow_along_axis(0, node, &growables)
 			clear(&growables)
@@ -298,7 +306,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 		}
 	}
 
-	#reverse for node in reverse_stack_post_order {
+	#reverse for node in ctx.layout_stack.reverse_post_order {
 		if node.layout.sizing.y.kind == .Grow {
 			node.size.y = max(node.layout._min.y, node.layout.sizing.y.min)
 		}
@@ -315,7 +323,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 		}
 	}
 
-	for node in stack_pre_order {
+	for node in ctx.layout_stack.pre_order {
 		if node.layout.direction == .Colom {
 			layout_grow_along_axis(1, node, &growables)
 			clear(&growables)
@@ -325,7 +333,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 		}
 	}
 
-	for node in stack_pre_order {
+	for node in ctx.layout_stack.pre_order {
 		along_axis: int = cast(int)node.layout.direction
 		across_axis: int = (along_axis + 1) % 2
 
@@ -353,17 +361,24 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 			}
 		}
 
-		command: Render_Command
-		command.size = node.size
-		command.color = node.style.current_color
-		command.position = node.position
+		command_rect: Command_Rect
+		command_rect.size = node.size
+		command_rect.color = node.style.current_color
+		command_rect.position = node.position
+		for r, i in node.style.border_radius {
+			command_rect.border_radius[i] = clamp(0, min(node.size.x, node.size.y) / 2, r)
+		}
 
-		ctx.render_commands[ctx.commands_added] = command
-		ctx.commands_added += 1
+		command_rect.border_thickness = node.style.border_thickness
+
+		append(&ctx.render_commands, Render_Command{command_rect})
 	}
 
-
 	clear_map(&ctx.last_frame_widgets)
+
+	clear(&ctx.layout_stack.reverse_post_order)
+	clear(&ctx.layout_stack.pre_order)
+	clear(&ctx.layout_stack.temp)
 
 	for w in ctx.widgets {
 		ctx.last_frame_widgets[w.id] = w
@@ -384,9 +399,17 @@ main :: proc() {
 	defer delete(ctx.render_commands)
 	defer delete(ctx.widgets)
 
+	sdf_shader := rl.LoadShader("", "./sdf_rect_shader.frag")
+
+	img := rl.GenImageColor(1, 1, rl.WHITE)
+	render_texture := rl.LoadTextureFromImage(img)
+	rl.UnloadImage(img)
+	defer rl.UnloadTexture(render_texture)
+
 	for !rl.WindowShouldClose() {
 		ctx.window_width = cast(f32)rl.GetScreenWidth()
 		ctx.window_height = cast(f32)rl.GetScreenHeight()
+
 
 		defer free_all(context.temp_allocator)
 		begin_ui(&ctx)
@@ -408,15 +431,17 @@ main :: proc() {
 			press_color   = {0, 0, 0, 255},
 			hover_color   = {255, 255, 255, 255},
 			default_color = {75, 75, 75, 255},
+			border_radius = {50, 50, 20, 5},
 		}
 
 		style.default_color = {255, 255, 150, 255}
 		w_1 := create_widget(&ctx, {}, {sizing = {fixed(50), fixed(50)}}, style)
 		w_2 := create_widget(&ctx, {}, {sizing = {grow(100, 0), grow(100, 0)}, padding = 16}, style)
 		e, _ := get_widget_events(&ctx, w_1)
-		if e != {} && e != {.Hovered} {
-			fmt.println(e)
-		}
+
+		// if e != {} && e != {.Hovered} {
+		// 	fmt.println(e)
+		// }
 
 		push_parent(&ctx, w_2)
 		{
@@ -427,7 +452,7 @@ main :: proc() {
 		pop_parent(&ctx)
 
 		style.default_color = {255, 255, 150, 255}
-		w_3 := create_widget(&ctx, {.Dragable}, {sizing = {fit(0, 0), fit(0, 0)}, child_gap = 16, padding = 16, direction = .Row}, style)
+		w_3 := create_widget(&ctx, {}, {sizing = {fit(0, 0), fit(0, 0)}, child_gap = 16, padding = 16, direction = .Row}, style)
 		get_widget_events(&ctx, w_3)
 
 		push_parent(&ctx, w_3)
@@ -448,15 +473,50 @@ main :: proc() {
 		get_render_commands(&ctx)
 
 		rl.BeginDrawing()
-		rl.ClearBackground({45, 60, 70, 255})
-		render(ctx)
+		rl.ClearBackground({0, 0, 0, 255})
+		render(ctx, render_texture, sdf_shader)
 		rl.EndDrawing()
 	}
 }
 
-render :: proc(ctx: Core_Context) {
-	for cmd in ctx.render_commands[:ctx.commands_added] {
-		rl.DrawRectangleV(cmd.position, cmd.size, cast(rl.Color)cmd.color)
+render :: proc(ctx: Core_Context, texture: rl.Texture, shader: rl.Shader) {
+
+	rect_center_loc := rl.GetShaderLocation(shader, "rect_center")
+	rect_size_loc := rl.GetShaderLocation(shader, "rect_size")
+	border_radius_loc := rl.GetShaderLocation(shader, "border_radius")
+	color_loc := rl.GetShaderLocation(shader, "color")
+
+	for cmd in ctx.render_commands {
+		switch v in cmd.type {
+		case Command_Rect:
+			size := v.size / 2
+			pos := v.position + size
+			rad := v.border_radius
+			color: [4]f32
+			for c, i in v.color {
+				color[i] = f32(c) / 255
+			}
+
+			rl.BeginShaderMode(shader)
+			rl.SetShaderValue(shader, rect_center_loc, &pos, .VEC2)
+			rl.SetShaderValue(shader, rect_size_loc, &size, .VEC2)
+			rl.SetShaderValue(shader, border_radius_loc, &rad, .VEC4)
+			rl.SetShaderValue(shader, color_loc, &color, .VEC4)
+
+			src := rl.Rectangle{0, 0, 1, 1}
+			dst := rl.Rectangle{v.position.x, v.position.y, v.size.x, v.size.y}
+
+			rl.DrawTexturePro(texture, src, dst, {}, 0.0, rl.BLACK)
+			rl.EndShaderMode()
+		}
 	}
+
+	// for cmd in ctx.render_commands {
+	// 	switch v in cmd.type {
+	// 	case Command_Rect:
+	// 		rl.DrawRectangleV(v.position, v.size, cast(rl.Color)v.color)
+	// 	}
+	// }
+
 	rl.DrawFPS(10, 10)
 }

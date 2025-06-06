@@ -59,10 +59,8 @@ layout_fit :: proc(axis: int, node: ^Widget) {
 	}
 }
 
-import "core:fmt"
-
 layout_grow_along_axis :: proc(axis: int, node: ^Widget, growables: ^[dynamic]^Widget) {
-	if node.first_child == nil { 	// node has no childs. Leaf node, leave.
+	if node.first_child == nil {
 		return
 	}
 
