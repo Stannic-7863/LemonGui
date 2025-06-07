@@ -130,12 +130,15 @@ deinit_core_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.widgets)
 	delete(ctx.render_commands)
 	delete(ctx.last_frame_widgets)
+	delete(ctx.layout_stack.temp)
+	delete(ctx.layout_stack.pre_order)
+	delete(ctx.layout_stack.reverse_post_order)
 }
 
 begin_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.render_commands)
 	clear(&ctx.widgets)
-	root := create_widget(ctx, {}, layout({fixed(ctx.window_width), fixed(ctx.window_height)}, 16, 16, .Row), {})
+	root := create_widget(ctx, {}, layout({fixed(ctx.window_width), fixed(ctx.window_height)}, 16, 16, .Colom), {})
 	push_parent(ctx, root)
 }
 
@@ -235,103 +238,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 
 	*/
 
-
-	append(&ctx.layout_stack.temp, &ctx.widgets[0]) // append root node 
-
-	for {
-		node := pop_safe(&ctx.layout_stack.temp) or_break
-
-		append(&ctx.layout_stack.reverse_post_order, node)
-
-		for node_child := node.first_child; node_child != nil; node_child = node_child.next {
-			append(&ctx.layout_stack.temp, node_child)
-		}
-	}
-
-
-	clear(&ctx.layout_stack.temp)
-	append(&ctx.layout_stack.temp, &ctx.widgets[0])
-
-	for {
-
-		node := pop_safe(&ctx.layout_stack.temp) or_break
-
-		append(&ctx.layout_stack.pre_order, node)
-
-		for node_child := node.last_child; node_child != nil; node_child = node_child.prev {
-			append(&ctx.layout_stack.temp, node_child)
-		}
-	}
-
-	clear(&ctx.layout_stack.temp)
-
-	// 1st pass : Fixed Size 
-	#reverse for node in ctx.layout_stack.reverse_post_order {
-		for i in 0 ..= 1 {
-			if node.layout.sizing[i].kind == .Fixed {
-				node.size[i] = node.layout.sizing[i].max
-			}
-		}
-	}
-
-	// 2nd pass : Fit sizing along x axis 
-	#reverse for node in ctx.layout_stack.reverse_post_order {
-		if node.layout.sizing.x.kind == .Grow {
-			node.size.x = max(node.layout._min.x, node.layout.sizing.x.min)
-		} // Tree is walked from leaf nodes. 
-
-		layout_fit(0, node)
-
-
-		if node.layout.sizing.x.kind == .Fit {
-			padding := node.layout.padding
-			node.size.x += padding[3] + padding[1]
-			if node.layout.direction == .Row {
-				node.size.x += f32(node.total_children - 1) * node.layout.child_gap
-			}
-		}
-
-	}
-
-
-	growables := make([dynamic]^Widget, 0, 16, context.temp_allocator)
-	// 3rd pass : Grow sizing along x axis 
-	for node in ctx.layout_stack.pre_order {
-		if node.layout.direction == .Row {
-			layout_grow_along_axis(0, node, &growables)
-			clear(&growables)
-		} else {
-			layout_grow_across_axis(0, node, &growables)
-			clear(&growables)
-		}
-	}
-
-	#reverse for node in ctx.layout_stack.reverse_post_order {
-		if node.layout.sizing.y.kind == .Grow {
-			node.size.y = max(node.layout._min.y, node.layout.sizing.y.min)
-		}
-
-		layout_fit(1, node)
-
-		padding := node.layout.padding
-
-		if node.layout.sizing.y.kind == .Fit {
-			node.size.y += padding[0] + padding[2]
-			if node.layout.direction == .Colom {
-				node.size.y += f32(node.total_children - 1) * node.layout.child_gap
-			}
-		}
-	}
-
-	for node in ctx.layout_stack.pre_order {
-		if node.layout.direction == .Colom {
-			layout_grow_along_axis(1, node, &growables)
-			clear(&growables)
-		} else {
-			layout_grow_across_axis(1, node, &growables)
-			clear(&growables)
-		}
-	}
+	layout_sizing_pass(ctx)
 
 	for node in ctx.layout_stack.pre_order {
 		along_axis: int = cast(int)node.layout.direction
@@ -355,8 +262,8 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 			position_increment[along_axis] += child.size[along_axis] + node.layout.child_gap
 		}
 
-		if node.flags & {.No_Event_Cull} == {} {
-			if is_point_in_rect(node.position, node.size, ctx.mouse.position) && ctx.active_widget_id == 0 {
+		if !(.No_Event_Cull in node.flags) {
+			if is_point_in_rect(node.position, node.size, ctx.mouse.position, node.style.border_radius) && ctx.active_widget_id == 0 {
 				ctx.hot_widget_id = node.id
 			}
 		}
@@ -365,6 +272,7 @@ get_render_commands :: proc(ctx: ^Core_Context) {
 		command_rect.size = node.size
 		command_rect.color = node.style.current_color
 		command_rect.position = node.position
+
 		for r, i in node.style.border_radius {
 			command_rect.border_radius[i] = clamp(0, min(node.size.x, node.size.y) / 2, r)
 		}
@@ -406,6 +314,8 @@ main :: proc() {
 	rl.UnloadImage(img)
 	defer rl.UnloadTexture(render_texture)
 
+	rl.SetTargetFPS(60)
+
 	for !rl.WindowShouldClose() {
 		ctx.window_width = cast(f32)rl.GetScreenWidth()
 		ctx.window_height = cast(f32)rl.GetScreenHeight()
@@ -431,43 +341,38 @@ main :: proc() {
 			press_color   = {0, 0, 0, 255},
 			hover_color   = {255, 255, 255, 255},
 			default_color = {75, 75, 75, 255},
-			border_radius = {50, 50, 20, 5},
+			border_radius = {50, 0, 50, 0},
 		}
 
 		style.default_color = {255, 255, 150, 255}
 		w_1 := create_widget(&ctx, {}, {sizing = {fixed(50), fixed(50)}}, style)
-		w_2 := create_widget(&ctx, {}, {sizing = {grow(100, 0), grow(100, 0)}, padding = 16}, style)
-		e, _ := get_widget_events(&ctx, w_1)
+		w_2 := create_widget(&ctx, {}, {sizing = {grow(0, 1000), grow(0, 1000)}, padding = 16}, style)
+		e, _ := get_widget_events(&ctx, w_2)
 
-		// if e != {} && e != {.Hovered} {
-		// 	fmt.println(e)
-		// }
+		if e != {} {
+			fmt.println(e)
+		}
 
 		push_parent(&ctx, w_2)
 		{
 			style.default_color = {255, 0, 150, 255}
 			w_21 := create_widget(&ctx, {}, {sizing = {fixed(50), fixed(50)}}, style)
-			get_widget_events(&ctx, w_21)
 		}
 		pop_parent(&ctx)
 
 		style.default_color = {255, 255, 150, 255}
 		w_3 := create_widget(&ctx, {}, {sizing = {fit(0, 0), fit(0, 0)}, child_gap = 16, padding = 16, direction = .Row}, style)
-		get_widget_events(&ctx, w_3)
 
 		push_parent(&ctx, w_3)
 		{
 			style.default_color = {255, 0, 150, 255}
 			w_31 := create_widget(&ctx, {.No_Event_Cull}, {sizing = {grow(50, 50), grow(50, 50)}}, style)
-			get_widget_events(&ctx, w_31)
 			w_32 := create_widget(&ctx, {}, {sizing = {grow(50, 50), grow(50, 50)}}, style)
-			get_widget_events(&ctx, w_32)
 		}
 		pop_parent(&ctx)
 
 		style.default_color = {255, 255, 150, 255}
 		w_6 := create_widget(&ctx, {}, {sizing = {grow(50, 50), grow(50, 50)}}, style)
-		get_widget_events(&ctx, w_6)
 
 		end_ui(&ctx)
 		get_render_commands(&ctx)

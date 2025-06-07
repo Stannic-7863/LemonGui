@@ -18,7 +18,7 @@ float sdRoundedBox( in vec2 p, in vec2 b, in vec4 r )
 
 void main() {
 	float sdf = sdRoundedBox(fragTexCoord * rect_size * 2 - rect_size  , rect_size, border_radius);
-	float e = smoothstep(1.2,-1.2,sdf);
+	float e = smoothstep(1.5,-1,sdf);
 	
-	fragColor = vec4(color.rgb,e);	
+	fragColor = vec4(color.rgb, color.a * e);	
 }
