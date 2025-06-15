@@ -33,23 +33,13 @@ Widget_Event :: enum {
 }
 
 Widget_Events :: bit_set[Widget_Event]
+Active_Widget_Events :: ~Widget_Events{.Hovered, .Right_Clicked, .Left_Clicked, .Double_Right_Clicked, .Double_Left_Clicked}
 
-// ok = false means widget did not exists last frame
-get_widget_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event: Widget_Events, ok: bool) #optional_ok {
-
-	widget_last_frame := ctx.last_frame_widgets[widget.id] or_return
-
-	active := (ctx.active_widget_id == 0 || ctx.active_widget_id == widget.id)
-	hot := widget_last_frame.id == ctx.hot_widget_id
-
-	is_point_in_rect(widget_last_frame.position, widget_last_frame.size, ctx.mouse.position, widget_last_frame.style.border_radius)
-
-	if hot {
-		event += {.Hovered}
-	} else {return}
+resolve_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event: Widget_Events) {
 
 	if .Left_Released in ctx.mouse.events {
 		event += {.Left_Clicked}
+		ctx.active_widget_id = 0
 		if time.since(ctx.mouse.last_left_click) < ctx.mouse.double_click_timeout {
 			event += {.Double_Left_Clicked}
 		} else {
@@ -59,6 +49,7 @@ get_widget_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event: Widget
 
 	if .Right_Released in ctx.mouse.events {
 		event += {.Right_Clicked}
+		ctx.active_widget_id = 0
 		if time.since(ctx.mouse.last_right_click) < ctx.mouse.double_click_timeout {
 			event += {.Double_Right_Clicked}
 		} else {
@@ -66,43 +57,36 @@ get_widget_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event: Widget
 		}
 	}
 
-	(active) or_return
-
 	if .Left_Pressed in ctx.mouse.events {
 		event += {.Left_Pressed}
 		ctx.mouse.left_down_start = time.now()
+		ctx.active_widget_id = widget.node.id
+	}
+
+	if .Left_Down in ctx.mouse.events {
+		event += {.Left_Down}
+		ctx.active_widget_id = widget.node.id
+
+		if time.since(ctx.mouse.left_down_start) > ctx.mouse.long_down_timeout {
+			event += {.Long_Left_Down}
+		}
 	}
 
 	if .Right_Pressed in ctx.mouse.events {
 		event += {.Right_Pressed}
 		ctx.mouse.right_down_start = time.now()
-	}
-
-	if .Left_Down in ctx.mouse.events {
-		event += {.Left_Down}
-		ctx.active_widget_id = widget.id
-
-		if time.since(ctx.mouse.left_down_start) > ctx.mouse.long_down_timeout {
-			event += {.Long_Left_Down}
-		}
-
-	} else {
-		ctx.active_widget_id = 0
+		ctx.active_widget_id = widget.node.id
 	}
 
 	if .Right_Down in ctx.mouse.events {
 		event += {.Right_Down}
-		ctx.active_widget_id = widget.id
+		ctx.active_widget_id = widget.node.id
 
 		if time.since(ctx.mouse.right_down_start) > ctx.mouse.long_down_timeout {
 			event += {.Long_Right_Down}
 		}
-
-	} else {
-		ctx.active_widget_id = 0
 	}
-
-	return event, true
+	return
 }
 
 is_point_in_rect :: proc(rect_pos, rect_size, point: Vec2f32, border_radius: Vec4f32) -> bool {
