@@ -230,8 +230,9 @@ end_ui :: proc(ctx: ^Core_Context) {
 	clear_map(&ctx.persistant_data)
 
 	for &w in ctx.widgets {
-		events: Widget_Events
+		resolve_animations(&w)
 
+		events: Widget_Events
 		if w.node.id == ctx.hot_widget_id {
 			events += {.Hovered}
 		}
@@ -242,17 +243,35 @@ end_ui :: proc(ctx: ^Core_Context) {
 
 		events -= w.events_mask
 
+		if (.Hovered in events && .Hovered not_in w.events) {
+			if w.in_decay_active_anim {
+				w.start = w.style
+				w.hot_t = 0
+				w.in_decay_active_anim = false
+			}
+		}
+
+		if w.in_progressive_active_anim && (events & Active_Widget_Events != w.events & Active_Widget_Events) {
+			w.active_overrided = true
+			w.hot_t = 1
+			w.start = w.style
+		}
+
 		if w.node.id == ctx.hot_widget_id {
-			w.hot_t = clamp(w.hot_t + ctx.delta_time, 0, 1)
+			if !w.in_progressive_active_anim {
+				w.hot_t = clamp(w.hot_t + ctx.delta_time, 0, 1)
+			}
 		} else {
-			w.hot_t = clamp(w.hot_t - ctx.delta_time, 0, 1)
+			if !w.in_progressive_active_anim {
+				w.hot_t = clamp(w.hot_t - ctx.delta_time, 0, 1)
+			}
 		}
 
 		if w.node.id == ctx.active_widget_id {
-			if w.events & Active_Widget_Events != events & Active_Widget_Events && events & Active_Widget_Events != {} && w.active_t != 0 {
-				w.active_t = 0
-				w.active_overrided = true
+			if w.active_overrided {
 				w.start = w.style
+				w.active_t = 0
+				w.active_overrided = false
 			}
 			w.active_t = clamp(w.active_t + ctx.delta_time, 0, 1)
 		} else {
@@ -419,7 +438,7 @@ main :: proc() {
 			"",
 			{sizing = {fixed(ctx.window_width), fixed(ctx.window_height)}, direction = .Row},
 			style = {layout = {child_gap = 16, padding = 16}},
-			events_mask = ~{},
+			events_mask = {},
 		)
 		push_parent(&ctx, root)
 
@@ -429,21 +448,20 @@ main :: proc() {
 			"A quick brown fox jumps over the lazy dog",
 			{sizing = {grow(), grow()}, direction = .Row, child_alignment = {x = .Right}},
 			style,
+			{},
 		)
 		resolve_styling(w_2)
-		resolve_animations(w_2)
+
 
 		{
 			push_parent(&ctx, w_2)
 			defer pop_parent(&ctx)
 			style.color = CHILD_BACKGROUND
-			w_21 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style)
+			w_21 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style, ~{})
 			w_22 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style)
 			w_23 := create_widget(&ctx, "", {sizing = {percent(0.5), percent(0.5)}}, style)
 		}
-
 		style.color = DEFAULT_BACKGROUND
-
 
 		if rl.IsKeyPressed(.UP) {
 			y_align = .Top
@@ -526,24 +544,32 @@ resolve_styling :: proc(widget: ^Widget) {
 resolve_animations :: proc(w: ^Widget) {
 	is_interacted_hot: bool = .Hovered in w.events
 	is_interacted_active: bool = w.events & Active_Widget_Events != {}
+	was_interacted_hot: bool = w.in_progressive_hot_anim
+	was_interacted_active: bool = w.in_progressive_active_anim
 
-	if !w.in_progressive_hot_anim && (is_interacted_hot) {
+	// entering hot animation 
+	if (is_interacted_hot) && !was_interacted_hot {
 		w.in_decay_hot_anim = false
 		w.in_progressive_hot_anim = true
 		w.start = w.style
 	}
-	if w.in_progressive_hot_anim && !(is_interacted_hot) {
+
+	// leaving hot animation 
+	if was_interacted_hot && !(is_interacted_hot) {
 		w.in_decay_hot_anim = true
 		w.in_progressive_hot_anim = false
 		w.start = w.style
 	}
 
-	if !w.in_progressive_active_anim && (is_interacted_active) {
+	// entring active animation
+	if !was_interacted_active && (is_interacted_active) {
 		w.in_decay_active_anim = false
 		w.in_progressive_active_anim = true
 		w.start = w.style
 	}
-	if w.in_progressive_active_anim && !(is_interacted_active) {
+
+	// leaving active animation
+	if was_interacted_active && !(is_interacted_active) {
 		w.in_decay_active_anim = true
 		w.in_progressive_active_anim = false
 		w.start = w.style
