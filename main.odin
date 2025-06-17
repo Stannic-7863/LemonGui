@@ -174,7 +174,7 @@ Widget :: struct {
 	in_progressive_active_anim, in_decay_active_anim: bool,
 	active_overrided:                                 bool,
 	active_t, hot_t:                                  f32,
-	size, position, text_size:                        Vec2f32,
+	size, position, text_size, text_position:         Vec2f32,
 	text:                                             string,
 	lines:                                            []string,
 	node:                                             Node,
@@ -249,70 +249,21 @@ end_ui :: proc(ctx: ^Core_Context) {
 		}
 
 		if w.node.id == ctx.active_widget_id {
-			if w.events & Active_Widget_Events != events & Active_Widget_Events {
-				if events & Active_Widget_Events != {} && w.active_t != 0 {
-					w.active_t = 0
-					w.active_overrided = true
-					w.start = w.style
-				}
+			if w.events & Active_Widget_Events != events & Active_Widget_Events && events & Active_Widget_Events != {} && w.active_t != 0 {
+				w.active_t = 0
+				w.active_overrided = true
+				w.start = w.style
 			}
 			w.active_t = clamp(w.active_t + ctx.delta_time, 0, 1)
 		} else {
 			if w.active_overrided {
+				w.start = w.style
 				w.active_t = 1
 				w.active_overrided = false
-				w.start = w.style
 			}
 			w.active_t = clamp(w.active_t - ctx.delta_time, 0, 1)
 		}
 
-		is_interacted_hot: bool = .Hovered in events
-		is_interacted_active: bool = events & Active_Widget_Events != {}
-
-
-		if !w.in_progressive_hot_anim && (is_interacted_hot) {
-			w.in_decay_hot_anim = false
-			w.in_progressive_hot_anim = true
-			w.start = w.style
-		}
-		if w.in_progressive_hot_anim && !(is_interacted_hot) {
-			w.in_decay_hot_anim = true
-			w.in_progressive_hot_anim = false
-			w.start = w.style
-		}
-
-		if !w.in_progressive_active_anim && (is_interacted_active) {
-			w.in_decay_active_anim = false
-			w.in_progressive_active_anim = true
-			w.start = w.style
-		}
-		if w.in_progressive_active_anim && !(is_interacted_active) {
-			w.in_decay_active_anim = true
-			w.in_progressive_active_anim = false
-			w.start = w.style
-		}
-
-		if w.hot_t == 0 {
-			w.in_decay_hot_anim = false
-			w.in_progressive_hot_anim = false
-		}
-		if w.active_t == 0 {
-			w.in_decay_active_anim = false
-			w.in_progressive_active_anim = false
-			w.active_overrided = false
-		}
-
-		if w.in_progressive_active_anim {
-			lerp_style_progressive(&w, w.active_t)
-		} else if w.in_progressive_hot_anim {
-			lerp_style_progressive(&w, w.hot_t)
-		}
-
-		if w.in_decay_hot_anim {
-			lerp_style_decaying(&w, w.hot_t)
-		} else if w.in_decay_active_anim {
-			lerp_style_decaying(&w, w.active_t)
-		}
 
 		ctx.persistant_data[w.node.id] = Persistant_Data {
 			events                     = events,
@@ -332,7 +283,6 @@ end_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.stacks.reverse_post)
 	clear(&ctx.stacks.pre)
 	clear(&ctx.stacks.temp)
-
 }
 
 create_widget :: proc(ctx: ^Core_Context, text: string, layout: Layout, style: Style, events_mask: Widget_Events = {}) -> ^Widget {
@@ -433,6 +383,9 @@ main :: proc() {
 
 	rl.SetTargetFPS(60)
 
+	x_align: Child_Alignment_X
+	y_align: Child_Alignment_Y
+	direc: Direction
 	for !rl.WindowShouldClose() {
 		ctx.window_width = cast(f32)rl.GetScreenWidth()
 		ctx.window_height = cast(f32)rl.GetScreenHeight()
@@ -458,7 +411,7 @@ main :: proc() {
 			color = DEFAULT_BACKGROUND,
 			border_radius = {20, 10, 20, 10},
 			text = {font_size = 20, spacing = 2, line_height = 20},
-			layout = {padding = 16, child_gap = 16},
+			layout = {padding = 32, child_gap = 16},
 		}
 
 		root := create_widget(
@@ -471,26 +424,64 @@ main :: proc() {
 		push_parent(&ctx, root)
 
 		w_1 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style)
-		style.text.font_id = 69
-		w_2 := create_widget(&ctx, "", {sizing = {grow(0, max(f32)), grow(0, max(f32))}, direction = .Row}, style)
-		style.text.font_id = 0
+		w_2 := create_widget(
+			&ctx,
+			"A quick brown fox jumps over the lazy dog",
+			{sizing = {grow(), grow()}, direction = .Row, child_alignment = {x = .Right}},
+			style,
+		)
 		resolve_styling(w_2)
+		resolve_animations(w_2)
 
 		{
 			push_parent(&ctx, w_2)
 			defer pop_parent(&ctx)
 			style.color = CHILD_BACKGROUND
 			w_21 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style)
-			w_22 := create_widget(&ctx, "", {sizing = {grow(50, 1000000), grow(50, 100000)}}, style)
+			w_22 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style)
+			w_23 := create_widget(&ctx, "", {sizing = {percent(0.5), percent(0.5)}}, style)
 		}
 
 		style.color = DEFAULT_BACKGROUND
-		w_3 := create_widget(&ctx, "", {sizing = {grow(0, max(f32)), grow(0, max(f32))}, direction = .Row}, style)
+
+
+		if rl.IsKeyPressed(.UP) {
+			y_align = .Top
+		}
+		if rl.IsKeyPressed(.DOWN) {
+			y_align = .Bottom
+		}
+		if rl.IsKeyPressed(.LEFT) {
+			x_align = .Left
+		}
+		if rl.IsKeyPressed(.RIGHT) {
+			x_align = .Right
+		}
+		if rl.IsKeyPressed(.KP_1) {
+			x_align = .Center
+		}
+		if rl.IsKeyPressed(.KP_2) {
+			y_align = .Center
+		}
+
+		if rl.IsKeyPressed(.R) {
+			direc = .Row
+		}
+		if rl.IsKeyPressed(.C) {
+			direc = .Colom
+		}
+
+		w_3 := create_widget(
+			&ctx,
+			"A quick brown fox does not jump over the lazy dog",
+			{sizing = {grow(), grow()}, direction = direc, child_alignment = {x = x_align, y = y_align}},
+			style,
+		)
 		{
 			push_parent(&ctx, w_3)
 			defer pop_parent(&ctx)
 			style.color = CHILD_BACKGROUND
-			w_31 := create_widget(&ctx, "", {sizing = {fit(0, 0), fit(0, 0)}, direction = .Row}, style)
+			w_31 := create_widget(&ctx, "", {sizing = {fit(), fit()}, direction = .Row}, style)
 			{
 				push_parent(&ctx, w_31)
 				defer pop_parent(&ctx)
@@ -498,6 +489,8 @@ main :: proc() {
 				w_31_1 := create_widget(&ctx, "", {sizing = {grow(50, 50), fixed(50)}}, style)
 				w_31_2 := create_widget(&ctx, "", {sizing = {grow(50, 50), grow(50, 50)}}, style)
 			}
+			style.color = CHILD_BACKGROUND
+			w_32 := create_widget(&ctx, "", {sizing = {percent(0.5), percent(0.5)}}, style)
 		}
 
 		style.color = DEFAULT_BACKGROUND
@@ -527,6 +520,55 @@ resolve_styling :: proc(widget: ^Widget) {
 	if .Long_Left_Down in widget.events {
 		widget.target.color = LONG_PRESS_COLOR
 		widget.target.border_radius = {50, 50, 50, 50}
+	}
+}
+
+resolve_animations :: proc(w: ^Widget) {
+	is_interacted_hot: bool = .Hovered in w.events
+	is_interacted_active: bool = w.events & Active_Widget_Events != {}
+
+	if !w.in_progressive_hot_anim && (is_interacted_hot) {
+		w.in_decay_hot_anim = false
+		w.in_progressive_hot_anim = true
+		w.start = w.style
+	}
+	if w.in_progressive_hot_anim && !(is_interacted_hot) {
+		w.in_decay_hot_anim = true
+		w.in_progressive_hot_anim = false
+		w.start = w.style
+	}
+
+	if !w.in_progressive_active_anim && (is_interacted_active) {
+		w.in_decay_active_anim = false
+		w.in_progressive_active_anim = true
+		w.start = w.style
+	}
+	if w.in_progressive_active_anim && !(is_interacted_active) {
+		w.in_decay_active_anim = true
+		w.in_progressive_active_anim = false
+		w.start = w.style
+	}
+
+	if w.hot_t < 0.001 {
+		w.in_decay_hot_anim = false
+		w.in_progressive_hot_anim = false
+	}
+	if w.active_t < 0.001 {
+		w.in_decay_active_anim = false
+		w.in_progressive_active_anim = false
+		w.active_overrided = false
+	}
+
+	if w.in_progressive_active_anim {
+		lerp_style_progressive(w, w.active_t)
+	} else if w.in_progressive_hot_anim {
+		lerp_style_progressive(w, w.hot_t)
+	}
+
+	if w.in_decay_hot_anim {
+		lerp_style_decaying(w, w.hot_t)
+	} else if w.in_decay_active_anim {
+		lerp_style_decaying(w, w.active_t)
 	}
 }
 
@@ -562,7 +604,14 @@ render :: proc(ctx: Core_Context, texture: rl.Texture, shader: rl.Shader) {
 			initial_y := v.position.y
 
 			for l in v.lines {
-				rl.DrawTextEx(rl.GetFontDefault(), " ", {v.position.x, initial_y}, v.font_size, v.spacing, cast(rl.Color)v.color)
+				rl.DrawTextEx(
+					rl.GetFontDefault(),
+					fmt.ctprint(l),
+					{v.position.x, initial_y},
+					v.font_size,
+					v.spacing,
+					cast(rl.Color)v.color,
+				)
 				// width := rl.MeasureTextEx(rl.GetFontDefault(), fmt.ctprint(l), v.font_size, v.spacing)
 				// rl.DrawRectangleLinesEx({v.position.x, initial_y, width.x, width.y}, 2, rl.WHITE)
 				initial_y += v.line_height

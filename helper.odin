@@ -12,22 +12,21 @@ hex :: proc "contextless" (hex: u32) -> Color {
 	return (transmute([4]u8)hex).abgr
 }
 
-fit :: proc "contextless" (min, max: f32) -> Sizing {
+fit :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Sizing {
 	return Sizing{min = min, max = max, kind = .Fit}
 }
 
-grow :: proc "contextless" (min, max: f32) -> Sizing {
+grow :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Sizing {
 	return Sizing{min = min, max = max, kind = .Grow}
+}
+
+percent :: proc "contextless" (value: f32 = 1) -> Sizing {
+	return Sizing{min = value, max = value, kind = .Percent}
 }
 
 fixed :: proc "contextless" (size: f32) -> Sizing {
 	return Sizing{size, size, .Fixed}
 }
-
-percent :: proc "contextless" (p: f32) -> Sizing {
-	return Sizing{p, 0, .Percent}
-}
-
 
 lerp :: proc "contextless" (a, b: $T, t: $E) -> (x: T) {
 	when intrinsics.type_is_numeric(T) && intrinsics.type_is_array(T) {
