@@ -60,7 +60,6 @@ render_frame()
 // Support max size constraint [WIP]
 // Support for floating elements 
 // Support for free elements that are rendered on top of everything else. Position set by user
-// Support for justify and related layout styling options 
 // Support vertical text 
 // Support overgrowing elements 
 
@@ -552,6 +551,7 @@ resolve_animations :: proc(w: ^Widget) {
 		w.in_decay_hot_anim = false
 		w.in_progressive_hot_anim = true
 		w.start = w.style
+		w.hot_t = 0
 	}
 
 	// leaving hot animation 
@@ -559,6 +559,7 @@ resolve_animations :: proc(w: ^Widget) {
 		w.in_decay_hot_anim = true
 		w.in_progressive_hot_anim = false
 		w.start = w.style
+		w.hot_t = 1
 	}
 
 	// entring active animation
@@ -573,16 +574,6 @@ resolve_animations :: proc(w: ^Widget) {
 		w.in_decay_active_anim = true
 		w.in_progressive_active_anim = false
 		w.start = w.style
-	}
-
-	if w.hot_t < 0.001 {
-		w.in_decay_hot_anim = false
-		w.in_progressive_hot_anim = false
-	}
-	if w.active_t < 0.001 {
-		w.in_decay_active_anim = false
-		w.in_progressive_active_anim = false
-		w.active_overrided = false
 	}
 
 	if w.in_progressive_active_anim {
