@@ -50,13 +50,13 @@ render_frame()
 // Support vertical text 
 // Support overgrowing elements 
 
+
 Core_Context :: struct {
 	delta_time:                  f32,
 	window_height, window_width: f32,
 	hot_widget_id:               Id, //id, widget currently under mouse  
 	active_widget_id:            Id, //id, widget currently being interacted with 
 	current_parent:              ^Widget,
-	last_widget:                 ^Widget,
 	mouse:                       Mouse_Context,
 	text_lines:                  [dynamic]string,
 	widgets:                     [dynamic]Widget,
@@ -71,11 +71,12 @@ Core_Context :: struct {
 }
 
 Persistant_Data :: struct {
+	events:                                           Widget_Events,
 	in_progressive_hot_anim, in_decay_hot_anim:       bool,
 	in_progressive_active_anim, in_decay_active_anim: bool,
 	active_overrided:                                 bool,
-	events:                                           Widget_Events,
-	active_t, hot_t, largest_text_width:              f32,
+	active_t, hot_t:                                  f32,
+	size, position, prev_text_size:                   Vec2f32,
 	style, start:                                     Style,
 }
 
@@ -94,7 +95,8 @@ Mouse_Context :: struct {
 }
 
 Render_Command :: struct {
-	type: Render_Command_Type,
+	z_index: int,
+	type:    Render_Command_Type,
 }
 
 Render_Command_Type :: union {
@@ -118,11 +120,6 @@ Command_Text :: struct {
 	lines:       []string,
 }
 
-Layout_Style :: struct {
-	padding:   [4]f32,
-	child_gap: f32,
-}
-
 Text_Style :: struct {
 	font_id:     int,
 	font_size:   f32,
@@ -135,7 +132,8 @@ Style :: struct {
 	border_radius:    Vec4f32,
 	border_thickness: Vec4f32,
 	text:             Text_Style,
-	layout:           Layout_Style,
+	padding:          [4]f32,
+	child_gap:        f32,
 }
 
 Word_Measure :: struct {
@@ -158,23 +156,27 @@ Node :: struct {
 Widget :: struct {
 	// Progressive animations : time var moves from 0 - 1 
 	// Decay animations : time var moves from 1 - 0
-	in_progressive_hot_anim, in_decay_hot_anim:       bool,
-	in_progressive_active_anim, in_decay_active_anim: bool,
-	active_overrided:                                 bool,
-	active_t, hot_t, largest_text_width:              f32,
-	size, position, text_size, text_position:         Vec2f32,
-	text:                                             string,
-	lines:                                            []string,
-	node:                                             Node,
-	layout:                                           Layout,
-	style, start, target:                             Style,
-	events, events_mask:                              Widget_Events,
+	in_progressive_hot_anim, in_decay_hot_anim:               bool,
+	in_progressive_active_anim, in_decay_active_anim:         bool,
+	active_overrided:                                         bool,
+	active_t, hot_t:                                          f32,
+	size, position, text_size, text_position, prev_text_size: Vec2f32,
+	text:                                                     string,
+	lines:                                                    []string,
+	node:                                                     Node,
+	layout:                                                   Layout,
+	floating:                                                 Floating,
+	style, start, target:                                     Style,
+	events, events_mask:                                      Widget_Events,
+	z_index:                                                  int,
 }
+
+import "core:fmt"
 
 init_core_context :: proc(widget_arr_backing_length: int) -> Core_Context {
 	ctx := Core_Context{}
 	ctx.text_lines = make([dynamic]string)
-	ctx.widgets = make([dynamic]Widget, widget_arr_backing_length)
+	ctx.widgets = make([dynamic]Widget, 0, widget_arr_backing_length)
 	ctx.render_commands = make([dynamic]Render_Command, widget_arr_backing_length)
 	ctx.stacks.temp = make([dynamic]^Widget, 0, widget_arr_backing_length)
 	ctx.stacks.pre = make([dynamic]^Widget, 0, widget_arr_backing_length)
@@ -202,15 +204,13 @@ pop_parent :: proc(ctx: ^Core_Context) {
 }
 
 begin_ui :: proc(ctx: ^Core_Context) {
-	clear(&ctx.render_commands)
 	clear(&ctx.widgets)
 	clear(&ctx.text_lines)
+	clear(&ctx.render_commands)
+	ctx.current_parent = nil
 }
 
 end_ui :: proc(ctx: ^Core_Context) {
-	ctx.current_parent = nil
-	ctx.last_widget = nil
-
 	build_stacks(ctx)
 	layout_sizing_pass(ctx)
 	layout_positioning_pass(ctx)
@@ -274,7 +274,9 @@ end_ui :: proc(ctx: ^Core_Context) {
 			style                      = w.style,
 			hot_t                      = w.hot_t,
 			active_t                   = w.active_t,
-			largest_text_width         = w.largest_text_width,
+			size                       = w.size,
+			position                   = w.position,
+			prev_text_size             = w.prev_text_size,
 			in_progressive_hot_anim    = w.in_progressive_hot_anim,
 			in_decay_hot_anim          = w.in_decay_hot_anim,
 			in_progressive_active_anim = w.in_progressive_active_anim,
@@ -289,7 +291,14 @@ end_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.stacks.temp)
 }
 
-create_widget :: proc(ctx: ^Core_Context, text: string, layout: Layout, style: Style, events_mask: Widget_Events = {}) -> ^Widget {
+create_widget :: proc(
+	ctx: ^Core_Context,
+	text: string = "",
+	layout: Layout = {},
+	floating: Floating = {},
+	style: Style = {},
+	events_mask: Widget_Events = {},
+) -> ^Widget {
 	append(&ctx.widgets, Widget{})
 	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
 
@@ -299,9 +308,12 @@ create_widget :: proc(ctx: ^Core_Context, text: string, layout: Layout, style: S
 	w.layout = layout
 	w.target = style
 	w.events_mask = events_mask
-
+	w.floating = floating
 	w.node.index = len(ctx.widgets) - 1
 	w.node.parent = ctx.current_parent
+	if w.floating != {} {
+		w.z_index = cap(ctx.widgets)
+	}
 
 	if ctx.current_parent != nil {
 		ctx.current_parent.node.total_children += 1
@@ -314,7 +326,6 @@ create_widget :: proc(ctx: ^Core_Context, text: string, layout: Layout, style: S
 		if ctx.current_parent.node.last_child != nil {
 			ctx.current_parent.node.last_child.node.next = w
 		}
-
 		ctx.current_parent.node.last_child = w
 	}
 
@@ -349,7 +360,7 @@ create_widget :: proc(ctx: ^Core_Context, text: string, layout: Layout, style: S
 		w.events = val.events
 		w.hot_t = val.hot_t
 		w.active_t = val.active_t
-		w.largest_text_width = val.largest_text_width
+		w.prev_text_size = val.prev_text_size
 		w.start = val.start
 		w.style = val.style
 		w.in_decay_hot_anim = val.in_decay_hot_anim
@@ -362,4 +373,56 @@ create_widget :: proc(ctx: ^Core_Context, text: string, layout: Layout, style: S
 	}
 
 	return w
+}
+
+resolve_animations :: proc(w: ^Widget) {
+	is_interacted_hot: bool = .Hovered in w.events
+	is_interacted_active: bool = w.events & Active_Widget_Events != {}
+	was_interacted_hot: bool = w.in_progressive_hot_anim
+	was_interacted_active: bool = w.in_progressive_active_anim
+
+	// entering hot animation 
+	if (is_interacted_hot) && !was_interacted_hot {
+		w.in_decay_hot_anim = false
+		w.in_progressive_hot_anim = true
+		w.start = w.style
+		w.hot_t = 0
+	}
+
+	// leaving hot animation 
+	if was_interacted_hot && !(is_interacted_hot) {
+
+		w.in_decay_hot_anim = true
+		w.in_progressive_hot_anim = false
+		w.start = w.style
+		w.hot_t = 1
+	}
+
+	// entring active animation
+	if !was_interacted_active && (is_interacted_active) {
+		w.in_decay_active_anim = false
+		w.in_progressive_active_anim = true
+		w.start = w.style
+		w.active_t = 0
+	}
+
+	// leaving active animation
+	if was_interacted_active && !(is_interacted_active) {
+		w.in_decay_active_anim = true
+		w.in_progressive_active_anim = false
+		w.start = w.style
+		w.active_t = 1
+	}
+
+	if w.in_progressive_active_anim {
+		lerp_style_progressive(w, w.active_t)
+	} else if w.in_progressive_hot_anim {
+		lerp_style_progressive(w, w.hot_t)
+	}
+
+	if w.in_decay_hot_anim {
+		lerp_style_decaying(w, w.hot_t)
+	} else if w.in_decay_active_anim {
+		lerp_style_decaying(w, w.active_t)
+	}
 }

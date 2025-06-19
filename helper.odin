@@ -42,7 +42,7 @@ lerp_style_progressive :: proc(w: ^Widget, time: f32) {
 	w.style.border_radius = lerp(w.start.border_radius, w.target.border_radius, ease.cubic_in_out(time))
 	w.style.text.spacing = math.lerp(w.start.text.spacing, w.target.text.spacing, ease.cubic_in_out(time))
 	w.style.text.font_size = math.lerp(w.start.text.font_size, w.target.text.font_size, ease.cubic_in_out(time))
-	w.style.layout.padding = math.lerp(w.start.layout.padding, w.target.layout.padding, ease.cubic_in_out(time))
+	w.style.padding = math.lerp(w.start.padding, w.target.padding, ease.cubic_in_out(time))
 }
 
 lerp_style_decaying :: proc(w: ^Widget, time: f32) {
@@ -50,5 +50,5 @@ lerp_style_decaying :: proc(w: ^Widget, time: f32) {
 	w.style.border_radius = lerp(w.target.border_radius, w.start.border_radius, ease.cubic_in_out(time))
 	w.style.text.font_size = math.lerp(w.target.text.font_size, w.start.text.font_size, ease.cubic_in_out(time))
 	w.style.text.spacing = math.lerp(w.target.text.spacing, w.start.text.spacing, ease.cubic_in_out(time))
-	w.style.layout.padding = math.lerp(w.target.layout.padding, w.start.layout.padding, ease.cubic_in_out(time))
+	w.style.padding = math.lerp(w.target.padding, w.start.padding, ease.cubic_in_out(time))
 }

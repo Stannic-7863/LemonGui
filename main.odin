@@ -11,11 +11,13 @@ BLACK :: Color{0, 0, 0, 255}
 GREEN :: Color{0, 255, 0, 255}
 BLUE :: Color{0, 0, 255, 255}
 RED :: Color{255, 0, 0, 255}
-DEFAULT_BACKGROUND :: [4]u8{30, 30, 46, 255} // #1E1E2E
 CHILD_BACKGROUND :: [4]u8{42, 42, 64, 255} // #2A2A40
+DEFAULT_BACKGROUND :: [4]u8{30, 30, 46, 255} // #1E1E2E
 HOVER_COLOR :: [4]u8{58, 58, 90, 255} // #3A3A5A
-LONG_PRESS_COLOR :: [4]u8{255, 136, 170, 255} // #FF88AA
 PRESS_COLOR :: [4]u8{136, 221, 255, 255} // #88DDFF
+LONG_PRESS_COLOR :: [4]u8{255, 136, 170, 255} // #FF88AA
+
+import "core:mem"
 
 main :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
@@ -23,14 +25,12 @@ main :: proc() {
 	defer rl.CloseWindow()
 
 	ctx := init_core_context(32)
+	defer deinit_core_context(&ctx)
+
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
 
 	ctx.text_measure_proc = measure_text
-
-	defer delete(ctx.persistant_data)
-	defer delete(ctx.render_commands)
-	defer delete(ctx.widgets)
 
 	sdf_shader := rl.LoadShader("", "./sdf_rect_shader.frag")
 
@@ -49,7 +49,6 @@ main :: proc() {
 		ctx.window_height = cast(f32)rl.GetScreenHeight()
 		ctx.delta_time = rl.GetFrameTime()
 
-		defer free_all(context.temp_allocator)
 		begin_ui(&ctx)
 
 		if rl.IsMouseButtonDown(.LEFT) {ctx.mouse.events += {.Left_Down}}
@@ -69,35 +68,49 @@ main :: proc() {
 			color = DEFAULT_BACKGROUND,
 			border_radius = {20, 10, 20, 10},
 			text = {font_size = 20, spacing = 2, line_height = 20},
-			layout = {padding = 32, child_gap = 16},
+			padding = 32,
+			child_gap = 16,
 		}
 
 		root := create_widget(
 			&ctx,
 			"",
 			{sizing = {fixed(ctx.window_width), fixed(ctx.window_height)}, direction = .Row},
-			style = {layout = {child_gap = 16, padding = 16}},
+			style = {child_gap = 16, padding = 16},
 			events_mask = {},
 		)
 		push_parent(&ctx, root)
 
-		w_1 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style)
+		w_1 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style = style)
 		w_2 := create_widget(
 			&ctx,
 			"A quick brown fox jumps over the lazy dog",
-			{sizing = {grow(), grow()}, direction = .Row, child_alignment = {x = .Right}},
-			style,
+			{sizing = {grow(), grow()}, direction = .Row, child_alignment = {x = .Left}},
+			style = style,
 		)
 		resolve_styling(w_2)
-
 
 		{
 			push_parent(&ctx, w_2)
 			defer pop_parent(&ctx)
 			style.color = CHILD_BACKGROUND
-			w_21 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style, ~{})
-			w_22 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style)
-			w_23 := create_widget(&ctx, "", {sizing = {percent(0.5), percent(0.5)}}, style)
+			w_21 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style = style, events_mask = ~{})
+			w_22 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style = style)
+			w_23 := create_widget(
+				&ctx,
+				"omai wa mou",
+				{sizing = {percent(0.5), percent(0.5)}},
+				{attachments = {parent = .Center_Center, element = .Center_Center}, attachment_to = .Parent, expand = {0, 0}},
+				style = style,
+			)
+			{
+				push_parent(&ctx, w_23)
+				defer pop_parent(&ctx)
+				style.color = DEFAULT_BACKGROUND
+				w_23_1 := create_widget(&ctx, "", {sizing = {grow(), grow()}}, style = style, events_mask = ~{})
+				w_23_2 := create_widget(&ctx, "", {sizing = {grow(), grow()}}, style = style)
+			}
+
 		}
 		style.color = DEFAULT_BACKGROUND
 
@@ -131,26 +144,26 @@ main :: proc() {
 			&ctx,
 			"A quick brown fox does not jump over the lazy dog",
 			{sizing = {grow(), grow()}, direction = direc, child_alignment = {x = x_align, y = y_align}},
-			style,
+			style = style,
 		)
 		{
 			push_parent(&ctx, w_3)
 			defer pop_parent(&ctx)
 			style.color = CHILD_BACKGROUND
-			w_31 := create_widget(&ctx, "", {sizing = {fit(), fit()}, direction = .Row}, style)
+			w_31 := create_widget(&ctx, "", {sizing = {fit(), fit()}, direction = .Row}, style = style)
 			{
 				push_parent(&ctx, w_31)
 				defer pop_parent(&ctx)
 				style.color = DEFAULT_BACKGROUND
-				w_31_1 := create_widget(&ctx, "", {sizing = {grow(50, 50), fixed(50)}}, style)
-				w_31_2 := create_widget(&ctx, "", {sizing = {grow(50, 50), grow(50, 50)}}, style)
+				w_31_1 := create_widget(&ctx, "", {sizing = {grow(50, 50), fixed(50)}}, style = style)
+				w_31_2 := create_widget(&ctx, "", {sizing = {grow(50, 50), grow(50, 50)}}, style = style)
 			}
 			style.color = CHILD_BACKGROUND
-			w_32 := create_widget(&ctx, "", {sizing = {percent(0.5), percent(0.5)}}, style)
+			w_32 := create_widget(&ctx, "", {sizing = {percent(0.5), percent(0.5)}}, style = style)
 		}
 
 		style.color = DEFAULT_BACKGROUND
-		w_4 := create_widget(&ctx, "", {sizing = {grow(50, 50), grow(50, 50)}}, style)
+		w_4 := create_widget(&ctx, "", {sizing = {grow(50, 50), grow(50, 50)}}, style = style)
 
 		end_ui(&ctx)
 
@@ -158,6 +171,7 @@ main :: proc() {
 		rl.ClearBackground(rl.BLANK)
 		render(ctx, render_texture, sdf_shader)
 		rl.EndDrawing()
+		free_all(context.temp_allocator)
 	}
 }
 
@@ -179,56 +193,6 @@ resolve_styling :: proc(widget: ^Widget) {
 	}
 }
 
-resolve_animations :: proc(w: ^Widget) {
-	is_interacted_hot: bool = .Hovered in w.events
-	is_interacted_active: bool = w.events & Active_Widget_Events != {}
-	was_interacted_hot: bool = w.in_progressive_hot_anim
-	was_interacted_active: bool = w.in_progressive_active_anim
-
-	// entering hot animation 
-	if (is_interacted_hot) && !was_interacted_hot {
-		w.in_decay_hot_anim = false
-		w.in_progressive_hot_anim = true
-		w.start = w.style
-		w.hot_t = 0
-	}
-
-	// leaving hot animation 
-	if was_interacted_hot && !(is_interacted_hot) {
-		w.in_decay_hot_anim = true
-		w.in_progressive_hot_anim = false
-		w.start = w.style
-		w.hot_t = 1
-	}
-
-	// entring active animation
-	if !was_interacted_active && (is_interacted_active) {
-		w.in_decay_active_anim = false
-		w.in_progressive_active_anim = true
-		w.start = w.style
-		w.active_t = 0
-	}
-
-	// leaving active animation
-	if was_interacted_active && !(is_interacted_active) {
-		w.in_decay_active_anim = true
-		w.in_progressive_active_anim = false
-		w.start = w.style
-		w.active_t = 1
-	}
-
-	if w.in_progressive_active_anim {
-		lerp_style_progressive(w, w.active_t)
-	} else if w.in_progressive_hot_anim {
-		lerp_style_progressive(w, w.hot_t)
-	}
-
-	if w.in_decay_hot_anim {
-		lerp_style_decaying(w, w.hot_t)
-	} else if w.in_decay_active_anim {
-		lerp_style_decaying(w, w.active_t)
-	}
-}
 
 render :: proc(ctx: Core_Context, texture: rl.Texture, shader: rl.Shader) {
 	rect_center_loc := rl.GetShaderLocation(shader, "rect_center")
@@ -270,8 +234,6 @@ render :: proc(ctx: Core_Context, texture: rl.Texture, shader: rl.Shader) {
 					v.spacing,
 					cast(rl.Color)v.color,
 				)
-				// width := rl.MeasureTextEx(rl.GetFontDefault(), fmt.ctprint(l), v.font_size, v.spacing)
-				// rl.DrawRectangleLinesEx({v.position.x, initial_y, width.x, width.y}, 2, rl.WHITE)
 				initial_y += v.line_height
 			}
 
