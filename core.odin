@@ -3,11 +3,6 @@ package main
 import "core:hash"
 import "core:time"
 
-Vec2f32 :: [2]f32
-Vec4f32 :: [4]f32 // for padding : top right bottom left | for corners : top left top right bottom right bottom left
-Color :: [4]u8 // turn this into a union of : solid color, gradient + graident type 
-Id :: distinct i64
-
 /*
 during frame : 
 
@@ -51,52 +46,66 @@ render_frame()
 // Support overgrowing elements 
 
 
+// odinfmt: disable 
+Vec2f32 :: [2]f32
+Vec4f32 :: [4]f32 // for padding : top right bottom left | for corners : top left top right bottom right bottom left
+Color   :: [4]u8 // turn this into a union of : solid color, gradient + graident type 
+Id		:: distinct i64
+// odinfmt: enable
+
+Animation_States :: enum u8 {
+	Hot_Progressive, // on detecting a new hot event 
+	Hot_Decay, // on detecting previous hot event's death 
+	Active_Progressive,
+	Active_Decay,
+	Active_Overrided,
+}
+
 Core_Context :: struct {
-	delta_time:                  f32,
-	window_height, window_width: f32,
-	hot_widget_id:               Id, //id, widget currently under mouse  
-	active_widget_id:            Id, //id, widget currently being interacted with 
-	current_parent:              ^Widget,
+	stacks:                      struct {
+		post_r: [dynamic]^Widget,
+		pre:    [dynamic]^Widget,
+		temp:   [dynamic]^Widget,
+	},
 	mouse:                       Mouse_Context,
 	text_lines:                  [dynamic]string,
 	widgets:                     [dynamic]Widget,
 	render_commands:             [dynamic]Render_Command,
 	persistant_data:             map[Id]Persistant_Data, // widgets from last frame. Used to query events. Accessed by widget.id
-	stacks:                      struct {
-		reverse_post: [dynamic]^Widget,
-		pre:          [dynamic]^Widget,
-		temp:         [dynamic]^Widget,
-	},
+	hot_widget_id:               Id, //id, widget currently under mouse  
+	active_widget_id:            Id, //id, widget currently being interacted with 
+	current_parent:              ^Widget,
 	text_measure_proc:           proc(text: string, style: Text_Style) -> f32,
+	window_height, window_width: f32,
+	delta_time:                  f32,
 }
 
 Persistant_Data :: struct {
-	events:                                           Widget_Events,
-	in_progressive_hot_anim, in_decay_hot_anim:       bool,
-	in_progressive_active_anim, in_decay_active_anim: bool,
-	active_overrided:                                 bool,
-	active_t, hot_t:                                  f32,
-	size, position, prev_text_size:                   Vec2f32,
-	style, start:                                     Style,
+	style, start:    Style,
+	size, position:  Vec2f32,
+	active_t, hot_t: f32,
+	events:          Widget_Events,
+	anim_state:      bit_set[Animation_States],
 }
 
 Mouse_Context :: struct {
-	scroll:               f32,
-	scroll_v:             Vec2f32,
-	position:             Vec2f32,
-	old_position:         Vec2f32,
+	double_click_timeout: time.Duration,
+	long_down_timeout:    time.Duration,
 	last_left_click:      time.Time,
 	last_right_click:     time.Time,
 	left_down_start:      time.Time,
 	right_down_start:     time.Time,
-	long_down_timeout:    time.Duration,
-	double_click_timeout: time.Duration,
+	old_position:         Vec2f32,
+	position:             Vec2f32,
+	delta:                Vec2f32,
+	scroll_v:             Vec2f32,
+	scroll:               f32,
 	events:               bit_set[Mouse_Event],
 }
 
 Render_Command :: struct {
-	z_index: int,
 	type:    Render_Command_Type,
+	z_index: int,
 }
 
 Render_Command_Type :: union {
@@ -105,19 +114,19 @@ Render_Command_Type :: union {
 }
 
 Command_Rect :: struct {
-	size, position:   Vec2f32,
 	border_radius:    Vec4f32,
 	border_thickness: Vec4f32,
+	size, position:   Vec2f32,
 	color:            Color,
 }
 
 Command_Text :: struct {
+	lines:       []string,
 	position:    Vec2f32,
 	font_size:   f32,
 	spacing:     f32,
 	line_height: f32,
 	color:       Color,
-	lines:       []string,
 }
 
 Text_Style :: struct {
@@ -128,50 +137,48 @@ Text_Style :: struct {
 }
 
 Style :: struct {
-	color:            Color,
 	border_radius:    Vec4f32,
 	border_thickness: Vec4f32,
-	text:             Text_Style,
-	padding:          [4]f32,
-	child_gap:        f32,
+	color:            Color,
 }
 
 Word_Measure :: struct {
 	text:          string,
-	width:         f32,
-	spaces_before: i32,
 	start_index:   int,
+	spaces_before: i32,
+	width:         f32,
 }
 
 Node :: struct {
+	id:                    Id,
 	next:                  ^Widget,
 	prev:                  ^Widget,
 	parent:                ^Widget,
 	last_child:            ^Widget,
 	first_child:           ^Widget,
 	index, total_children: int,
-	id:                    Id,
+}
+
+Config :: union {
+	Layout,
+	Floating,
+	Text,
 }
 
 Widget :: struct {
-	// Progressive animations : time var moves from 0 - 1 
-	// Decay animations : time var moves from 1 - 0
-	in_progressive_hot_anim, in_decay_hot_anim:               bool,
-	in_progressive_active_anim, in_decay_active_anim:         bool,
-	active_overrided:                                         bool,
-	active_t, hot_t:                                          f32,
-	size, position, text_size, text_position, prev_text_size: Vec2f32,
-	text:                                                     string,
-	lines:                                                    []string,
-	node:                                                     Node,
-	layout:                                                   Layout,
-	floating:                                                 Floating,
-	style, start, target:                                     Style,
-	events, events_mask:                                      Widget_Events,
-	z_index:                                                  int,
+	config:               Config,
+	node:                 Node,
+	style, start, target: Style,
+	expand:               [2]Expand,
+	offset:               [2]Offset,
+	_min:                 Vec2f32,
+	size, position:       Vec2f32,
+	_z_index:             int,
+	active_t, hot_t:      f32,
+	events, events_mask:  Widget_Events,
+	anim_state:           bit_set[Animation_States],
+	anchor:               Anchor,
 }
-
-import "core:fmt"
 
 init_core_context :: proc(widget_arr_backing_length: int) -> Core_Context {
 	ctx := Core_Context{}
@@ -180,7 +187,7 @@ init_core_context :: proc(widget_arr_backing_length: int) -> Core_Context {
 	ctx.render_commands = make([dynamic]Render_Command, widget_arr_backing_length)
 	ctx.stacks.temp = make([dynamic]^Widget, 0, widget_arr_backing_length)
 	ctx.stacks.pre = make([dynamic]^Widget, 0, widget_arr_backing_length)
-	ctx.stacks.reverse_post = make([dynamic]^Widget, 0, widget_arr_backing_length)
+	ctx.stacks.post_r = make([dynamic]^Widget, 0, widget_arr_backing_length)
 	ctx.persistant_data = make(map[Id]Persistant_Data)
 	return ctx
 }
@@ -191,7 +198,7 @@ deinit_core_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.persistant_data)
 	delete(ctx.stacks.temp)
 	delete(ctx.stacks.pre)
-	delete(ctx.stacks.reverse_post)
+	delete(ctx.stacks.post_r)
 	delete(ctx.text_lines)
 }
 
@@ -232,16 +239,15 @@ end_ui :: proc(ctx: ^Core_Context) {
 		events -= w.events_mask
 
 		if (.Hovered in events && .Hovered not_in w.events) {
-			if w.in_decay_active_anim {
+			if .Active_Decay in w.anim_state {
 				w.start = w.style
 				w.hot_t = 0
-				w.in_decay_active_anim = false
+				w.anim_state -= {.Active_Decay}
 			}
 		}
 
-		// if detected a new active event or one of two active events was removed
-		if w.in_progressive_active_anim && (events & Active_Widget_Events != w.events & Active_Widget_Events) {
-			w.active_overrided = true
+		if .Active_Progressive in w.anim_state && (events & Active_Widget_Events != w.events & Active_Widget_Events) {
+			w.anim_state += {.Active_Overrided}
 			w.start = w.style
 		}
 
@@ -252,177 +258,205 @@ end_ui :: proc(ctx: ^Core_Context) {
 		}
 
 		if w.node.id == ctx.active_widget_id {
-			if w.active_overrided {
+			if .Active_Overrided in w.anim_state {
 				w.start = w.style
 				w.active_t = 0
-				w.active_overrided = false
+				w.anim_state -= {.Active_Overrided}
 			}
 			w.active_t = clamp(w.active_t + ctx.delta_time, 0, 1)
 		} else {
-			if w.active_overrided {
+			if .Active_Overrided in w.anim_state {
 				w.start = w.style
 				w.active_t = 1
-				w.active_overrided = false
+				w.anim_state -= {.Active_Overrided}
 			}
 			w.active_t = clamp(w.active_t - ctx.delta_time, 0, 1)
 		}
 
-
 		ctx.persistant_data[w.node.id] = Persistant_Data {
-			events                     = events,
-			start                      = w.start,
-			style                      = w.style,
-			hot_t                      = w.hot_t,
-			active_t                   = w.active_t,
-			size                       = w.size,
-			position                   = w.position,
-			prev_text_size             = w.prev_text_size,
-			in_progressive_hot_anim    = w.in_progressive_hot_anim,
-			in_decay_hot_anim          = w.in_decay_hot_anim,
-			in_progressive_active_anim = w.in_progressive_active_anim,
-			in_decay_active_anim       = w.in_decay_active_anim,
-			active_overrided           = w.active_overrided,
+			events     = events,
+			start      = w.start,
+			style      = w.style,
+			hot_t      = w.hot_t,
+			active_t   = w.active_t,
+			size       = w.size,
+			position   = w.position,
+			anim_state = w.anim_state,
 		}
 	}
 
 	ctx.mouse.events = {}
-	clear(&ctx.stacks.reverse_post)
+	ctx.mouse.old_position = ctx.mouse.position
+	clear(&ctx.stacks.post_r)
 	clear(&ctx.stacks.pre)
 	clear(&ctx.stacks.temp)
 }
 
-create_widget :: proc(
-	ctx: ^Core_Context,
-	text: string = "",
-	layout: Layout = {},
-	floating: Floating = {},
-	style: Style = {},
-	events_mask: Widget_Events = {},
-) -> ^Widget {
-	append(&ctx.widgets, Widget{})
-	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
-
-	w^ = {} // zero out 
-
-	w.text = text
-	w.layout = layout
-	w.target = style
-	w.events_mask = events_mask
-	w.floating = floating
-	w.node.index = len(ctx.widgets) - 1
-	w.node.parent = ctx.current_parent
-	if w.floating != {} {
-		w.z_index = cap(ctx.widgets)
-	}
-
+_add_widget :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	if ctx.current_parent != nil {
 		ctx.current_parent.node.total_children += 1
 
 		if ctx.current_parent.node.first_child == nil {
-			ctx.current_parent.node.first_child = w
+			ctx.current_parent.node.first_child = widget
 		}
-		w.node.prev = ctx.current_parent.node.last_child
+		widget.node.prev = ctx.current_parent.node.last_child
 
 		if ctx.current_parent.node.last_child != nil {
-			ctx.current_parent.node.last_child.node.next = w
+			ctx.current_parent.node.last_child.node.next = widget
 		}
-		ctx.current_parent.node.last_child = w
+		ctx.current_parent.node.last_child = widget
 	}
+}
 
-
+_generate_widget_hash :: proc(widget: ^Widget) {
 	buffer: [size_of(int) * 4]byte
 	offset: int
 	temp: [size_of(int)]u8
 
-	if w.node.prev != nil {
-		temp = transmute([size_of(int)]u8)w.node.prev
+	if widget.node.prev != nil {
+		temp = transmute([size_of(int)]u8)widget.node.prev
 		copy(buffer[offset:offset + size_of(int)], temp[:])
 	}
 	offset += size_of(int)
 
-	if w.node.parent != nil {
-		temp = transmute([size_of(int)]u8)w.node.parent
+	if widget.node.parent != nil {
+		temp = transmute([size_of(int)]u8)widget.node.parent
 		copy(buffer[offset:offset + size_of(int)], temp[:])
 	}
 	offset += size_of(int)
 
-	temp = transmute([size_of(int)]u8)w.node.total_children
+	temp = transmute([size_of(int)]u8)widget.node.total_children
 	copy(buffer[offset:offset + size_of(int)], temp[:])
 	offset += size_of(int)
 
-	temp = transmute([size_of(int)]u8)w.node.index
+	temp = transmute([size_of(int)]u8)widget.node.index
 	copy(buffer[offset:offset + size_of(int)], temp[:])
 	offset += size_of(int)
 
-	w.node.id = cast(Id)hash.fnv64a(buffer[:])
+	widget.node.id = cast(Id)hash.fnv64a(buffer[:])
+}
 
-	if val, ok := ctx.persistant_data[w.node.id]; ok {
-		w.events = val.events
-		w.hot_t = val.hot_t
-		w.active_t = val.active_t
-		w.prev_text_size = val.prev_text_size
-		w.start = val.start
-		w.style = val.style
-		w.in_decay_hot_anim = val.in_decay_hot_anim
-		w.in_progressive_hot_anim = val.in_progressive_hot_anim
-		w.in_decay_active_anim = val.in_decay_active_anim
-		w.in_progressive_active_anim = val.in_progressive_active_anim
-		w.active_overrided = val.active_overrided
-	} else {
+_retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widget: ^Widget) -> bool {
+	val := persistant_data[widget.node.id] or_return
+	widget.events = val.events
+	widget.hot_t = val.hot_t
+	widget.active_t = val.active_t
+	widget.start = val.start
+	widget.style = val.style
+	widget.anim_state = val.anim_state
+	return true
+}
+
+create_widget :: proc(
+	ctx: ^Core_Context,
+	config: Config = nil,
+	expand: [2]Expand = {},
+	offset: [2]Offset = {},
+	style: Style = {},
+	events_mask: Widget_Events = {},
+) -> ^Widget {
+
+	if e, ok := config.(Text); (ok || config == nil) {
+		return nil
+	}
+
+	append(&ctx.widgets, Widget{})
+	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
+	w^ = {} // zero out 
+
+	w.config = config
+	w.target = style
+	w.offset = offset
+	w.expand = expand
+	w.events_mask = events_mask
+	w.node.index = len(ctx.widgets) - 1
+	w.node.parent = ctx.current_parent
+
+	_add_widget(ctx, w)
+	_generate_widget_hash(w)
+
+	if !_retrieve_persistant_data(ctx.persistant_data, w) {
 		w.style = style
 	}
 
 	return w
 }
 
+create_text :: proc(
+	ctx: ^Core_Context,
+	text: Text,
+	expand: [2]Expand = {},
+	offset: [2]Offset = {},
+	style: Style = {},
+	events_mask: Widget_Events = {},
+) {
+	append(&ctx.widgets, Widget{})
+	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
+	w^ = {} // zero out 
+
+	w.config = text
+	w.target = style
+	w.offset = offset
+	w.expand = expand
+	w.events_mask = events_mask
+	w.node.index = len(ctx.widgets) - 1
+	w.node.parent = ctx.current_parent
+
+	_add_widget(ctx, w)
+	_generate_widget_hash(w)
+
+	if !_retrieve_persistant_data(ctx.persistant_data, w) {
+		w.style = style
+	}
+}
+
 resolve_animations :: proc(w: ^Widget) {
 	is_interacted_hot: bool = .Hovered in w.events
 	is_interacted_active: bool = w.events & Active_Widget_Events != {}
-	was_interacted_hot: bool = w.in_progressive_hot_anim
-	was_interacted_active: bool = w.in_progressive_active_anim
+	was_interacted_hot: bool = .Hot_Progressive in w.anim_state
+	was_interacted_active: bool = .Active_Progressive in w.anim_state
 
 	// entering hot animation 
 	if (is_interacted_hot) && !was_interacted_hot {
-		w.in_decay_hot_anim = false
-		w.in_progressive_hot_anim = true
+		w.anim_state -= {.Hot_Decay}
+		w.anim_state += {.Hot_Progressive}
 		w.start = w.style
 		w.hot_t = 0
 	}
 
 	// leaving hot animation 
 	if was_interacted_hot && !(is_interacted_hot) {
-
-		w.in_decay_hot_anim = true
-		w.in_progressive_hot_anim = false
+		w.anim_state += {.Hot_Decay}
+		w.anim_state -= {.Hot_Progressive}
 		w.start = w.style
 		w.hot_t = 1
 	}
 
 	// entring active animation
 	if !was_interacted_active && (is_interacted_active) {
-		w.in_decay_active_anim = false
-		w.in_progressive_active_anim = true
+		w.anim_state -= {.Active_Decay}
+		w.anim_state += {.Active_Progressive}
 		w.start = w.style
 		w.active_t = 0
 	}
 
 	// leaving active animation
 	if was_interacted_active && !(is_interacted_active) {
-		w.in_decay_active_anim = true
-		w.in_progressive_active_anim = false
+		w.anim_state += {.Active_Decay}
+		w.anim_state -= {.Active_Progressive}
 		w.start = w.style
 		w.active_t = 1
 	}
 
-	if w.in_progressive_active_anim {
+	if .Active_Progressive in w.anim_state {
 		lerp_style_progressive(w, w.active_t)
-	} else if w.in_progressive_hot_anim {
+	} else if .Hot_Progressive in w.anim_state {
 		lerp_style_progressive(w, w.hot_t)
 	}
 
-	if w.in_decay_hot_anim {
+	if .Hot_Decay in w.anim_state {
 		lerp_style_decaying(w, w.hot_t)
-	} else if w.in_decay_active_anim {
+	} else if .Active_Decay in w.anim_state {
 		lerp_style_decaying(w, w.active_t)
 	}
 }

@@ -12,6 +12,26 @@ hex :: proc "contextless" (hex: u32) -> Color {
 	return (transmute([4]u8)hex).abgr
 }
 
+expand_percent :: proc "contextless" (value: f32) -> Expand {
+	return Expand{value = value, kind = .Percent}
+}
+
+expand_absolute :: proc "contextless" (value: f32) -> Expand {
+	return Expand{value = value, kind = .Absolute}
+}
+
+offset_percent :: proc "contextless" (value: f32) -> Offset {
+	return Offset{value = value, kind = .Percent}
+}
+
+offset_relative :: proc "contextless" (value: f32) -> Offset {
+	return Offset{value = value, kind = .Relative}
+}
+
+offset_fixed :: proc "contextless" (value: f32) -> Offset {
+	return Offset{value = value, kind = .Fixed}
+}
+
 fit :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Sizing {
 	return Sizing{min = min, max = max, kind = .Fit}
 }
@@ -40,15 +60,9 @@ lerp :: proc "contextless" (a, b: $T, t: $E) -> (x: T) {
 lerp_style_progressive :: proc(w: ^Widget, time: f32) {
 	w.style.color = lerp(w.start.color, w.target.color, time)
 	w.style.border_radius = lerp(w.start.border_radius, w.target.border_radius, ease.cubic_in_out(time))
-	w.style.text.spacing = math.lerp(w.start.text.spacing, w.target.text.spacing, ease.cubic_in_out(time))
-	w.style.text.font_size = math.lerp(w.start.text.font_size, w.target.text.font_size, ease.cubic_in_out(time))
-	w.style.padding = math.lerp(w.start.padding, w.target.padding, ease.cubic_in_out(time))
 }
 
 lerp_style_decaying :: proc(w: ^Widget, time: f32) {
 	w.style.color = lerp(w.target.color, w.start.color, time)
 	w.style.border_radius = lerp(w.target.border_radius, w.start.border_radius, ease.cubic_in_out(time))
-	w.style.text.font_size = math.lerp(w.target.text.font_size, w.start.text.font_size, ease.cubic_in_out(time))
-	w.style.text.spacing = math.lerp(w.target.text.spacing, w.start.text.spacing, ease.cubic_in_out(time))
-	w.style.padding = math.lerp(w.target.padding, w.start.padding, ease.cubic_in_out(time))
 }
