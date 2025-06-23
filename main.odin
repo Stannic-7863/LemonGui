@@ -1,5 +1,8 @@
 package main
 
+import "base:runtime"
+import "core:reflect"
+
 import "core:fmt"
 import "core:hash"
 import "core:time"
@@ -17,9 +20,31 @@ HOVER_COLOR :: [4]u8{58, 58, 90, 255} // #3A3A5A
 PRESS_COLOR :: [4]u8{136, 221, 255, 255} // #88DDFF
 LONG_PRESS_COLOR :: [4]u8{255, 136, 170, 255} // #FF88AA
 
-import "core:mem"
+print_types :: proc(type: typeid, depth: int = 1, name: string = "") {
+	if depth > 0 {
+		type_info := type_info_of(type)
+		if reflect.is_struct(type_info) {
+			for field_info in reflect.struct_fields_zipped(type) {
+				print_types(field_info.type.id, depth - 1, field_info.name)
+			}
+		}
+	}
+
+	fmt.println(type, name, type_info_of(type).size)
+}
 
 main :: proc() {
+	for args in runtime.args__ {
+		if args == "sizes" {
+			print_types(Widget)
+		}
+		if args == "app" {
+			run_app()
+		}
+	}
+}
+
+run_app :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
 	rl.InitWindow(700, 700, "Balls?")
 	defer rl.CloseWindow()
@@ -43,13 +68,15 @@ main :: proc() {
 
 	x_align: Child_Alignment_X
 	y_align: Child_Alignment_Y
-	direc: Direction
+	direc: Layout_Direction
+	can_render := false
 	for !rl.WindowShouldClose() {
+
 		ctx.window_width = cast(f32)rl.GetScreenWidth()
 		ctx.window_height = cast(f32)rl.GetScreenHeight()
 		ctx.delta_time = rl.GetFrameTime()
 
-		begin_ui(&ctx)
+		ctx.mouse.position = rl.GetMousePosition()
 
 		if rl.IsMouseButtonDown(.LEFT) {ctx.mouse.events += {.Left_Down}}
 		if rl.IsMouseButtonDown(.RIGHT) {ctx.mouse.events += {.Right_Down}}
@@ -61,31 +88,25 @@ main :: proc() {
 		if rl.IsMouseButtonReleased(.RIGHT) {ctx.mouse.events += {.Right_Released}}
 		if rl.IsMouseButtonReleased(.MIDDLE) {ctx.mouse.events += {.Middle_Released}}
 
-		ctx.mouse.old_position = ctx.mouse.position
-		ctx.mouse.position = rl.GetMousePosition()
+		begin_ui(&ctx)
 
 		style := Style {
-			color = DEFAULT_BACKGROUND,
+			color         = DEFAULT_BACKGROUND,
 			border_radius = {20, 10, 20, 10},
-			text = {font_size = 20, spacing = 2, line_height = 20},
-			padding = 32,
-			child_gap = 16,
 		}
 
 		root := create_widget(
 			&ctx,
-			"",
-			{sizing = {fixed(ctx.window_width), fixed(ctx.window_height)}, direction = .Row},
-			style = {child_gap = 16, padding = 16},
+			Layout{sizing = {fixed(ctx.window_width), fixed(ctx.window_height)}, direction = .Row, child_gap = 16, padding = 16},
+			style = {},
 			events_mask = {},
 		)
 		push_parent(&ctx, root)
 
-		w_1 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style = style)
+		w_1 := create_widget(&ctx, Layout{sizing = {fixed(50), fixed(50)}}, style = style)
 		w_2 := create_widget(
 			&ctx,
-			"A quick brown fox jumps over the lazy dog",
-			{sizing = {grow(), grow()}, direction = .Row, child_alignment = {x = .Left}},
+			Layout{sizing = {grow(), grow()}, direction = .Row, child_alignment = {x = .Left}, child_gap = 16, padding = 16},
 			style = style,
 		)
 		resolve_styling(w_2)
@@ -94,22 +115,26 @@ main :: proc() {
 			push_parent(&ctx, w_2)
 			defer pop_parent(&ctx)
 			style.color = CHILD_BACKGROUND
-			w_21 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style = style, events_mask = ~{})
-			w_22 := create_widget(&ctx, "", {sizing = {fixed(50), fixed(50)}}, style = style)
-			w_23 := create_widget(
-				&ctx,
-				"omai wa mou",
-				{sizing = {percent(0.5), percent(0.5)}},
-				{attachments = {parent = .Center_Center, element = .Center_Center}, attachment_to = .Parent, expand = {0, 0}},
-				style = style,
-			)
-			{
-				push_parent(&ctx, w_23)
-				defer pop_parent(&ctx)
-				style.color = DEFAULT_BACKGROUND
-				w_23_1 := create_widget(&ctx, "", {sizing = {grow(), grow()}}, style = style, events_mask = ~{})
-				w_23_2 := create_widget(&ctx, "", {sizing = {grow(), grow()}}, style = style)
-			}
+			w_21 := create_widget(&ctx, Layout{sizing = {fixed(50), fixed(50)}}, style = style, events_mask = ~{})
+			w_22 := create_widget(&ctx, Layout{sizing = {fixed(50), fixed(50)}}, style = style)
+			// w_23 := create_widget(
+			// 	&ctx,
+			// 	Floating {
+			// 		parent = .Left_Top,
+			// 		element = .Left_Top,
+			// 		attachment_to = .Parent,
+			// 		layout = Layout{sizing = {percent(0.5), percent(0.5)}, child_gap = 16, padding = 16},
+			// 	},
+			// 	style = style,
+			// )
+
+			// {
+			// 	push_parent(&ctx, w_23)
+			// 	defer pop_parent(&ctx)
+			// 	style.color = DEFAULT_BACKGROUND
+			// 	w_23_1 := create_widget(&ctx, Layout{sizing = {grow(), grow()}}, style = style, events_mask = ~{})
+			// 	w_23_2 := create_widget(&ctx, Layout{sizing = {grow(), grow()}}, style = style)
+			// }
 
 		}
 		style.color = DEFAULT_BACKGROUND
@@ -142,28 +167,27 @@ main :: proc() {
 
 		w_3 := create_widget(
 			&ctx,
-			"A quick brown fox does not jump over the lazy dog",
-			{sizing = {grow(), grow()}, direction = direc, child_alignment = {x = x_align, y = y_align}},
+			Layout{sizing = {grow(), grow()}, direction = direc, child_alignment = {x = x_align, y = y_align}, child_gap = 16, padding = 16},
 			style = style,
 		)
 		{
 			push_parent(&ctx, w_3)
 			defer pop_parent(&ctx)
 			style.color = CHILD_BACKGROUND
-			w_31 := create_widget(&ctx, "", {sizing = {fit(), fit()}, direction = .Row}, style = style)
+			w_31 := create_widget(&ctx, Layout{sizing = {fit(0), fit(0)}, direction = .Row, child_gap = 16, padding = 16}, style = style)
 			{
 				push_parent(&ctx, w_31)
 				defer pop_parent(&ctx)
 				style.color = DEFAULT_BACKGROUND
-				w_31_1 := create_widget(&ctx, "", {sizing = {grow(50, 50), fixed(50)}}, style = style)
-				w_31_2 := create_widget(&ctx, "", {sizing = {grow(50, 50), grow(50, 50)}}, style = style)
+				w_31_1 := create_widget(&ctx, Layout{sizing = {grow(50, 50), fixed(50)}}, style = style)
+				w_31_2 := create_widget(&ctx, Layout{sizing = {grow(50, 50), grow(50, 50)}}, style = style)
 			}
 			style.color = CHILD_BACKGROUND
-			w_32 := create_widget(&ctx, "", {sizing = {percent(0.5), percent(0.5)}}, style = style)
+			w_32 := create_widget(&ctx, Layout{sizing = {percent(0.5), percent(0.5)}}, style = style)
 		}
 
 		style.color = DEFAULT_BACKGROUND
-		w_4 := create_widget(&ctx, "", {sizing = {grow(50, 50), grow(50, 50)}}, style = style)
+		w_4 := create_widget(&ctx, Layout{sizing = {grow(50, 50), grow(50, 50)}}, style = style)
 
 		end_ui(&ctx)
 
@@ -173,6 +197,7 @@ main :: proc() {
 		rl.EndDrawing()
 		free_all(context.temp_allocator)
 	}
+
 }
 
 resolve_styling :: proc(widget: ^Widget) {
@@ -184,7 +209,6 @@ resolve_styling :: proc(widget: ^Widget) {
 	if .Left_Down in widget.events {
 		widget.target.color = PRESS_COLOR
 		widget.target.border_radius = {30, 30, 30, 30}
-		widget.target.text.font_size = 10
 	}
 
 	if .Long_Left_Down in widget.events {
@@ -226,14 +250,7 @@ render :: proc(ctx: Core_Context, texture: rl.Texture, shader: rl.Shader) {
 			initial_y := v.position.y
 
 			for l in v.lines {
-				rl.DrawTextEx(
-					rl.GetFontDefault(),
-					fmt.ctprint(l),
-					{v.position.x, initial_y},
-					v.font_size,
-					v.spacing,
-					cast(rl.Color)v.color,
-				)
+				rl.DrawTextEx(rl.GetFontDefault(), fmt.ctprint(l), {v.position.x, initial_y}, v.font_size, v.spacing, cast(rl.Color)v.color)
 				initial_y += v.line_height
 			}
 

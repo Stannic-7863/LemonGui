@@ -3,7 +3,7 @@ package main
 import "core:math/linalg"
 import "core:time"
 
-Mouse_Event :: enum {
+Mouse_Event :: enum u8 {
 	Right_Down,
 	Right_Pressed,
 	Right_Released,
@@ -17,7 +17,7 @@ Mouse_Event :: enum {
 	Scroll_Down,
 }
 
-Widget_Event :: enum {
+Widget_Event :: enum u8 {
 	Left_Clicked,
 	Left_Pressed,
 	Left_Down,
