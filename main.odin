@@ -44,6 +44,96 @@ main :: proc() {
 	}
 }
 
+slider :: proc(ctx: ^Core_Context, value: ^f32, min, max: f32) {
+
+	main_container := create_widget(
+		ctx,
+		Layout {
+			sizing = sizing(grow(100), fixed(100)),
+			padding = {0, 15, 0, 15},
+			child_gap = 5,
+			direction = .X,
+			child_alignment = {.Center, .Center},
+		},
+		style = Style{color = {200, 200, 200, 255}, border_radius = 5},
+	)
+
+	push_parent(ctx, main_container)
+
+	create_widget(ctx, Text{style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 15}, text = fmt.tprint(min)})
+
+	railing := create_widget(
+		ctx,
+		Layout{sizing = sizing(grow(), fixed(5)), direction = .Y, child_alignment = {.Center, .Center}},
+		style = Style{color = {128, 128, 128, 255}},
+	)
+
+	push_parent(ctx, railing)
+
+	knob_offset := (value^ - min) / (max - min) - 0.5
+
+	knob := create_widget(
+		ctx,
+		Layout{sizing = sizing(fixed(20), fixed(20))},
+		offset = {Offset{value = knob_offset, kind = .Percent}, {}},
+		style = Style{color = {0, 0, 0, 255}},
+	)
+	if .Left_Down in knob.events {
+		rel := ctx.mouse.position.x - railing.position.x
+		normalized := clamp(rel / railing.size.x, 0, 1)
+		value^ = min + (max - min) * normalized
+		knob.target.color = {150, 220, 235, 255}
+	}
+
+	create_widget(
+		ctx,
+		Text{text = fmt.tprint(value^), style = {font_id = 0, letter_spacing = 1, font_size = 10, line_spacing = 0}},
+		{},
+		{Offset{value = knob_offset, kind = .Percent}, {}},
+	)
+
+	pop_parent(ctx)
+
+	create_widget(ctx, Text{style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 15}, text = fmt.tprint(max)})
+
+	pop_parent(ctx)
+}
+
+toggle_button :: proc(ctx: ^Core_Context, label: string, toggle: ^bool) {
+
+	main_container := create_widget(
+		ctx,
+		Layout{sizing = sizing(grow(), fixed(100)), padding = 10, child_gap = 10, child_alignment = {.Center, .Center}},
+		style = Style{color = {200, 200, 200, 255}, border_radius = 5},
+	)
+	push_parent(ctx, main_container)
+	color: Color
+	if toggle^ {
+		color = {100, 255, 200, 255}
+	} else {
+		color = {255, 200, 100, 255}
+	}
+	e := create_widget(ctx, Layout{sizing = sizing(fixed(20), fixed(20))}, style = Style{color = color, border_radius = 4})
+	if .Left_Clicked in e.events {
+		toggle^ = !toggle^
+	}
+	create_widget(ctx, Text{text = label, style = Text_Style{font_id = 0, font_size = 20, line_spacing = 20, letter_spacing = 1}})
+	pop_parent(ctx)
+
+}
+
+button :: proc(ctx: ^Core_Context, label: string) -> Widget_Events {
+	main_container := create_widget(
+		ctx,
+		Layout{sizing = sizing(grow(), fixed(100)), padding = 10, child_gap = 10, child_alignment = {.Center, .Center}},
+		style = Style{color = {200, 200, 200, 255}, border_radius = 5},
+	)
+	push_parent(ctx, main_container)
+	create_widget(ctx, Text{text = label, style = Text_Style{font_id = 0, font_size = 20, line_spacing = 20, letter_spacing = 1}})
+	pop_parent(ctx)
+	return main_container.events
+}
+
 run_app :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
 	rl.InitWindow(700, 700, "Balls?")
@@ -69,13 +159,15 @@ run_app :: proc() {
 	x_align: Child_Alignment_X
 	y_align: Child_Alignment_Y
 	direc: Layout_Direction
-	can_render := false
-	for !rl.WindowShouldClose() {
 
+	slider_val: f32 = 10
+	toggle: bool
+
+	label := "Not Hovered"
+	for !rl.WindowShouldClose() {
 		ctx.window_width = cast(f32)rl.GetScreenWidth()
 		ctx.window_height = cast(f32)rl.GetScreenHeight()
-		ctx.delta_time = rl.GetFrameTime()
-
+		ctx.delta_time = rl.GetFrameTime() * 2
 		ctx.mouse.position = rl.GetMousePosition()
 
 		if rl.IsMouseButtonDown(.LEFT) {ctx.mouse.events += {.Left_Down}}
@@ -97,44 +189,54 @@ run_app :: proc() {
 
 		root := create_widget(
 			&ctx,
-			Layout{sizing = {fixed(ctx.window_width), fixed(ctx.window_height)}, direction = .Row, child_gap = 16, padding = 16},
+			Layout{sizing = sizing(fixed(ctx.window_width), fixed(ctx.window_height)), direction = .X, child_gap = 16, padding = 16},
 			style = {},
 			events_mask = {},
 		)
 		push_parent(&ctx, root)
 
-		w_1 := create_widget(&ctx, Layout{sizing = {fixed(50), fixed(50)}}, style = style)
+		slider(&ctx, &slider_val, 5, 15)
+
+		toggle_button(&ctx, "Toggle me Uwu", &toggle)
+
+		if .Hovered in button(&ctx, label) {
+			label = "Hovered"
+		} else {
+			label = "Not Hovered"
+		}
+
+		w_1 := create_widget(&ctx, Layout{sizing = sizing(fixed(50), fixed(50))}, style = style)
 		w_2 := create_widget(
 			&ctx,
-			Layout{sizing = {grow(), grow()}, direction = .Row, child_alignment = {x = .Left}, child_gap = 16, padding = 16},
+			Layout{sizing = sizing(grow(), grow()), direction = .X, child_alignment = {x = .Left}, child_gap = 16, padding = 16},
 			style = style,
 		)
 		resolve_styling(w_2)
 
-		{
-			push_parent(&ctx, w_2)
+		if push_parent(&ctx, w_2) {
 			defer pop_parent(&ctx)
 			style.color = CHILD_BACKGROUND
-			w_21 := create_widget(&ctx, Layout{sizing = {fixed(50), fixed(50)}}, style = style, events_mask = ~{})
-			w_22 := create_widget(&ctx, Layout{sizing = {fixed(50), fixed(50)}}, style = style)
-			// w_23 := create_widget(
-			// 	&ctx,
-			// 	Floating {
-			// 		parent = .Left_Top,
-			// 		element = .Left_Top,
-			// 		attachment_to = .Parent,
-			// 		layout = Layout{sizing = {percent(0.5), percent(0.5)}, child_gap = 16, padding = 16},
-			// 	},
-			// 	style = style,
-			// )
+			w_21 := create_widget(&ctx, Layout{sizing = sizing(fixed(50), fixed(50))}, style = style, events_mask = ~{})
+			w_22 := create_widget(&ctx, Layout{sizing = sizing(fixed(50), fixed(50))}, style = style)
+			w_23 := create_widget(
+				&ctx,
+				Floating {
+					parent = .Center_Center,
+					element = .Center_Center,
+					attachment_to = .Parent,
+					layout = Layout{sizing = sizing(percent(0.5), percent(0.5)), child_gap = 16, padding = 16},
+				},
+				style = style,
+			)
 
-			// {
-			// 	push_parent(&ctx, w_23)
-			// 	defer pop_parent(&ctx)
-			// 	style.color = DEFAULT_BACKGROUND
-			// 	w_23_1 := create_widget(&ctx, Layout{sizing = {grow(), grow()}}, style = style, events_mask = ~{})
-			// 	w_23_2 := create_widget(&ctx, Layout{sizing = {grow(), grow()}}, style = style)
-			// }
+			if push_parent(&ctx, w_23) {
+				defer pop_parent(&ctx)
+				style.color = DEFAULT_BACKGROUND
+				create_widget(
+					&ctx,
+					Text{text = "Oi, I am A Floating Widget!", style = {font_id = 0, font_size = 20, line_spacing = 20, letter_spacing = 1}},
+				)
+			}
 
 		}
 		style.color = DEFAULT_BACKGROUND
@@ -159,35 +261,46 @@ run_app :: proc() {
 		}
 
 		if rl.IsKeyPressed(.R) {
-			direc = .Row
+			direc = .X
 		}
 		if rl.IsKeyPressed(.C) {
-			direc = .Colom
+			direc = .Y
 		}
 
 		w_3 := create_widget(
 			&ctx,
-			Layout{sizing = {grow(), grow()}, direction = direc, child_alignment = {x = x_align, y = y_align}, child_gap = 16, padding = 16},
+			Layout{sizing = sizing(grow(), grow()), direction = direc, child_alignment = {x = x_align, y = y_align}, child_gap = 16, padding = 16},
 			style = style,
 		)
 		{
 			push_parent(&ctx, w_3)
 			defer pop_parent(&ctx)
 			style.color = CHILD_BACKGROUND
-			w_31 := create_widget(&ctx, Layout{sizing = {fit(0), fit(0)}, direction = .Row, child_gap = 16, padding = 16}, style = style)
-			{
-				push_parent(&ctx, w_31)
-				defer pop_parent(&ctx)
-				style.color = DEFAULT_BACKGROUND
-				w_31_1 := create_widget(&ctx, Layout{sizing = {grow(50, 50), fixed(50)}}, style = style)
-				w_31_2 := create_widget(&ctx, Layout{sizing = {grow(50, 50), grow(50, 50)}}, style = style)
-			}
-			style.color = CHILD_BACKGROUND
-			w_32 := create_widget(&ctx, Layout{sizing = {percent(0.5), percent(0.5)}}, style = style)
+			create_widget(
+				&ctx,
+				Text {
+					text = "A quick brown fox jumps over the lazy dog",
+					style = {font_id = 0, letter_spacing = 1, font_size = 30, line_spacing = 30},
+				},
+			)
+			create_widget(
+				&ctx,
+				Text {
+					text = "Why Does A quick brown Jumps over the lazy Dog?",
+					style = {font_id = 0, letter_spacing = 5, font_size = 15, line_spacing = 15},
+				},
+			)
+			create_widget(
+				&ctx,
+				Text {
+					text = "When Does A quick brown Jumps over the lazy Dog?",
+					style = {font_id = 0, letter_spacing = 10, font_size = 10, line_spacing = 10},
+				},
+			)
 		}
 
 		style.color = DEFAULT_BACKGROUND
-		w_4 := create_widget(&ctx, Layout{sizing = {grow(50, 50), grow(50, 50)}}, style = style)
+		w_4 := create_widget(&ctx, Layout{sizing = sizing(grow(50, 50), grow(50, 50))}, style = style)
 
 		end_ui(&ctx)
 
@@ -249,7 +362,8 @@ render :: proc(ctx: Core_Context, texture: rl.Texture, shader: rl.Shader) {
 		case Command_Text:
 			initial_y := v.position.y
 
-			for l in v.lines {
+			for l in ctx.text_lines[v.start:v.end] {
+				rl.DrawRectangleV({v.position.x, initial_y}, rl.MeasureTextEx(rl.GetFontDefault(), fmt.ctprintf(l), v.font_size, v.spacing), rl.GRAY)
 				rl.DrawTextEx(rl.GetFontDefault(), fmt.ctprint(l), {v.position.x, initial_y}, v.font_size, v.spacing, cast(rl.Color)v.color)
 				initial_y += v.line_height
 			}
@@ -275,9 +389,9 @@ measure_text :: proc(text: string, config: Text_Style) -> f32 {
 		glyph := font.glyphs[glyph_index]
 
 		if glyph.advanceX != 0 {
-			advance = f32(glyph.advanceX) * scale + config.spacing
+			advance = f32(glyph.advanceX) * scale + config.letter_spacing
 		} else {
-			advance = font.recs[glyph_index].width * scale + f32(glyph.offsetX) + config.spacing
+			advance = font.recs[glyph_index].width * scale + f32(glyph.offsetX) + config.letter_spacing
 		}
 		width += advance
 	}

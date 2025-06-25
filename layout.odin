@@ -1,12 +1,16 @@
 package main
 
+import "core:container/small_array"
 import "core:fmt"
+import "core:os"
 import "core:sort"
 
-Layout_Direction :: enum u8 {
-	Row,
-	Colom,
+Axis :: enum u8 {
+	X,
+	Y,
 }
+
+Layout_Direction :: Axis
 
 Layout_Kind :: enum u8 {
 	Fit,
@@ -88,13 +92,13 @@ Sizing :: struct {
 
 Floating :: struct {
 	layout:          Layout,
-	parent_id:       Id,
+	id:              Id, // Used if Attachment_To == .Id 
 	parent, element: Anchor,
 	attachment_to:   Attachment_To,
 }
 
 Layout :: struct {
-	sizing:          [2]Sizing,
+	sizing:          [Axis]Sizing,
 	padding:         Vec4f32,
 	child_gap:       f32,
 	child_alignment: Child_Alignment,
@@ -102,61 +106,51 @@ Layout :: struct {
 }
 
 Text :: struct {
-	text:       string,
-	start, end: int, // index into ctx.text_lines 
-	min:        f32,
+	style:        Text_Style,
+	text:         string,
+	_start, _end: int, // index into ctx.text_lines 
 }
 
 @(private = "file")
 Growable :: struct {
-	size: ^Vec2f32,
-	min:  f32,
-	max:  f32,
+	size:    ^Vec2f32,
+	min:     f32,
+	max:     f32,
+	is_text: bool,
 }
 
-fit_into_parent :: proc(axis: int, widget: ^Widget) {
+fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 	parent := widget.node.parent
 
 	if parent == nil {return}
 
-	parent_layout: Layout
+	parent_layout, parent_is_layout := get_layout(parent)
 
-	switch type in parent.config {
-	case Floating:
-		parent_layout = type.layout
-	case Layout:
-		parent_layout = type
-	case Text:
+	if !parent_is_layout {
 		return
 	}
 
 	if parent_layout.sizing[axis].kind == .Fit {
-		if cast(int)parent_layout.direction == axis {
+		if parent_layout.direction == axis {
 			parent.size[axis] += widget.size[axis]
 		} else {
 			parent.size[axis] = max(parent.size[axis], widget.size[axis])
 		}
 	}
 
-	widget_layout: Layout
-	switch type in widget.config {
-	case Floating:
-		widget_layout = type.layout
-	case Layout:
-		widget_layout = type
-	case Text:
+	widget_layout, widget_is_layout := get_layout(widget)
+	if !widget_is_layout {
+		if parent_layout.direction == axis {
+			parent._min[axis] += widget._min[axis]
+		} else {
+			parent._min[axis] = max(parent._min[axis], widget._min[axis])
+		}
+		return
 	}
 
-	padding: f32
+	padding: f32 = get_axis_padding(axis, widget_layout.padding)
 
-	if axis == 0 {
-		padding = widget_layout.padding[3] + widget_layout.padding[1]
-	}
-	if axis == 1 {
-		padding = widget_layout.padding[0] + widget_layout.padding[2]
-	}
-
-	if cast(int)widget_layout.direction == axis {
+	if widget_layout.direction == axis {
 		if widget_layout.sizing[axis].kind == .Fit {
 			widget.size[axis] += max(0, f32(widget.node.total_children - 1) * widget_layout.child_gap)
 		}
@@ -168,25 +162,19 @@ fit_into_parent :: proc(axis: int, widget: ^Widget) {
 	widget.size[axis] = max(widget.size[axis], widget_layout.sizing[axis].min)
 	widget.size[axis] = min(widget.size[axis], widget_layout.sizing[axis].max)
 
-	if cast(int)parent_layout.direction == axis {
+	if parent_layout.direction == axis {
 		parent._min[axis] += widget.size[axis]
 	} else {
 		parent._min[axis] = max(parent._min[axis], widget.size[axis])
 	}
 
+	return
 }
 
-grow_shrink_children_along_axis :: proc(axis: int, layout: Layout, widget: ^Widget, growables: ^[dynamic]Growable) {
+grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget, growables: ^[dynamic]Growable) {
 	if widget.node.first_child == nil {return}
 
-	remaining: f32 = widget.size[axis]
-
-	if axis == 0 {
-		remaining -= layout.padding[3] + layout.padding[1] // left + right 
-	}
-	if axis == 1 {
-		remaining -= layout.padding[0] + layout.padding[2] // top + bottom 
-	}
+	remaining: f32 = widget.size[axis] - get_axis_padding(axis, layout.padding)
 
 	remaining -= layout.child_gap * f32(widget.node.total_children - 1)
 
@@ -204,14 +192,16 @@ grow_shrink_children_along_axis :: proc(axis: int, layout: Layout, widget: ^Widg
 			switch type.sizing[axis].kind {
 			case .Grow:
 				child_widget.size[axis] = max(child_widget._min[axis], type.sizing[axis].min)
-				append(growables, Growable{&child_widget.size, child_widget.size[axis], type.sizing[axis].max})
+				append(growables, Growable{&child_widget.size, child_widget.size[axis], type.sizing[axis].max, false})
 			case .Percent:
 				child_widget.size[axis] = widget.size[axis] * type.sizing[axis].min
 			case .Fixed:
 			case .Fit:
 			}
 		case Text:
-			append(growables, Growable{&child_widget.size, type.min, max(f32)})
+			if axis != .Y {
+				append(growables, Growable{&child_widget.size, child_widget._min.x, max(f32), true})
+			}
 		}
 		remaining -= child_widget.size[axis]
 	}
@@ -224,23 +214,25 @@ grow_shrink_children_along_axis :: proc(axis: int, layout: Layout, widget: ^Widg
 			smallest: f32 = growables[0].size[axis]
 			second_smallest: f32 = max(f32)
 			to_add: f32 = remaining
-
 			// We find the smallest and second smallest along the axis we to expand to. 
 			// Once we find the smallest, we grow it until its the size of second smallest and repeat this process until all space is distributed 
-
 			for child, i in growables {
+				if child.is_text {
+					ordered_remove(growables, i)
+					continue
+				}
 				if child.size[axis] < smallest {
-					smallest = child.size[axis]
 					second_smallest = smallest
+					smallest = child.size[axis]
 				}
 				if child.size[axis] > smallest {
 					second_smallest = min(second_smallest, child.size[axis])
 					to_add = second_smallest - smallest
 				}
 			}
+
 			// If all growables are smallest then we distribute remaining space equally, other wise we add space to smallest one only 
 			to_add = min(to_add, remaining / cast(f32)len(growables))
-
 			#reverse for child, i in growables {
 				if child.size[axis] == smallest {
 					child.size[axis] += to_add
@@ -290,29 +282,13 @@ grow_shrink_children_along_axis :: proc(axis: int, layout: Layout, widget: ^Widg
 	}
 }
 
-grow_children_across_axis :: proc(axis: int, layout: Layout, widget: ^Widget) {
+grow_children_across_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget) {
 	if widget.node.first_child == nil {return}
 
-	axis_padding: f32
-
-	if axis == 0 {
-		axis_padding = layout.padding[3] + layout.padding[1]
-	}
-	if axis == 1 {
-		axis_padding = layout.padding[0] + layout.padding[2]
-	}
+	axis_padding: f32 = get_axis_padding(axis, layout.padding)
 
 	for child_widget := widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
-		layout: Layout
-
-		switch type in child_widget.config {
-		case Text:
-			continue
-		case Layout:
-			layout = type
-		case Floating:
-			layout = type.layout
-		}
+		layout: Layout = get_layout(child_widget) or_continue
 
 		if layout.sizing[axis].kind == .Percent {
 			child_widget.size[axis] = widget.size[axis] * layout.sizing[axis].min
@@ -329,24 +305,7 @@ grow_children_across_axis :: proc(axis: int, layout: Layout, widget: ^Widget) {
 layout_sizing_pass :: proc(ctx: ^Core_Context) {
 	#reverse for w in ctx.stacks.post_r {
 
-		layout: Layout
-
-		switch type in w.config {
-		case Layout:
-			layout = type
-		case Floating:
-			layout = type.layout
-		case Text:
-			// 	if w.node.first_child != nil {
-			// 		w.layout.min.x += w.style.child_gap
-			// 	} else {
-			// 		w.layout.min.x += w.style.padding[3] + w.style.padding[1]
-			// 		w.layout.min.y += w.style.padding[2] + w.style.padding[0]
-			// 	}
-			// 	w.layout.min.x += w.prev_text_size.x
-			// 	w.layout.min.y += w.prev_text_size.y
-			continue
-		}
+		layout: Layout = get_layout(w) or_continue
 
 		for sizing, i in layout.sizing {
 			w.size[i] = sizing.min
@@ -354,52 +313,128 @@ layout_sizing_pass :: proc(ctx: ^Core_Context) {
 	}
 
 	#reverse for w in ctx.stacks.post_r {
-		fit_into_parent(0, w)
+		fit_into_parent(.X, w)
+		switch type in w.config {
+		case Layout:
+		case Floating:
+		case Text:
+			w.size = ctx.text_measure_proc(type.text, type.style)
+		}
 	}
 
 	growables := make([dynamic]Growable, 0, 16, context.temp_allocator)
 	for w in ctx.stacks.pre {
-		layout: Layout
-		switch type in w.config {
-		case Text:
-			continue
-		case Layout:
-			layout = type
-		case Floating:
-			layout = type.layout
-		}
+		layout: Layout = get_layout(w) or_continue
 
-		// w.text_size = ctx.text_measure_proc(w.text, w.style.text)
-		if layout.direction == .Row {
-			grow_shrink_children_along_axis(0, layout, w, &growables)
+		if layout.direction == .X {
+			grow_shrink_children_along_axis(.X, layout, w, &growables)
 			clear(&growables)
 		} else {
-			grow_children_across_axis(0, layout, w)
+			grow_children_across_axis(.X, layout, w)
 			clear(&growables)
+		}
+	}
+
+	measured_words := make([dynamic]Word_Measure, context.temp_allocator)
+	for widget in ctx.stacks.pre {
+		switch &type in widget.config {
+		case Layout:
+			continue
+		case Floating:
+			continue
+		case Text:
+			if len(type.text) == 0 {
+				continue
+			}
+
+			word_start: int
+			in_word: bool
+			largest_width: f32
+			for r, i in type.text {
+				if r == ' ' {
+					if in_word {
+						w := type.text[word_start:i]
+
+						spaces_before: i32 = 0
+						for r_w in w {
+							if r_w != ' ' {
+								break
+							}
+							spaces_before += 1
+							word_start += 1
+						}
+						word := type.text[word_start:i]
+						width := ctx.text_measure_proc(word, type.style)
+						largest_width = max(width, largest_width)
+						append(&measured_words, Word_Measure{text = word, width = width, spaces_before = spaces_before, start_index = word_start})
+
+						word_start = i
+						in_word = false
+					}
+				} else {
+					if !in_word {
+						in_word = true
+					}
+				}
+			}
+
+			if in_word && word_start < len(type.text) {
+				word := type.text[word_start:]
+				space_count: i32 = 0
+
+				for wr, _ in word {
+					if wr != ' ' {
+						break
+					}
+					space_count += 1
+					word_start += 1
+				}
+				word = type.text[word_start:]
+				width := ctx.text_measure_proc(word, type.style)
+				largest_width = max(width, largest_width)
+				append(&measured_words, Word_Measure{text = word, width = width, spaces_before = space_count, start_index = word_start})
+			}
+
+			x: f32 = 0
+			space_width := ctx.text_measure_proc(" ", type.style)
+
+			wrapping: bool
+			line_start: int = 0
+
+			widget_lines_start := len(ctx.text_lines)
+			for w in measured_words {
+				x += space_width * f32(w.spaces_before)
+				if x + w.width > widget.size.x {
+					x = 0
+					append(&ctx.text_lines, type.text[line_start:w.start_index])
+					line_start = w.start_index
+					wrapping = true
+				}
+				x += w.width
+			}
+
+			if line_start < len(type.text) {
+				append(&ctx.text_lines, type.text[line_start:])
+			}
+			type._start = widget_lines_start
+			type._end = len(ctx.text_lines)
+			widget.size.y = f32(type._end - type._start) * type.style.line_spacing
+			widget._min = {largest_width, widget.size.y}
+			clear(&measured_words)
 		}
 	}
 
 	#reverse for w in ctx.stacks.post_r {
-		fit_into_parent(1, w)
+		fit_into_parent(.Y, w)
 	}
 
 	for w in ctx.stacks.pre {
-		layout: Layout
-
-		switch type in w.config {
-		case Text:
-			continue
-		case Layout:
-			layout = type
-		case Floating:
-			layout = type.layout
-		}
-
-		if layout.direction == .Colom {
-			grow_shrink_children_along_axis(1, layout, w, &growables)
+		layout: Layout = get_layout(w) or_continue
+		if layout.direction == .Y {
+			grow_shrink_children_along_axis(.Y, layout, w, &growables)
 			clear(&growables)
 		} else {
-			grow_children_across_axis(1, layout, w)
+			grow_children_across_axis(.Y, layout, w)
 			clear(&growables)
 		}
 	}
@@ -417,7 +452,7 @@ layout_positioning_pass :: proc(ctx: ^Core_Context) {
 
 			switch type.attachment_to {
 			case .Id:
-				val, ok := ctx.persistant_data[type.parent_id]
+				val, ok := ctx.persistant_data[type.id]
 				if ok {
 					anchor_pos = val.position
 					anchor_size = val.size
@@ -484,7 +519,49 @@ layout_positioning_pass :: proc(ctx: ^Core_Context) {
 		case Layout:
 			layout = type
 		case Text:
-			continue // 
+			for offset, i in widget.offset {
+				switch offset.kind {
+				case .None:
+				case .Fixed:
+					widget.position[i] = offset.value
+				case .Relative:
+					widget.position[i] += offset.value
+				case .Percent:
+					if widget.node.parent != nil {
+						widget.position[i] += offset.value * widget.node.parent.size[i]
+					}
+				}
+			}
+
+			for expand, i in widget.expand {
+				switch expand.kind {
+				case .None:
+				case .Absolute:
+					widget.size[i] += expand.value
+				case .Percent:
+					if widget.node.parent != nil {
+						widget.size[i] += expand.value * widget.node.parent.size[i]
+					}
+				}
+			}
+			command_rect: Command_Rect
+			command_rect.size = widget.size
+			command_rect.color = widget.style.color
+			command_rect.position = widget.position
+			command_rect.border_radius = widget.style.border_radius
+			command_rect.border_thickness = widget.style.border_thickness
+			append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_rect})
+
+			command_text: Command_Text
+			command_text.color = WHITE
+			command_text.position = widget.position
+			command_text.spacing = type.style.letter_spacing
+			command_text.font_size = type.style.font_size
+			command_text.line_height = type.style.line_spacing
+			command_text.end = type._end
+			command_text.start = type._start
+			append(&ctx.render_commands, Render_Command{z_index = widget._z_index + 1, type = command_text})
+			continue // Text never has children hence skip. This loops goes from top to bottom into the tree. Any text will have its position resolved always 
 		}
 
 		total_size: Vec2f32
@@ -495,7 +572,7 @@ layout_positioning_pass :: proc(ctx: ^Core_Context) {
 		position_increment: Vec2f32
 
 		switch layout.direction {
-		case .Row:
+		case .X:
 			switch layout.child_alignment.x {
 			case .Left:
 				position_increment.x = widget.position.x + padding[3]
@@ -533,7 +610,7 @@ layout_positioning_pass :: proc(ctx: ^Core_Context) {
 					child.position.y = center - child.size.y / 2
 				}
 			}
-		case .Colom:
+		case .Y:
 			switch layout.child_alignment.x {
 			case .Left:
 				position_increment.x = widget.position.x + padding[3]
@@ -565,7 +642,7 @@ layout_positioning_pass :: proc(ctx: ^Core_Context) {
 					position_increment.y += child.size.y + layout.child_gap
 				}
 			case .Bottom:
-				position_increment.y = widget.position.y + widget.size.y + layout.child_gap - padding[2]
+				position_increment.y = widget.position.y + widget.size.y - padding[2]
 				for child := widget.node.last_child; child != nil; child = child.node.prev {
 					position_increment.y -= child.size.y + layout.child_gap
 					child.position.y = position_increment.y
@@ -621,17 +698,6 @@ layout_positioning_pass :: proc(ctx: ^Core_Context) {
 		command_rect.border_thickness = widget.style.border_thickness
 
 		append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_rect})
-
-		// if widget.text != "" {
-		// 	command_text: Command_Text
-		// 	command_text.color = WHITE
-		// 	command_text.position = widget.text_position
-		// 	command_text.spacing = widget.style.text.spacing
-		// 	command_text.font_size = widget.style.text.font_size
-		// 	command_text.line_height = widget.style.text.line_height
-		// 	command_text.lines = widget.lines
-		// 	append(&ctx.render_commands, Render_Command{z_index = widget.z_index + 1, type = command_text})
-		// }
 	}
 
 	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})

@@ -28,6 +28,10 @@ offset_relative :: proc "contextless" (value: f32) -> Offset {
 	return Offset{value = value, kind = .Relative}
 }
 
+sizing :: proc "contextless" (x, y: Sizing) -> [Axis]Sizing {
+	return {.X = x, .Y = y}
+}
+
 offset_fixed :: proc "contextless" (value: f32) -> Offset {
 	return Offset{value = value, kind = .Fixed}
 }
@@ -46,6 +50,28 @@ percent :: proc "contextless" (value: f32 = 1) -> Sizing {
 
 fixed :: proc "contextless" (size: f32) -> Sizing {
 	return Sizing{size, size, .Fixed}
+}
+
+get_axis_padding :: proc "contextless" (axis: Axis, padding: Vec4f32) -> f32 {
+	switch axis {
+	case .X:
+		return padding[3] + padding[1]
+	case .Y:
+		return padding[0] + padding[2]
+	}
+	unreachable()
+}
+
+get_layout :: proc "contextless" (widget: ^Widget) -> (Layout, bool) {
+	switch v in widget.config {
+	case Layout:
+		return v, true
+	case Floating:
+		return v.layout, true
+	case Text:
+		return {}, false
+	}
+	unreachable()
 }
 
 lerp :: proc "contextless" (a, b: $T, t: $E) -> (x: T) {

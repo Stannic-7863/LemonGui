@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:hash"
 import "core:time"
 
@@ -81,11 +82,11 @@ Core_Context :: struct {
 }
 
 Persistant_Data :: struct {
-	style, start:    Style,
-	size, position:  Vec2f32,
-	active_t, hot_t: f32,
-	events:          Widget_Events,
-	anim_state:      bit_set[Animation_States],
+	style, start:         Style,
+	size, position, _min: Vec2f32,
+	active_t, hot_t:      f32,
+	events:               Widget_Events,
+	_anim_state:          bit_set[Animation_States],
 }
 
 Mouse_Context :: struct {
@@ -121,7 +122,8 @@ Command_Rect :: struct {
 }
 
 Command_Text :: struct {
-	lines:       []string,
+	start:       int,
+	end:         int,
 	position:    Vec2f32,
 	font_size:   f32,
 	spacing:     f32,
@@ -129,24 +131,24 @@ Command_Text :: struct {
 	color:       Color,
 }
 
+Word_Measure :: struct {
+	text:          string,
+	start_index:   int,
+	spaces_before: i32,
+	width:         f32,
+}
+
 Text_Style :: struct {
-	font_id:     int,
-	font_size:   f32,
-	spacing:     f32,
-	line_height: f32,
+	font_id:        int,
+	font_size:      f32,
+	letter_spacing: f32,
+	line_spacing:   f32,
 }
 
 Style :: struct {
 	border_radius:    Vec4f32,
 	border_thickness: Vec4f32,
 	color:            Color,
-}
-
-Word_Measure :: struct {
-	text:          string,
-	start_index:   int,
-	spaces_before: i32,
-	width:         f32,
 }
 
 Node :: struct {
@@ -176,7 +178,7 @@ Widget :: struct {
 	_z_index:             int,
 	active_t, hot_t:      f32,
 	events, events_mask:  Widget_Events,
-	anim_state:           bit_set[Animation_States],
+	_anim_state:          bit_set[Animation_States],
 	anchor:               Anchor,
 }
 
@@ -202,8 +204,12 @@ deinit_core_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.text_lines)
 }
 
-push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) {
+// Returns false if widget has config type of text. Text widget cannot have children.
+push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
+	_, ok := widget.config.(Text)
+	(!ok) or_return
 	ctx.current_parent = widget
+	return true
 }
 
 pop_parent :: proc(ctx: ^Core_Context) {
@@ -225,7 +231,7 @@ end_ui :: proc(ctx: ^Core_Context) {
 	clear_map(&ctx.persistant_data)
 
 	for &w in ctx.widgets {
-		resolve_animations(&w)
+		_resolve_animations(&w)
 
 		events: Widget_Events
 		if w.node.id == ctx.hot_widget_id {
@@ -239,15 +245,15 @@ end_ui :: proc(ctx: ^Core_Context) {
 		events -= w.events_mask
 
 		if (.Hovered in events && .Hovered not_in w.events) {
-			if .Active_Decay in w.anim_state {
+			if .Active_Decay in w._anim_state {
 				w.start = w.style
 				w.hot_t = 0
-				w.anim_state -= {.Active_Decay}
+				w._anim_state -= {.Active_Decay}
 			}
 		}
 
-		if .Active_Progressive in w.anim_state && (events & Active_Widget_Events != w.events & Active_Widget_Events) {
-			w.anim_state += {.Active_Overrided}
+		if .Active_Progressive in w._anim_state && (events & Active_Widget_Events != w.events & Active_Widget_Events) {
+			w._anim_state += {.Active_Overrided}
 			w.start = w.style
 		}
 
@@ -258,30 +264,31 @@ end_ui :: proc(ctx: ^Core_Context) {
 		}
 
 		if w.node.id == ctx.active_widget_id {
-			if .Active_Overrided in w.anim_state {
+			if .Active_Overrided in w._anim_state {
 				w.start = w.style
 				w.active_t = 0
-				w.anim_state -= {.Active_Overrided}
+				w._anim_state -= {.Active_Overrided}
 			}
 			w.active_t = clamp(w.active_t + ctx.delta_time, 0, 1)
 		} else {
-			if .Active_Overrided in w.anim_state {
+			if .Active_Overrided in w._anim_state {
 				w.start = w.style
 				w.active_t = 1
-				w.anim_state -= {.Active_Overrided}
+				w._anim_state -= {.Active_Overrided}
 			}
 			w.active_t = clamp(w.active_t - ctx.delta_time, 0, 1)
 		}
 
 		ctx.persistant_data[w.node.id] = Persistant_Data {
-			events     = events,
-			start      = w.start,
-			style      = w.style,
-			hot_t      = w.hot_t,
-			active_t   = w.active_t,
-			size       = w.size,
-			position   = w.position,
-			anim_state = w.anim_state,
+			events      = events,
+			start       = w.start,
+			style       = w.style,
+			hot_t       = w.hot_t,
+			active_t    = w.active_t,
+			size        = w.size,
+			position    = w.position,
+			_anim_state = w._anim_state,
+			_min        = w._min,
 		}
 	}
 
@@ -290,6 +297,36 @@ end_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.stacks.post_r)
 	clear(&ctx.stacks.pre)
 	clear(&ctx.stacks.temp)
+}
+
+create_widget :: proc(
+	ctx: ^Core_Context,
+	config: Config = nil,
+	expand: [2]Expand = {},
+	offset: [2]Offset = {},
+	style: Style = {},
+	events_mask: Widget_Events = {},
+) -> ^Widget {
+
+	append(&ctx.widgets, Widget{})
+	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
+	w^ = {} // zero out
+	w.config = config
+	w.target = style
+	w.offset = offset
+	w.expand = expand
+	w.events_mask = events_mask
+	w.node.parent = ctx.current_parent
+	w._z_index = len(ctx.widgets) - 1
+
+	_add_widget(ctx, w)
+	_generate_widget_hash(w)
+
+	if !_retrieve_persistant_data(ctx.persistant_data, w) {
+		w.style = style
+	}
+
+	return w
 }
 
 _add_widget :: proc(ctx: ^Core_Context, widget: ^Widget) {
@@ -338,125 +375,69 @@ _generate_widget_hash :: proc(widget: ^Widget) {
 
 _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widget: ^Widget) -> bool {
 	val := persistant_data[widget.node.id] or_return
+	widget.position = val.position
+	widget.size = val.size
 	widget.events = val.events
 	widget.hot_t = val.hot_t
 	widget.active_t = val.active_t
 	widget.start = val.start
 	widget.style = val.style
-	widget.anim_state = val.anim_state
+	widget._anim_state = val._anim_state
+
+	if _, ok := widget.config.(Text); ok {
+		widget._min = val._min
+	}
+
 	return true
 }
 
-create_widget :: proc(
-	ctx: ^Core_Context,
-	config: Config = nil,
-	expand: [2]Expand = {},
-	offset: [2]Offset = {},
-	style: Style = {},
-	events_mask: Widget_Events = {},
-) -> ^Widget {
-
-	if e, ok := config.(Text); (ok || config == nil) {
-		return nil
-	}
-
-	append(&ctx.widgets, Widget{})
-	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
-	w^ = {} // zero out 
-
-	w.config = config
-	w.target = style
-	w.offset = offset
-	w.expand = expand
-	w.events_mask = events_mask
-	w.node.index = len(ctx.widgets) - 1
-	w.node.parent = ctx.current_parent
-
-	_add_widget(ctx, w)
-	_generate_widget_hash(w)
-
-	if !_retrieve_persistant_data(ctx.persistant_data, w) {
-		w.style = style
-	}
-
-	return w
-}
-
-create_text :: proc(
-	ctx: ^Core_Context,
-	text: Text,
-	expand: [2]Expand = {},
-	offset: [2]Offset = {},
-	style: Style = {},
-	events_mask: Widget_Events = {},
-) {
-	append(&ctx.widgets, Widget{})
-	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
-	w^ = {} // zero out 
-
-	w.config = text
-	w.target = style
-	w.offset = offset
-	w.expand = expand
-	w.events_mask = events_mask
-	w.node.index = len(ctx.widgets) - 1
-	w.node.parent = ctx.current_parent
-
-	_add_widget(ctx, w)
-	_generate_widget_hash(w)
-
-	if !_retrieve_persistant_data(ctx.persistant_data, w) {
-		w.style = style
-	}
-}
-
-resolve_animations :: proc(w: ^Widget) {
+_resolve_animations :: proc(w: ^Widget) {
 	is_interacted_hot: bool = .Hovered in w.events
 	is_interacted_active: bool = w.events & Active_Widget_Events != {}
-	was_interacted_hot: bool = .Hot_Progressive in w.anim_state
-	was_interacted_active: bool = .Active_Progressive in w.anim_state
+	was_interacted_hot: bool = .Hot_Progressive in w._anim_state
+	was_interacted_active: bool = .Active_Progressive in w._anim_state
 
 	// entering hot animation 
 	if (is_interacted_hot) && !was_interacted_hot {
-		w.anim_state -= {.Hot_Decay}
-		w.anim_state += {.Hot_Progressive}
+		w._anim_state -= {.Hot_Decay}
+		w._anim_state += {.Hot_Progressive}
 		w.start = w.style
 		w.hot_t = 0
 	}
 
 	// leaving hot animation 
 	if was_interacted_hot && !(is_interacted_hot) {
-		w.anim_state += {.Hot_Decay}
-		w.anim_state -= {.Hot_Progressive}
+		w._anim_state += {.Hot_Decay}
+		w._anim_state -= {.Hot_Progressive}
 		w.start = w.style
 		w.hot_t = 1
 	}
 
 	// entring active animation
 	if !was_interacted_active && (is_interacted_active) {
-		w.anim_state -= {.Active_Decay}
-		w.anim_state += {.Active_Progressive}
+		w._anim_state -= {.Active_Decay}
+		w._anim_state += {.Active_Progressive}
 		w.start = w.style
 		w.active_t = 0
 	}
 
 	// leaving active animation
 	if was_interacted_active && !(is_interacted_active) {
-		w.anim_state += {.Active_Decay}
-		w.anim_state -= {.Active_Progressive}
+		w._anim_state += {.Active_Decay}
+		w._anim_state -= {.Active_Progressive}
 		w.start = w.style
 		w.active_t = 1
 	}
 
-	if .Active_Progressive in w.anim_state {
+	if .Active_Progressive in w._anim_state {
 		lerp_style_progressive(w, w.active_t)
-	} else if .Hot_Progressive in w.anim_state {
+	} else if .Hot_Progressive in w._anim_state {
 		lerp_style_progressive(w, w.hot_t)
 	}
 
-	if .Hot_Decay in w.anim_state {
+	if .Hot_Decay in w._anim_state {
 		lerp_style_decaying(w, w.hot_t)
-	} else if .Active_Decay in w.anim_state {
+	} else if .Active_Decay in w._anim_state {
 		lerp_style_decaying(w, w.active_t)
 	}
 }
