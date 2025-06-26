@@ -1,8 +1,10 @@
-package main
+package ui_core
 
-import "base:intrinsics"
+import "base:runtime"
+import "core:fmt"
 import "core:math"
 import "core:math/ease"
+import "core:reflect"
 
 rgba :: proc(r, g, b, a: u8) -> Color {
 	return {r, g, b, a}
@@ -52,7 +54,7 @@ fixed :: proc "contextless" (size: f32) -> Sizing {
 	return Sizing{size, size, .Fixed}
 }
 
-get_axis_padding :: proc "contextless" (axis: Axis, padding: Vec4f32) -> f32 {
+_get_axis_padding :: proc "contextless" (axis: Axis, padding: Vec4f32) -> f32 {
 	switch axis {
 	case .X:
 		return padding[3] + padding[1]
@@ -62,7 +64,7 @@ get_axis_padding :: proc "contextless" (axis: Axis, padding: Vec4f32) -> f32 {
 	unreachable()
 }
 
-get_layout :: proc "contextless" (widget: ^Widget) -> (Layout, bool) {
+_get_layout :: proc "contextless" (widget: ^Widget) -> (Layout, bool) {
 	switch v in widget.config {
 	case Layout:
 		return v, true
@@ -74,21 +76,29 @@ get_layout :: proc "contextless" (widget: ^Widget) -> (Layout, bool) {
 	unreachable()
 }
 
-lerp :: proc "contextless" (a, b: $T, t: $E) -> (x: T) {
-	when intrinsics.type_is_numeric(T) && intrinsics.type_is_array(T) {
-		for i in 0 ..< len(a) {
-			x[i] = intrinsics.type_elem_type(T)(cast(E)a[i] * (1 - t) + cast(E)b[i] * t)
+_get_field_value_by_name :: proc(a: any, names: ..string) -> any {
+	a := a
+	for name in names {
+		ti := runtime.type_info_base(type_info_of(a.id))
+		if ts, ok := ti.variant.(runtime.Type_Info_Struct); ok {
+			for n, i in ts.names[:ts.field_count] {
+				if n == name {
+					a.id = ts.types[i].id
+					a.data = rawptr(uintptr(a.data) + ts.offsets[i])
+				}
+			}
+		} else if ts, ok := ti.variant.(runtime.Type_Info_Union); ok {
+			a = reflect.get_union_variant(a)
+			ti := runtime.type_info_base(type_info_of(a.id))
+			if ts, ok := ti.variant.(runtime.Type_Info_Struct); ok {
+				for n, i in ts.names[:ts.field_count] {
+					if n == name {
+						a.id = ts.types[i].id
+						a.data = rawptr(uintptr(a.data) + ts.offsets[i])
+					}
+				}
+			}
 		}
-		return x
 	}
-}
-
-lerp_style_progressive :: proc(w: ^Widget, time: f32) {
-	w.style.color = lerp(w.start.color, w.target.color, time)
-	w.style.border_radius = lerp(w.start.border_radius, w.target.border_radius, ease.cubic_in_out(time))
-}
-
-lerp_style_decaying :: proc(w: ^Widget, time: f32) {
-	w.style.color = lerp(w.target.color, w.start.color, time)
-	w.style.border_radius = lerp(w.target.border_radius, w.start.border_radius, ease.cubic_in_out(time))
+	return a
 }

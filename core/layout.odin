@@ -1,4 +1,4 @@
-package main
+package ui_core
 
 import "core:container/small_array"
 import "core:fmt"
@@ -119,12 +119,12 @@ Growable :: struct {
 	is_text: bool,
 }
 
-fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
+_fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 	parent := widget.node.parent
 
 	if parent == nil {return}
 
-	parent_layout, parent_is_layout := get_layout(parent)
+	parent_layout, parent_is_layout := _get_layout(parent)
 
 	if !parent_is_layout {
 		return
@@ -138,7 +138,7 @@ fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 		}
 	}
 
-	widget_layout, widget_is_layout := get_layout(widget)
+	widget_layout, widget_is_layout := _get_layout(widget)
 	if !widget_is_layout {
 		if parent_layout.direction == axis {
 			parent._min[axis] += widget._min[axis]
@@ -148,7 +148,7 @@ fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 		return
 	}
 
-	padding: f32 = get_axis_padding(axis, widget_layout.padding)
+	padding: f32 = _get_axis_padding(axis, widget_layout.padding)
 
 	if widget_layout.direction == axis {
 		if widget_layout.sizing[axis].kind == .Fit {
@@ -171,10 +171,10 @@ fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 	return
 }
 
-grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget, growables: ^[dynamic]Growable) {
+_grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget, growables: ^[dynamic]Growable) {
 	if widget.node.first_child == nil {return}
 
-	remaining: f32 = widget.size[axis] - get_axis_padding(axis, layout.padding)
+	remaining: f32 = widget.size[axis] - _get_axis_padding(axis, layout.padding)
 
 	remaining -= layout.child_gap * f32(widget.node.total_children - 1)
 
@@ -282,13 +282,20 @@ grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Wid
 	}
 }
 
-grow_children_across_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget) {
+_grow_children_across_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget) {
 	if widget.node.first_child == nil {return}
 
-	axis_padding: f32 = get_axis_padding(axis, layout.padding)
+	axis_padding: f32 = _get_axis_padding(axis, layout.padding)
 
 	for child_widget := widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
-		layout: Layout = get_layout(child_widget) or_continue
+		layout, is_text := _get_layout(child_widget)
+		if !is_text {
+			parent_layout, _ := _get_layout(widget)
+			if parent_layout.direction == .Y && axis == .X && child_widget.size.x > widget.size.x {
+				child_widget.size.x = widget.size.x - _get_axis_padding(.X, parent_layout.padding)
+			}
+			continue
+		}
 
 		if layout.sizing[axis].kind == .Percent {
 			child_widget.size[axis] = widget.size[axis] * layout.sizing[axis].min
@@ -302,10 +309,10 @@ grow_children_across_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget) {
 	}
 }
 
-layout_sizing_pass :: proc(ctx: ^Core_Context) {
+_layout_sizing_pass :: proc(ctx: ^Core_Context) {
 	#reverse for w in ctx.stacks.post_r {
 
-		layout: Layout = get_layout(w) or_continue
+		layout: Layout = _get_layout(w) or_continue
 
 		for sizing, i in layout.sizing {
 			w.size[i] = sizing.min
@@ -313,7 +320,7 @@ layout_sizing_pass :: proc(ctx: ^Core_Context) {
 	}
 
 	#reverse for w in ctx.stacks.post_r {
-		fit_into_parent(.X, w)
+		_fit_into_parent(.X, w)
 		switch type in w.config {
 		case Layout:
 		case Floating:
@@ -324,13 +331,13 @@ layout_sizing_pass :: proc(ctx: ^Core_Context) {
 
 	growables := make([dynamic]Growable, 0, 16, context.temp_allocator)
 	for w in ctx.stacks.pre {
-		layout: Layout = get_layout(w) or_continue
+		layout: Layout = _get_layout(w) or_continue
 
 		if layout.direction == .X {
-			grow_shrink_children_along_axis(.X, layout, w, &growables)
+			_grow_shrink_children_along_axis(.X, layout, w, &growables)
 			clear(&growables)
 		} else {
-			grow_children_across_axis(.X, layout, w)
+			_grow_children_across_axis(.X, layout, w)
 			clear(&growables)
 		}
 	}
@@ -425,22 +432,22 @@ layout_sizing_pass :: proc(ctx: ^Core_Context) {
 	}
 
 	#reverse for w in ctx.stacks.post_r {
-		fit_into_parent(.Y, w)
+		_fit_into_parent(.Y, w)
 	}
 
 	for w in ctx.stacks.pre {
-		layout: Layout = get_layout(w) or_continue
+		layout: Layout = _get_layout(w) or_continue
 		if layout.direction == .Y {
-			grow_shrink_children_along_axis(.Y, layout, w, &growables)
+			_grow_shrink_children_along_axis(.Y, layout, w, &growables)
 			clear(&growables)
 		} else {
-			grow_children_across_axis(.Y, layout, w)
+			_grow_children_across_axis(.Y, layout, w)
 			clear(&growables)
 		}
 	}
 }
 
-layout_positioning_pass :: proc(ctx: ^Core_Context) {
+_layout_positioning_pass :: proc(ctx: ^Core_Context) {
 	for widget in ctx.stacks.pre {
 		layout: Layout
 
@@ -553,7 +560,7 @@ layout_positioning_pass :: proc(ctx: ^Core_Context) {
 			append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_rect})
 
 			command_text: Command_Text
-			command_text.color = WHITE
+			command_text.color = {255, 255, 255, 255}
 			command_text.position = widget.position
 			command_text.spacing = type.style.letter_spacing
 			command_text.font_size = type.style.font_size
@@ -676,13 +683,11 @@ layout_positioning_pass :: proc(ctx: ^Core_Context) {
 			}
 		}
 
-		for r, i in widget.target.border_radius {
-			widget.target.border_radius[i] = clamp(0, min(widget.size.x, widget.size.y) / 2, r)
+		for r, i in widget.style.border_radius {
+			widget.style.border_radius[i] = clamp(0, min(widget.size.x, widget.size.y) / 2, r)
 		}
 
-		if is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border_radius) &&
-		   ctx.active_widget_id == 0 &&
-		   widget.events_mask != ~{} {
+		if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border_radius) && ctx.active_widget_id == 0 {
 			ctx.hot_widget_id = widget.node.id
 		}
 
@@ -703,7 +708,7 @@ layout_positioning_pass :: proc(ctx: ^Core_Context) {
 	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
 }
 
-build_stacks :: proc(ctx: ^Core_Context) {
+_build_stacks :: proc(ctx: ^Core_Context) {
 	append(&ctx.stacks.temp, &ctx.widgets[0]) // append root node 
 
 	// Perhaps I should make this a breathd first tree instead of depth first tree

@@ -1,4 +1,4 @@
-package main
+package ui_core
 
 import "core:math/linalg"
 import "core:time"
@@ -33,9 +33,23 @@ Widget_Event :: enum u8 {
 }
 
 Widget_Events :: bit_set[Widget_Event]
-Active_Widget_Events :: ~Widget_Events{.Hovered, .Right_Clicked, .Left_Clicked, .Double_Right_Clicked, .Double_Left_Clicked}
 
-resolve_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event: Widget_Events) {
+Mouse_Context :: struct {
+	double_click_timeout: time.Duration,
+	long_down_timeout:    time.Duration,
+	last_left_click:      time.Time,
+	last_right_click:     time.Time,
+	left_down_start:      time.Time,
+	right_down_start:     time.Time,
+	old_position:         Vec2f32,
+	position:             Vec2f32,
+	delta:                Vec2f32,
+	scroll_v:             Vec2f32,
+	scroll:               f32,
+	events:               bit_set[Mouse_Event],
+}
+
+_resolve_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event: Widget_Events) {
 
 	if .Left_Released in ctx.mouse.events {
 		event += {.Left_Clicked}
@@ -89,7 +103,7 @@ resolve_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event: Widget_Ev
 	return
 }
 
-is_point_in_rect :: proc(rect_pos, rect_size, point: Vec2f32, border_radius: Vec4f32) -> bool {
+_is_point_in_rect :: proc(rect_pos, rect_size, point: Vec2f32, border_radius: Vec4f32) -> bool {
 
 	border_radius := border_radius.zywx
 
