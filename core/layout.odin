@@ -90,25 +90,12 @@ Sizing :: struct {
 	kind:     Layout_Kind,
 }
 
-Floating :: struct {
-	layout:          Layout,
-	id:              Id, // Used if Attachment_To == .Id 
-	parent, element: Anchor,
-	attachment_to:   Attachment_To,
-}
-
-Layout :: struct {
-	sizing:          [Axis]Sizing,
-	padding:         Vec4f32,
-	child_gap:       f32,
-	child_alignment: Child_Alignment,
-	direction:       Layout_Direction,
-}
-
-Text :: struct {
-	style:        Text_Style,
-	text:         string,
-	_start, _end: int, // index into ctx.text_lines 
+@(private = "file")
+Word_Measure :: struct {
+	text:          string,
+	start_index:   int,
+	spaces_before: i32,
+	width:         f32,
 }
 
 @(private = "file")
@@ -194,7 +181,10 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Wi
 				child_widget.size[axis] = max(child_widget._min[axis], type.sizing[axis].min)
 				append(growables, Growable{&child_widget.size, child_widget.size[axis], type.sizing[axis].max, false})
 			case .Percent:
-				child_widget.size[axis] = widget.size[axis] * type.sizing[axis].min
+				s :=
+					(widget.size[axis] - _get_axis_padding(axis, layout.padding) - f32(widget.node.total_children - 1) * layout.child_gap) *
+					type.sizing[axis].min
+				child_widget.size[axis] = max(child_widget._min[axis], s)
 			case .Fixed:
 			case .Fit:
 			}
@@ -298,7 +288,9 @@ _grow_children_across_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget) 
 		}
 
 		if layout.sizing[axis].kind == .Percent {
-			child_widget.size[axis] = widget.size[axis] * layout.sizing[axis].min
+			child_widget.size[axis] =
+				(widget.size[axis] - _get_axis_padding(axis, layout.padding) - f32(widget.node.total_children - 1) * layout.child_gap) *
+				layout.sizing[axis].min
 			child_widget.size[axis] = max(child_widget._min[axis], child_widget.size[axis])
 		}
 		if layout.sizing[axis].kind == .Grow {
@@ -448,8 +440,12 @@ _layout_sizing_pass :: proc(ctx: ^Core_Context) {
 }
 
 _layout_positioning_pass :: proc(ctx: ^Core_Context) {
-	for widget in ctx.stacks.pre {
+	for widget, i in ctx.stacks.pre {
 		layout: Layout
+
+		if widget.node.parent != nil {
+			widget._z_index = widget.node.parent._z_index + 1 + i
+		}
 
 		switch type in widget.config {
 		case Floating:
@@ -558,16 +554,12 @@ _layout_positioning_pass :: proc(ctx: ^Core_Context) {
 			command_rect.border_radius = widget.style.border_radius
 			command_rect.border_thickness = widget.style.border_thickness
 			append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_rect})
-
 			command_text: Command_Text
-			command_text.color = {255, 255, 255, 255}
 			command_text.position = widget.position
-			command_text.spacing = type.style.letter_spacing
-			command_text.font_size = type.style.font_size
-			command_text.line_height = type.style.line_spacing
+			command_text.style = type.style
 			command_text.end = type._end
 			command_text.start = type._start
-			append(&ctx.render_commands, Render_Command{z_index = widget._z_index + 1, type = command_text})
+			append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_text})
 			continue // Text never has children hence skip. This loops goes from top to bottom into the tree. Any text will have its position resolved always 
 		}
 
@@ -675,10 +667,13 @@ _layout_positioning_pass :: proc(ctx: ^Core_Context) {
 			switch expand.kind {
 			case .None:
 			case .Absolute:
-				widget.size[i] += expand.value
+				widget.size[i] += expand.value * 2
+				widget.position[i] -= expand.value
 			case .Percent:
 				if widget.node.parent != nil {
-					widget.size[i] += expand.value * widget.node.parent.size[i]
+					v := expand.value * widget.node.parent.size[i]
+					widget.size[i] += v * 2
+					widget.position[i] -= v
 				}
 			}
 		}
@@ -691,20 +686,39 @@ _layout_positioning_pass :: proc(ctx: ^Core_Context) {
 			ctx.hot_widget_id = widget.node.id
 		}
 
-		if widget.node.parent != nil {
-			widget._z_index = widget.node.parent._z_index + 1
-		}
-
 		command_rect: Command_Rect
 		command_rect.size = widget.size
 		command_rect.color = widget.style.color
 		command_rect.position = widget.position
 		command_rect.border_radius = widget.style.border_radius
 		command_rect.border_thickness = widget.style.border_thickness
-
 		append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_rect})
-	}
 
+		if len(widget.primitives) > 0 {
+			append(
+				&ctx.render_commands,
+				Render_Command{type = Command_Clip_Start{clip_size = widget.size, clip_position = widget.position}, z_index = widget._z_index},
+			)
+			defer widget._z_index += len(widget.primitives) + 1
+			defer append(&ctx.render_commands, Render_Command{type = Command_Clip_End{}, z_index = widget._z_index + len(widget.primitives)})
+			for &p, i in widget.primitives {
+				switch &v in p {
+				case Primitive_Rect:
+					v.position += widget.position
+				case Primitive_Ellipse:
+					v.position += widget.position
+				case Primitive_Line:
+					v.end_position += widget.position
+					v.start_position += widget.position
+				case Primitive_Points:
+					for &point in v.points {
+						point += widget.position
+					}
+				}
+				append(&ctx.render_commands, Render_Command{z_index = widget._z_index + i + 1, type = p})
+			}
+		}
+	}
 	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
 }
 

@@ -2,6 +2,7 @@ package ui_core
 
 import "core:fmt"
 import "core:hash"
+import "core:math/ease"
 
 Animation_Data :: union {
 	f32,

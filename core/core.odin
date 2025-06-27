@@ -2,7 +2,8 @@ package ui_core
 
 import "core:fmt"
 import "core:hash"
-import "core:mem/virtual"
+import "core:math"
+import "core:math/linalg"
 import "core:time"
 
 /*
@@ -61,6 +62,12 @@ Animation_States :: enum u8 {
 	Active_Overrided,
 }
 
+when ODIN_DEBUG {
+	Core_Errors :: enum u8 {
+		No_Parent_To_Bind_Primitive,
+	}
+}
+
 Core_Context :: struct {
 	stacks:                      struct {
 		post_r: [dynamic]^Widget,
@@ -71,6 +78,7 @@ Core_Context :: struct {
 	text_lines:                  [dynamic]string,
 	widgets:                     [dynamic]Widget,
 	render_commands:             [dynamic]Render_Command,
+	primitives:                  [dynamic]Command_Primitive,
 	persistant_data:             map[Id]Persistant_Data, // widgets from last frame. Used to query events. Accessed by widget.id
 	animation_hooks:             map[Id]Animation_Hook,
 	hot_widget_id:               Id, //id, widget currently under mouse  
@@ -86,7 +94,6 @@ Persistant_Data :: struct {
 	style:                Style,
 	size, position, _min: Vec2f32,
 	events:               Widget_Events,
-	_anim_state:          bit_set[Animation_States],
 }
 
 Render_Command :: struct {
@@ -97,6 +104,9 @@ Render_Command :: struct {
 Render_Command_Type :: union {
 	Command_Rect,
 	Command_Text,
+	Command_Primitive,
+	Command_Clip_Start,
+	Command_Clip_End,
 }
 
 Command_Rect :: struct {
@@ -107,24 +117,51 @@ Command_Rect :: struct {
 }
 
 Command_Text :: struct {
-	start:       int,
-	end:         int,
-	position:    Vec2f32,
-	font_size:   f32,
-	spacing:     f32,
-	line_height: f32,
-	color:       Color,
+	start, end: int, // usage : ctx.lines[start:end] 
+	position:   Vec2f32,
+	style:      Text_Style,
 }
 
-Word_Measure :: struct {
-	text:          string,
-	start_index:   int,
-	spaces_before: i32,
-	width:         f32,
+Command_Clip_Start :: struct {
+	clip_position: Vec2f32,
+	clip_size:     Vec2f32,
+}
+
+Command_Clip_End :: struct {}
+
+Command_Primitive :: union {
+	Primitive_Line,
+	Primitive_Rect,
+	Primitive_Points,
+	Primitive_Ellipse,
+}
+
+Primitive_Ellipse :: struct {
+	position: Vec2f32,
+	size:     Vec2f32, // major, minor axis. a, b = size.x, size.y if size.x > size.y else size.y, size.x 
+	color:    Color,
+}
+
+Primitive_Rect :: struct {
+	position: Vec2f32,
+	size:     Vec2f32,
+	color:    Color,
+}
+
+Primitive_Points :: struct {
+	points: []Vec2f32,
+	color:  Color,
+}
+
+Primitive_Line :: struct {
+	start_position, end_position: Vec2f32,
+	thickness:                    f32,
+	color:                        Color,
 }
 
 Text_Style :: struct {
 	font_id:        int,
+	color:          Color,
 	font_size:      f32,
 	letter_spacing: f32,
 	line_spacing:   f32,
@@ -146,6 +183,28 @@ Node :: struct {
 	index, total_children: int,
 }
 
+Floating :: struct {
+	layout:          Layout,
+	id:              Id, // Used if Attachment_To == .Id 
+	parent, element: Anchor,
+	attachment_to:   Attachment_To,
+}
+
+Layout :: struct {
+	sizing:          [Axis]Sizing,
+	padding:         Vec4f32,
+	child_gap:       f32,
+	child_alignment: Child_Alignment,
+	direction:       Layout_Direction,
+}
+
+Text :: struct {
+	style:        Text_Style,
+	text:         string,
+	_start, _end: int, // index into ctx.text_lines 
+}
+
+
 Config :: union {
 	Layout,
 	Floating,
@@ -158,6 +217,7 @@ Widget :: struct {
 	style:          Style,
 	expand:         [2]Expand,
 	offset:         [2]Offset,
+	primitives:     []Command_Primitive,
 	_min:           Vec2f32,
 	size, position: Vec2f32,
 	_z_index:       int,
@@ -172,6 +232,7 @@ init_core_context :: proc(widget_arr_backing_length: int) -> Core_Context {
 	ctx.stacks.temp = make([dynamic]^Widget, 0, widget_arr_backing_length)
 	ctx.stacks.pre = make([dynamic]^Widget, 0, widget_arr_backing_length)
 	ctx.stacks.post_r = make([dynamic]^Widget, 0, widget_arr_backing_length)
+	ctx.primitives = make([dynamic]Command_Primitive)
 	ctx.persistant_data = make(map[Id]Persistant_Data)
 	return ctx
 }
@@ -185,6 +246,7 @@ deinit_core_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.stacks.post_r)
 	delete(ctx.text_lines)
 	delete(ctx.animation_hooks)
+	delete(ctx.primitives)
 }
 
 // Returns false if widget has config type of text. Text widget cannot have children.
@@ -216,8 +278,6 @@ end_ui :: proc(ctx: ^Core_Context) {
 	_resolve_animation_hooks(ctx)
 
 	for &w in ctx.widgets {
-		// _resolve_animations(&w)
-
 		events: Widget_Events
 		if w.node.id == ctx.hot_widget_id {
 			events += {.Hovered}
@@ -238,6 +298,7 @@ end_ui :: proc(ctx: ^Core_Context) {
 
 	ctx.mouse.events = {}
 	ctx.mouse.old_position = ctx.mouse.position
+	clear(&ctx.primitives)
 	clear(&ctx.stacks.post_r)
 	clear(&ctx.stacks.pre)
 	clear(&ctx.stacks.temp)
@@ -252,8 +313,11 @@ create_widget :: proc(ctx: ^Core_Context, config: Config = nil, expand: [2]Expan
 	w.offset = offset
 	w.expand = expand
 	w.node.parent = ctx.current_parent
-	w._z_index = len(ctx.widgets) - 1
 	w.node.index = len(ctx.widgets) - 1
+
+	if _, ok := w.config.(Floating); ok {
+		w._z_index = cap(ctx.widgets)
+	}
 
 	_add_widget(ctx, w)
 	_generate_widget_hash(w)
@@ -263,6 +327,13 @@ create_widget :: proc(ctx: ^Core_Context, config: Config = nil, expand: [2]Expan
 	}
 
 	return w
+}
+
+create_primitive :: proc(ctx: ^Core_Context, primitive: Command_Primitive) {
+	if ctx.current_parent != nil {
+		append(&ctx.primitives, primitive)
+		ctx.current_parent.primitives = ctx.primitives[len(ctx.primitives) - 1 - len(ctx.current_parent.primitives):len(ctx.primitives)]
+	}
 }
 
 _add_widget :: proc(ctx: ^Core_Context, widget: ^Widget) {
