@@ -11,8 +11,8 @@ during frame :
 
 create_widget() 
 |_ create a widget with specified style and params 
-|_ give it persistent data stored last frame
-|_ (POSSIBLY, NOT YET HERE) resolve styles based on events
+|_ provide it persistant data 
+|_ query events and do stuff
 
 at frame end :
 
@@ -20,48 +20,44 @@ emit_render_commands()
 |_ Build the reverse post-order and pre-order stacks for tree traversal of widgets 
 |_ Sizing pass 
    |_ fixed_sizing() -> fit_x() -> grow_x() -> text_wrap() -> fit_y() -> grow_y()
-|_ Positioning pass 
+|_ Positioning pass
    |_ Position elements 
    |_ Clamp style variables to maximums or minimums
    |_ Determine element under mouse (ctx.hot_widget) 
    |_ append to ctx.render_commands one or more (box, box + text etc) render commands
-|_ Clear out persistent Data 
-|_ Store this frames Data 
+|_ Clear out previous frames data and store this frames data 
    |_ Gather events
-   |_ Progress (t + deltatime) or decay (t - deltatime) animation timers (hot_t, active_t)
-   |_ Resolve_Style + Resolve_animations (resolve style will be moved out to be user's headache, 
-      it lags behind two frames here since its using last frame events)
-   |_ Place persistent data like animation timers and events into persistent_data hash map keyed by widget.node.id 
+   |_ Resolve Animations Hooks 
+   |_ Store Persistant Data 
 render_frame()
 */
 
-// API
-// Main Task : Collapse feature flags into Layout, Layout styling, styling  [DONE]
-// Keyboard Interface directly from core. Add helpers to map events. Add focus events or focus state  
-// Errors for the primitive functions 
+/*
+TODOS 
 
-// LAYOUT 
-// Support clipping rects 
-// Support max size constraint [WIP]
-// Support for floating elements 
-// Support for free elements that are rendered on top of everything else. Position set by user
-// Support vertical text 
-// Support overgrowing elements 
+API:
+	Errors 
 
+LAYOUT: 
+	Support Wrap_Children element perhaps. Wrap_Children will overwrite any layout config of children to confine them into a min max contraint ??? 
+	Support vertical text. Also Text wrapping flags
+	Support clipping rects (Clipping Done) 
+	Support max size constraint [WIP] (Almost Done)
+	Support for floating elements (Done)
+	Support for free elements that are rendered on top of everything else. Position set by user (Funcationality provided by Offset{})
+	Support overgrowing elements (Comes naturally with clipping :O)
+*/
 
 Vec2f32 :: [2]f32
-Vec4f32 :: [4]f32 // for padding : top right bottom left | for corners : top left top right bottom right bottom left
-Color :: [4]u8 // turn this into a union of : solid color, gradient + graident type 
+/*
+   Padding order : Top, right, bottom, left (Layout depends on this order)
+   border radius order : top left corner, top right corner, bottom right corner, bottom left corner (Layout does not depend on this order)
+*/
+Vec4f32 :: [4]f32
+Color :: [4]u8 // TODO: Turn this into a gradient type 
 Id :: distinct i64
 
-Animation_States :: enum u8 {
-	Hot_Progressive, // on detecting a new hot event 
-	Hot_Decay, // on detecting previous hot event's death 
-	Active_Progressive,
-	Active_Decay,
-	Active_Overrided,
-}
-
+// TODO: Error handling 
 when ODIN_DEBUG {
 	Core_Errors :: enum u8 {
 		No_Parent_To_Bind_Primitive,
@@ -75,8 +71,8 @@ Core_Context :: struct {
 		temp:   [dynamic]^Widget,
 	},
 	mouse:                       Mouse_Context,
-	text_lines:                  [dynamic]string,
 	widgets:                     [dynamic]Widget,
+	text_lines:                  [dynamic]string,
 	render_commands:             [dynamic]Render_Command,
 	primitives:                  [dynamic]Command_Primitive,
 	persistant_data:             map[Id]Persistant_Data, // widgets from last frame. Used to query events. Accessed by widget.id
@@ -88,7 +84,6 @@ Core_Context :: struct {
 	window_height, window_width: f32,
 	delta_time:                  f32,
 }
-
 
 Persistant_Data :: struct {
 	style:                Style,
@@ -104,16 +99,35 @@ Render_Command :: struct {
 Render_Command_Type :: union {
 	Command_Rect,
 	Command_Text,
+	Command_Border,
 	Command_Primitive,
-	Command_Clip_Start,
 	Command_Clip_End,
+	Command_Clip_Start,
+}
+
+Border_Type :: enum u8 {
+	None,
+	Single,
+	Double,
+	Dotted,
+	Dashed,
+	Grooved,
+	Inset,
+	Outset,
+}
+
+Command_Border :: struct {
+	radius:    Vec4f32,
+	thickness: Vec4f32,
+	position:  Vec2f32,
+	color:     [4]Color,
+	type:      [4]Border_Type,
 }
 
 Command_Rect :: struct {
-	border_radius:    Vec4f32,
-	border_thickness: Vec4f32,
-	size, position:   Vec2f32,
-	color:            Color,
+	border_radius:  Vec4f32,
+	size, position: Vec2f32,
+	color:          Color,
 }
 
 Command_Text :: struct {
@@ -136,6 +150,7 @@ Command_Primitive :: union {
 	Primitive_Ellipse,
 }
 
+// TODO: Right Primitives are clipped in the parent widget. Need to provide functionality to override and custom z index  
 Primitive_Ellipse :: struct {
 	position: Vec2f32,
 	size:     Vec2f32, // major, minor axis. a, b = size.x, size.y if size.x > size.y else size.y, size.x 
@@ -159,18 +174,28 @@ Primitive_Line :: struct {
 	color:                        Color,
 }
 
+// TODO: Make it consistant. Text style exists in Text while other styles here.
+Style :: struct {
+	border:  Maybe(Border_Style),
+	padding: Vec4f32,
+	color:   Color,
+}
+
+Border_Style :: struct {
+	radius:             Vec4f32,
+	thickness:          Vec4f32,
+	color:              [4]Color,
+	type:               [4]Border_Type,
+	between_child:      bool,
+	between_child_type: Border_Type,
+}
+
 Text_Style :: struct {
-	font_id:        int,
 	color:          Color,
+	font_id:        int,
 	font_size:      f32,
 	letter_spacing: f32,
 	line_spacing:   f32,
-}
-
-Style :: struct {
-	border_radius:    Vec4f32,
-	border_thickness: Vec4f32,
-	color:            Color,
 }
 
 Node :: struct {
@@ -192,7 +217,6 @@ Floating :: struct {
 
 Layout :: struct {
 	sizing:          [Axis]Sizing,
-	padding:         Vec4f32,
 	child_gap:       f32,
 	child_alignment: Child_Alignment,
 	direction:       Layout_Direction,
@@ -201,18 +225,17 @@ Layout :: struct {
 Text :: struct {
 	style:        Text_Style,
 	text:         string,
-	_start, _end: int, // index into ctx.text_lines 
+	_start, _end: int, // index into ctx.text_lines
 }
 
-
-Config :: union {
+Widget_Type :: union {
 	Layout,
 	Floating,
 	Text,
 }
 
 Widget :: struct {
-	config:         Config,
+	type:           Widget_Type,
 	node:           Node,
 	style:          Style,
 	expand:         [2]Expand,
@@ -251,7 +274,7 @@ deinit_core_context :: proc(ctx: ^Core_Context) {
 
 // Returns false if widget has config type of text. Text widget cannot have children.
 push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
-	_, ok := widget.config.(Text)
+	_, ok := widget.type.(Text)
 	(!ok) or_return
 	ctx.current_parent = widget
 	return true
@@ -304,18 +327,24 @@ end_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.stacks.temp)
 }
 
-create_widget :: proc(ctx: ^Core_Context, config: Config = nil, expand: [2]Expand = {}, offset: [2]Offset = {}, style: Style = {}) -> ^Widget {
+create_widget :: proc(
+	ctx: ^Core_Context,
+	widget_type: Widget_Type = nil,
+	expand: [2]Expand = {},
+	offset: [2]Offset = {},
+	style: Style = {},
+) -> ^Widget {
 
 	append(&ctx.widgets, Widget{})
 	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
 	w^ = {} // zero out
-	w.config = config
+	w.type = widget_type
 	w.offset = offset
 	w.expand = expand
 	w.node.parent = ctx.current_parent
 	w.node.index = len(ctx.widgets) - 1
 
-	if _, ok := w.config.(Floating); ok {
+	if _, ok := w.type.(Floating); ok {
 		w._z_index = cap(ctx.widgets)
 	}
 
@@ -388,7 +417,7 @@ _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widge
 	widget.events = val.events
 	widget.style = val.style
 
-	if _, ok := widget.config.(Text); ok {
+	if _, ok := widget.type.(Text); ok {
 		widget._min = val._min
 	}
 
