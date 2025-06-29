@@ -49,7 +49,7 @@ Attachment_To :: enum u8 {
 Offset_Kind :: enum u8 {
 	None,
 	Fixed, // Set position to what was provided
-	Relative, // Offset Relative to Parent position 
+	Absolute, // Offset Relative to Parent position 
 	Percent, // percent of parent size
 	Percent_Self, // percent of own size
 }
@@ -61,6 +61,8 @@ Expand_Kind :: enum u8 {
 	Percent_Self, // expand to percent of own size
 }
 
+// I still need to implement this : )
+// I should offload some rendering quirks like putting dashes and dots at wrap site to command emittion stage 
 Wrap_Kind :: enum u8 {
 	None,
 	Words,
@@ -73,6 +75,7 @@ Expand :: struct {
 	kind:  Expand_Kind,
 }
 
+// I should support anchors for this as well
 Offset :: struct {
 	value: f32,
 	kind:  Offset_Kind,
@@ -130,19 +133,26 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 		}
 	}
 
-	// Apply padding adjustments and min max constraints to widgets
+	// Apply padding adjustments and min max constraints to non text widgets.
+	// Propagate min sizes upward to parent for text widgets
 	widget_layout, widget_is_layout := _get_layout(widget)
+	padding: f32 = _get_axis_padding(axis, widget.style.padding)
 
 	if !widget_is_layout {
+		// Suppose grow_1 parent of grow_2 parent of text. 
+		// text will propagate its _min to grow_2, but grow_2 will only propagate its own size to grow_1's min. 
+		// TODO: Remove the above goofy behaviour and correctly define _min shenanigans
 		if parent_layout.direction == axis {
+			if parent_layout.sizing[axis].kind != .Fit { 	// we add widget size to parent in above snippet
+				parent.size[axis] += widget._min[axis] + padding
+			}
 			parent._min[axis] += widget._min[axis]
 		} else {
+			parent.size[axis] = max(parent.size[axis], widget._min[axis])
 			parent._min[axis] = max(parent._min[axis], widget._min[axis])
 		}
 		return
 	}
-
-	padding: f32 = _get_axis_padding(axis, widget.style.padding)
 
 	if widget_layout.direction == axis {
 		if widget_layout.sizing[axis].kind == .Fit {
@@ -168,7 +178,6 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 _grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget, growables: ^[dynamic]Growable) {
 	if widget.node.first_child == nil {return}
 	remaining: f32 = widget.size[axis] - _get_axis_padding(axis, widget.style.padding)
-
 	remaining -= layout.child_gap * f32(widget.node.total_children - 1)
 
 	for child_widget := widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
@@ -424,7 +433,7 @@ _layout_all_sizing_pass :: proc(ctx: ^Core_Context) {
 			}
 			type._start = widget_lines_start
 			type._end = len(ctx.text_lines)
-			widget.size.y = f32(type._end - type._start) * type.style.line_spacing + y_padding
+			widget.size.y = f32(type._end - type._start) * (type.style.font_size + type.style.line_spacing) + y_padding
 			widget._min = {largest_width + x_padding, widget.size.y}
 			clear(&measured_words)
 		}
@@ -457,7 +466,6 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 			}
 		}
 
-
 		switch type in widget.type {
 		case Floating:
 			_position_layout_floating(ctx, widget, type)
@@ -478,8 +486,8 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 		_offset_widget(widget)
 		_emit_rect_command(ctx, widget, widget._z_index + z_index_offset)
 		z_index_offset += 1
+		_emit_widget_primitive_commands(ctx, widget, widget._z_index + z_index_offset)
 		z_index_offset += len(widget.primitives)
-		_emit_widget_primitive_commands(ctx, widget, widget._z_index + z_index_offset - len(widget.primitives))
 		z_index_offset += 1
 	}
 
@@ -492,7 +500,7 @@ _offset_widget :: proc(widget: ^Widget) {
 		case .None:
 		case .Fixed:
 			widget.position[i] = offset.value
-		case .Relative:
+		case .Absolute:
 			widget.position[i] += offset.value
 		case .Percent:
 			if widget.node.parent != nil {
@@ -608,18 +616,21 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 		case .Left:
 			increment.x = widget.position.x + padding[3]
 			for child := widget.node.first_child; child != nil; child = child.node.next {
+				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = increment.x
 				increment.x += child.size.x + layout.child_gap
 			}
 		case .Right:
 			increment.x = widget.position.x + widget.size.x + layout.child_gap - padding[1]
 			for child := widget.node.last_child; child != nil; child = child.node.prev {
+				if _, ok := child.type.(Floating); ok {continue}
 				increment.x -= child.size.x + layout.child_gap
 				child.position.x = increment.x
 			}
 		case .Center:
-			increment.x = widget.position.x + widget.size.x / 2 - total_size.x / 2
+			increment.x = widget.position.x + widget.size.x / 2 - total_size.x / 2 + padding[3] / 2
 			for child := widget.node.first_child; child != nil; child = child.node.next {
+				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = increment.x
 				increment.x += child.size.x + layout.child_gap
 			}
@@ -628,16 +639,19 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 		case .Top:
 			increment.y = widget.position.y + padding[0]
 			for child := widget.node.first_child; child != nil; child = child.node.next {
+				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = increment.y
 			}
 		case .Bottom:
 			increment.y = widget.position.y + widget.size.y - padding[2]
 			for child := widget.node.first_child; child != nil; child = child.node.next {
+				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = increment.y - child.size.y
 			}
 		case .Center:
 			center := widget.position.y + widget.size.y / 2
 			for child := widget.node.first_child; child != nil; child = child.node.next {
+				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = center - child.size.y / 2
 			}
 		}
@@ -646,35 +660,41 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 		case .Left:
 			increment.x = widget.position.x + padding[3]
 			for child := widget.node.first_child; child != nil; child = child.node.next {
+				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = increment.x
 			}
 		case .Right:
 			increment.x = widget.position.x + widget.size.x - padding[1]
 			for child := widget.node.first_child; child != nil; child = child.node.next {
+				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = increment.x - child.size.x
 			}
 		case .Center:
 			center := widget.position.x + widget.size.x / 2
 			for child := widget.node.first_child; child != nil; child = child.node.next {
+				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = center - child.size.x / 2
 			}
 		}
 		switch layout.child_alignment.y {
 		case .Center:
-			increment.y = widget.position.y + widget.size.y / 2 - total_size.y / 2
+			increment.y = widget.position.y + widget.size.y / 2 - total_size.y / 2 + padding[0] / 2
 			for child := widget.node.first_child; child != nil; child = child.node.next {
+				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = increment.y
 				increment.y += child.size.y + layout.child_gap
 			}
 		case .Top:
 			increment.y = widget.position.y + padding[0]
 			for child := widget.node.first_child; child != nil; child = child.node.next {
+				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = increment.y
 				increment.y += child.size.y + layout.child_gap
 			}
 		case .Bottom:
-			increment.y = widget.position.y + widget.size.y - padding[2]
+			increment.y = widget.position.y + widget.size.y + layout.child_gap - padding[2]
 			for child := widget.node.last_child; child != nil; child = child.node.prev {
+				if _, ok := child.type.(Floating); ok {continue}
 				increment.y -= child.size.y + layout.child_gap
 				child.position.y = increment.y
 			}
