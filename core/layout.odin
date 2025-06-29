@@ -1,16 +1,11 @@
 package ui_core
 
-import "core:container/small_array"
-import "core:fmt"
-import "core:os"
 import "core:sort"
 
 Axis :: enum u8 {
 	X,
 	Y,
 }
-
-Layout_Direction :: Axis
 
 Layout_Kind :: enum u8 {
 	Fit,
@@ -54,13 +49,15 @@ Offset_Kind :: enum u8 {
 	None,
 	Fixed, // Set position to what was provided
 	Relative, // Offset Relative to Parent position 
-	Percent, // percent of parent size 
+	Percent, // percent of parent size
+	Percent_Self, // percent of own size
 }
 
 Expand_Kind :: enum u8 {
 	None,
-	Percent,
-	Absolute,
+	Absolute, // exapand to provided size
+	Percent, // expand to percentage of parent size 
+	Percent_Self, // expand to percent of own size
 }
 
 Wrap_Kind :: enum u8 {
@@ -107,6 +104,12 @@ Growable :: struct {
 }
 
 _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
+	/* 
+		This function is called in reverse post order. Childs will be come first, then their parents
+		That is why accumalating size into parents and figuring out the min max padding adjustment in the same function works
+	*/
+
+	// Accumulate Into Parents size
 	parent := widget.node.parent
 
 	if parent == nil {return}
@@ -125,8 +128,9 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 		}
 	}
 
+	// Apply padding adjustments and min max constraints to widgets
 	widget_layout, widget_is_layout := _get_layout(widget)
-	if !widget_is_layout { 	// It is text. Here we set min size of text widget as the largest word size from last frame + padding along axis  
+	if !widget_is_layout {
 		if parent_layout.direction == axis {
 			parent._min[axis] += widget._min[axis]
 		} else {
@@ -301,7 +305,7 @@ _grow_children_across_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget) 
 	}
 }
 
-_layout_sizing_pass :: proc(ctx: ^Core_Context) {
+_layout_all_sizing_pass :: proc(ctx: ^Core_Context) {
 	#reverse for w in ctx.stacks.post_r {
 
 		layout: Layout = _get_layout(w) or_continue
@@ -440,9 +444,13 @@ _layout_sizing_pass :: proc(ctx: ^Core_Context) {
 	}
 }
 
-_layout_positioning_pass :: proc(ctx: ^Core_Context) {
+_layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 	for widget, i in ctx.stacks.pre {
-		layout: Layout
+		defer {
+			if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border) && ctx.active_widget_id == 0 {
+				ctx.hot_widget_id = widget.node.id
+			}
+		}
 
 		if widget.node.parent != nil {
 			widget._z_index = widget.node.parent._z_index + 1 + i
@@ -450,312 +458,286 @@ _layout_positioning_pass :: proc(ctx: ^Core_Context) {
 
 		switch type in widget.type {
 		case Floating:
-			layout = type.layout
-			anchor_pos: Vec2f32
-			anchor_size: Vec2f32
-
-			switch type.attachment_to {
-			case .Id:
-				val, ok := ctx.persistant_data[type.id]
-				if ok {
-					anchor_pos = val.position
-					anchor_size = val.size
-				}
-			case .Root:
-				w := ctx.widgets[0]
-				anchor_pos = w.position
-				anchor_size = w.size
-			case .Parent:
-				anchor_pos = widget.node.parent.position
-				anchor_size = widget.node.parent.size
-			case .None:
-			}
-
-			offset: Vec2f32
-			switch type.parent {
-			case .Left_Top:
-				offset = anchor_pos
-			case .Right_Top:
-				offset.x = anchor_pos.x + anchor_size.x
-				offset.y = anchor_pos.y
-			case .Center_Top:
-				offset.x = anchor_pos.x + anchor_size.x / 2
-				offset.y = anchor_pos.y
-			case .Left_Center:
-				offset.x = anchor_pos.x
-				offset.y = anchor_pos.y + anchor_size.y / 2
-			case .Center_Center:
-				offset = anchor_pos + anchor_size / 2
-			case .Right_Center:
-				offset.x = anchor_pos.x + anchor_size.x
-				offset.y = anchor_pos.y + anchor_size.y / 2
-			case .Left_Bottom:
-				offset.x = anchor_pos.x
-				offset.y = anchor_pos.y + anchor_size.y
-			case .Right_Bottom:
-				offset = anchor_pos + anchor_size
-			case .Center_Bottom:
-				offset.x = anchor_pos.x + anchor_size.x / 2
-				offset.y = anchor_pos.y + anchor_size.y
-			}
-			switch type.element {
-			case .Left_Top: // there by default 
-			case .Right_Top:
-				offset.x -= widget.size.x
-			case .Center_Top:
-				offset.x -= widget.size.x / 2
-			case .Left_Center:
-				offset.y -= widget.size.y / 2
-			case .Center_Center:
-				offset -= widget.size / 2
-			case .Right_Center:
-				offset.x -= widget.size.x
-				offset.y -= widget.size.y / 2
-			case .Left_Bottom:
-				offset.y -= widget.size.y
-			case .Right_Bottom:
-				offset -= widget.size
-			case .Center_Bottom:
-				offset.x -= widget.size.x / 2
-				offset.y -= widget.size.y
-			}
-			widget.position = offset
+			_position_layout_floating(ctx, widget, type)
+			_position_layout_childs(widget, type.layout)
 		case Layout:
-			layout = type
+			_position_layout_childs(widget, type)
 		case Text:
-			for offset, i in widget.offset {
-				switch offset.kind {
-				case .None:
-				case .Fixed:
-					widget.position[i] = offset.value
-				case .Relative:
-					widget.position[i] += offset.value
-				case .Percent:
-					if widget.node.parent != nil {
-						widget.position[i] += offset.value * widget.node.parent.size[i]
-					}
-				}
-			}
-
-			for expand, i in widget.expand {
-				switch expand.kind {
-				case .None:
-				case .Absolute:
-					widget.size[i] += expand.value
-				case .Percent:
-					if widget.node.parent != nil {
-						widget.size[i] += expand.value * widget.node.parent.size[i]
-					}
-				}
-			}
-			command_rect: Command_Rect
-			command_rect.size = widget.size
-			command_rect.color = widget.style.color
-			command_rect.position = widget.position
-			if style, ok := widget.style.border.(Border_Style); ok {
-				command_rect.border_radius = style.radius
-			}
-			widget.position.x += widget.style.padding[3]
-			widget.position.y += widget.style.padding[0]
-			append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_rect})
-			command_text: Command_Text
-			command_text.position = widget.position
-			command_text.style = type.style
-			command_text.end = type._end
-			command_text.start = type._start
-			append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_text})
+			_expand_widget(widget)
+			_offset_widget(widget)
+			_emit_rect_command(ctx, widget)
+			_emit_text_command(ctx, widget, type)
 			continue // Text never has children hence skip. This loops goes from top to bottom into the tree. Any text will have its position resolved always 
 		}
 
-		total_size: Vec2f32
-		for child := widget.node.first_child; child != nil; child = child.node.next {
-			total_size += child.size + layout.child_gap
-		}
-		padding := widget.style.padding
-		position_increment: Vec2f32
-
-		switch layout.direction {
-		case .X:
-			switch layout.child_alignment.x {
-			case .Left:
-				position_increment.x = widget.position.x + padding[3]
-				for child := widget.node.first_child; child != nil; child = child.node.next {
-					child.position.x = position_increment.x
-					position_increment.x += child.size.x + layout.child_gap
-				}
-			case .Right:
-				position_increment.x = widget.position.x + widget.size.x + layout.child_gap - padding[1]
-				for child := widget.node.last_child; child != nil; child = child.node.prev {
-					position_increment.x -= child.size.x + layout.child_gap
-					child.position.x = position_increment.x
-				}
-			case .Center:
-				position_increment.x = widget.position.x + widget.size.x / 2 - total_size.x / 2
-				for child := widget.node.first_child; child != nil; child = child.node.next {
-					child.position.x = position_increment.x
-					position_increment.x += child.size.x + layout.child_gap
-				}
-			}
-			switch layout.child_alignment.y {
-			case .Top:
-				position_increment.y = widget.position.y + padding[0]
-				for child := widget.node.first_child; child != nil; child = child.node.next {
-					child.position.y = position_increment.y
-				}
-			case .Bottom:
-				position_increment.y = widget.position.y + widget.size.y - padding[2]
-				for child := widget.node.first_child; child != nil; child = child.node.next {
-					child.position.y = position_increment.y - child.size.y
-				}
-			case .Center:
-				center := widget.position.y + widget.size.y / 2
-				for child := widget.node.first_child; child != nil; child = child.node.next {
-					child.position.y = center - child.size.y / 2
-				}
-			}
-		case .Y:
-			switch layout.child_alignment.x {
-			case .Left:
-				position_increment.x = widget.position.x + padding[3]
-				for child := widget.node.first_child; child != nil; child = child.node.next {
-					child.position.x = position_increment.x
-				}
-			case .Right:
-				position_increment.x = widget.position.x + widget.size.x - padding[1]
-				for child := widget.node.first_child; child != nil; child = child.node.next {
-					child.position.x = position_increment.x - child.size.x
-				}
-			case .Center:
-				center := widget.position.x + widget.size.x / 2
-				for child := widget.node.first_child; child != nil; child = child.node.next {
-					child.position.x = center - child.size.x / 2
-				}
-			}
-			switch layout.child_alignment.y {
-			case .Center:
-				position_increment.y = widget.position.y + widget.size.y / 2 - total_size.y / 2
-				for child := widget.node.first_child; child != nil; child = child.node.next {
-					child.position.y = position_increment.y
-					position_increment.y += child.size.y + layout.child_gap
-				}
-			case .Top:
-				position_increment.y = widget.position.y + padding[0]
-				for child := widget.node.first_child; child != nil; child = child.node.next {
-					child.position.y = position_increment.y
-					position_increment.y += child.size.y + layout.child_gap
-				}
-			case .Bottom:
-				position_increment.y = widget.position.y + widget.size.y - padding[2]
-				for child := widget.node.last_child; child != nil; child = child.node.prev {
-					position_increment.y -= child.size.y + layout.child_gap
-					child.position.y = position_increment.y
-				}
-			}
-		}
-
-		for offset, i in widget.offset {
-			switch offset.kind {
-			case .None:
-			case .Fixed:
-				widget.position[i] = offset.value
-			case .Relative:
-				widget.position[i] += offset.value
-			case .Percent:
-				if widget.node.parent != nil {
-					widget.position[i] += offset.value * widget.node.parent.size[i]
-				}
-			}
-		}
-
-		for expand, i in widget.expand {
-			switch expand.kind {
-			case .None:
-			case .Absolute:
-				widget.size[i] += expand.value * 2
-				widget.position[i] -= expand.value
-			case .Percent:
-				if widget.node.parent != nil {
-					v := expand.value * widget.node.parent.size[i]
-					widget.size[i] += v * 2
-					widget.position[i] -= v
-				}
-			}
-		}
-
-		if border, ok := &widget.style.border.(Border_Style); ok {
-			for &r in border.radius {
-				r = clamp(0, min(widget.size.x, widget.size.y) / 2, r)
-			}
-		}
-
-		if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border) && ctx.active_widget_id == 0 {
-			ctx.hot_widget_id = widget.node.id
-		}
-
-		command_rect: Command_Rect
-		command_rect.size = widget.size
-		command_rect.color = widget.style.color
-		command_rect.position = widget.position
-		if style, ok := widget.style.border.(Border_Style); ok {
-			command_rect.border_radius = style.radius
-		}
-		append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_rect})
-
-		if len(widget.primitives) > 0 {
-			append(
-				&ctx.render_commands,
-				Render_Command{type = Command_Clip_Start{clip_size = widget.size, clip_position = widget.position}, z_index = widget._z_index},
-			)
-			defer widget._z_index += len(widget.primitives) + 1
-			defer append(&ctx.render_commands, Render_Command{type = Command_Clip_End{}, z_index = widget._z_index + len(widget.primitives)})
-			for &p, i in widget.primitives {
-				switch &v in p {
-				case Primitive_Rect:
-					v.position += widget.position
-				case Primitive_Ellipse:
-					v.position += widget.position
-				case Primitive_Line:
-					v.end_position += widget.position
-					v.start_position += widget.position
-				case Primitive_Points:
-					for &point in v.points {
-						point += widget.position
-					}
-				}
-				append(&ctx.render_commands, Render_Command{z_index = widget._z_index + i + 1, type = p})
-			}
-		}
+		_expand_widget(widget)
+		_offset_widget(widget)
+		_emit_rect_command(ctx, widget)
+		_emit_widget_primitive_commands(ctx, widget)
 	}
 	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
 }
 
-_build_stacks :: proc(ctx: ^Core_Context) {
-	append(&ctx.stacks.temp, &ctx.widgets[0]) // append root node 
-
-	// Perhaps I should make this a breathd first tree instead of depth first tree
-
-	for {
-		widget := pop_safe(&ctx.stacks.temp) or_break
-
-		append(&ctx.stacks.post_r, widget)
-
-		for child_widget := widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
-			append(&ctx.stacks.temp, child_widget)
+_offset_widget :: proc(widget: ^Widget) {
+	for offset, i in widget.offset {
+		switch offset.kind {
+		case .None:
+		case .Fixed:
+			widget.position[i] = offset.value
+		case .Relative:
+			widget.position[i] += offset.value
+		case .Percent:
+			if widget.node.parent != nil {
+				widget.position[i] += offset.value * widget.node.parent.size[i]
+			}
+		case .Percent_Self:
+			widget.position[i] += offset.value * widget.size[i]
 		}
 	}
+}
 
-	clear(&ctx.stacks.temp)
-	append(&ctx.stacks.temp, &ctx.widgets[0])
-
-	for {
-		widget := pop_safe(&ctx.stacks.temp) or_break
-
-		append(&ctx.stacks.pre, widget)
-
-		for child_widget := widget.node.last_child; child_widget != nil; child_widget = child_widget.node.prev {
-			append(&ctx.stacks.temp, child_widget)
+_expand_widget :: proc(widget: ^Widget) {
+	for expand, i in widget.expand {
+		switch expand.kind {
+		case .None:
+		case .Absolute:
+			widget.size[i] += expand.value
+		case .Percent:
+			if widget.node.parent != nil {
+				widget.size[i] += expand.value * widget.node.parent.size[i]
+			}
+		case .Percent_Self:
+			widget.size[i] += expand.value * widget.size[i]
 		}
 	}
+}
 
-	clear(&ctx.stacks.temp)
+_position_layout_floating :: proc(ctx: ^Core_Context, widget: ^Widget, floating: Floating) {
+	layout := floating.layout
+	anchor_pos: Vec2f32
+	anchor_size: Vec2f32
+
+	switch floating.attachment_to {
+	case .Id:
+		val, ok := ctx.persistant_data[floating.id]
+		if ok {
+			anchor_pos = val.position
+			anchor_size = val.size
+		}
+	case .Root:
+		w := ctx.widgets[0]
+		anchor_pos = w.position
+		anchor_size = w.size
+	case .Parent:
+		anchor_pos = widget.node.parent.position
+		anchor_size = widget.node.parent.size
+	case .None:
+	}
+
+	offset: Vec2f32
+	switch floating.parent {
+	case .Left_Top:
+		offset = anchor_pos
+	case .Right_Top:
+		offset.x = anchor_pos.x + anchor_size.x
+		offset.y = anchor_pos.y
+	case .Center_Top:
+		offset.x = anchor_pos.x + anchor_size.x / 2
+		offset.y = anchor_pos.y
+	case .Left_Center:
+		offset.x = anchor_pos.x
+		offset.y = anchor_pos.y + anchor_size.y / 2
+	case .Center_Center:
+		offset = anchor_pos + anchor_size / 2
+	case .Right_Center:
+		offset.x = anchor_pos.x + anchor_size.x
+		offset.y = anchor_pos.y + anchor_size.y / 2
+	case .Left_Bottom:
+		offset.x = anchor_pos.x
+		offset.y = anchor_pos.y + anchor_size.y
+	case .Right_Bottom:
+		offset = anchor_pos + anchor_size
+	case .Center_Bottom:
+		offset.x = anchor_pos.x + anchor_size.x / 2
+		offset.y = anchor_pos.y + anchor_size.y
+	}
+	switch floating.element {
+	case .Left_Top: // there by default 
+	case .Right_Top:
+		offset.x -= widget.size.x
+	case .Center_Top:
+		offset.x -= widget.size.x / 2
+	case .Left_Center:
+		offset.y -= widget.size.y / 2
+	case .Center_Center:
+		offset -= widget.size / 2
+	case .Right_Center:
+		offset.x -= widget.size.x
+		offset.y -= widget.size.y / 2
+	case .Left_Bottom:
+		offset.y -= widget.size.y
+	case .Right_Bottom:
+		offset -= widget.size
+	case .Center_Bottom:
+		offset.x -= widget.size.x / 2
+		offset.y -= widget.size.y
+	}
+	widget.position = offset
+}
+
+_position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
+	total_size: Vec2f32
+	for child := widget.node.first_child; child != nil; child = child.node.next {
+		total_size += child.size + layout.child_gap
+	}
+
+	padding := widget.style.padding
+	increment: Vec2f32
+
+	switch layout.direction {
+	case .X:
+		switch layout.child_alignment.x {
+		case .Left:
+			increment.x = widget.position.x + padding[3]
+			for child := widget.node.first_child; child != nil; child = child.node.next {
+				child.position.x = increment.x
+				increment.x += child.size.x + layout.child_gap
+			}
+		case .Right:
+			increment.x = widget.position.x + widget.size.x + layout.child_gap - padding[1]
+			for child := widget.node.last_child; child != nil; child = child.node.prev {
+				increment.x -= child.size.x + layout.child_gap
+				child.position.x = increment.x
+			}
+		case .Center:
+			increment.x = widget.position.x + widget.size.x / 2 - total_size.x / 2
+			for child := widget.node.first_child; child != nil; child = child.node.next {
+				child.position.x = increment.x
+				increment.x += child.size.x + layout.child_gap
+			}
+		}
+		switch layout.child_alignment.y {
+		case .Top:
+			increment.y = widget.position.y + padding[0]
+			for child := widget.node.first_child; child != nil; child = child.node.next {
+				child.position.y = increment.y
+			}
+		case .Bottom:
+			increment.y = widget.position.y + widget.size.y - padding[2]
+			for child := widget.node.first_child; child != nil; child = child.node.next {
+				child.position.y = increment.y - child.size.y
+			}
+		case .Center:
+			center := widget.position.y + widget.size.y / 2
+			for child := widget.node.first_child; child != nil; child = child.node.next {
+				child.position.y = center - child.size.y / 2
+			}
+		}
+	case .Y:
+		switch layout.child_alignment.x {
+		case .Left:
+			increment.x = widget.position.x + padding[3]
+			for child := widget.node.first_child; child != nil; child = child.node.next {
+				child.position.x = increment.x
+			}
+		case .Right:
+			increment.x = widget.position.x + widget.size.x - padding[1]
+			for child := widget.node.first_child; child != nil; child = child.node.next {
+				child.position.x = increment.x - child.size.x
+			}
+		case .Center:
+			center := widget.position.x + widget.size.x / 2
+			for child := widget.node.first_child; child != nil; child = child.node.next {
+				child.position.x = center - child.size.x / 2
+			}
+		}
+		switch layout.child_alignment.y {
+		case .Center:
+			increment.y = widget.position.y + widget.size.y / 2 - total_size.y / 2
+			for child := widget.node.first_child; child != nil; child = child.node.next {
+				child.position.y = increment.y
+				increment.y += child.size.y + layout.child_gap
+			}
+		case .Top:
+			increment.y = widget.position.y + padding[0]
+			for child := widget.node.first_child; child != nil; child = child.node.next {
+				child.position.y = increment.y
+				increment.y += child.size.y + layout.child_gap
+			}
+		case .Bottom:
+			increment.y = widget.position.y + widget.size.y - padding[2]
+			for child := widget.node.last_child; child != nil; child = child.node.prev {
+				increment.y -= child.size.y + layout.child_gap
+				child.position.y = increment.y
+			}
+		}
+	}
+}
+
+_emit_border_command :: proc() {}
+_emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, text: Text) {
+	widget.position.x += widget.style.padding[3]
+	widget.position.y += widget.style.padding[0]
+	command_text: Command_Text
+	command_text.position = widget.position
+	command_text.style = text.style
+	command_text.end = text._end
+	command_text.start = text._start
+	append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_text})
+}
+
+_emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget) {
+	command_rect: Command_Rect
+	command_rect.size = widget.size
+	command_rect.position = widget.position
+	command_rect.color = widget.style.color
+	_clamp_border_radius(widget)
+	if style, ok := widget.style.border.(Border_Style); ok {
+		command_rect.border_radius = style.radius
+	}
+	append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_rect})
+}
+_emit_clip_end_command :: proc(ctx: ^Core_Context, widget: ^Widget) {
+	append(&ctx.render_commands, Render_Command{type = Command_Clip_End{}, z_index = widget._z_index + len(widget.primitives)})
+}
+
+_emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget) {
+	append(
+		&ctx.render_commands,
+		Render_Command{type = Command_Clip_Start{clip_size = widget.size, clip_position = widget.position}, z_index = widget._z_index},
+	)
+}
+
+_emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget) {
+	if len(widget.primitives) > 0 {
+		_emit_clip_start_command(ctx, widget)
+
+		defer widget._z_index += len(widget.primitives) + 1
+		defer _emit_clip_end_command(ctx, widget)
+
+		for &p, i in widget.primitives {
+			switch &v in p {
+			case Primitive_Rect:
+				v.position += widget.position
+			case Primitive_Ellipse:
+				v.position += widget.position
+			case Primitive_Line:
+				v.end_position += widget.position
+				v.start_position += widget.position
+			case Primitive_Points:
+				for &point in v.points {
+					point += widget.position
+				}
+			}
+			append(&ctx.render_commands, Render_Command{z_index = widget._z_index + i + 1, type = p})
+		}
+	}
+}
+
+_clamp_border_radius :: proc(widget: ^Widget) {
+	if border, ok := &widget.style.border.(Border_Style); ok {
+		for &r in border.radius {
+			r = clamp(0, min(widget.size.x, widget.size.y) / 2, r)
+		}
+	}
 }
