@@ -1,5 +1,6 @@
 package ui_core
 
+import "core:fmt"
 import "core:sort"
 
 Axis :: enum u8 {
@@ -114,6 +115,7 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 
 	if parent == nil {return}
 
+
 	parent_layout, parent_is_layout := _get_layout(parent)
 
 	if !parent_is_layout {
@@ -130,6 +132,7 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 
 	// Apply padding adjustments and min max constraints to widgets
 	widget_layout, widget_is_layout := _get_layout(widget)
+
 	if !widget_is_layout {
 		if parent_layout.direction == axis {
 			parent._min[axis] += widget._min[axis]
@@ -164,7 +167,6 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 
 _grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget, growables: ^[dynamic]Growable) {
 	if widget.node.first_child == nil {return}
-
 	remaining: f32 = widget.size[axis] - _get_axis_padding(axis, widget.style.padding)
 
 	remaining -= layout.child_gap * f32(widget.node.total_children - 1)
@@ -173,7 +175,7 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Wi
 		switch type in child_widget.type {
 		case Floating:
 			if type.layout.sizing[axis].kind == .Grow {
-				child_widget.size[axis] = child_widget.node.parent.size[axis]
+				child_widget.size[axis] = widget.size[axis]
 			}
 			if type.layout.sizing[axis].kind == .Percent {
 				child_widget.size[axis] = max(child_widget._min[axis], widget.size[axis] * type.layout.sizing[axis].min)
@@ -199,6 +201,7 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Wi
 		}
 		remaining -= child_widget.size[axis]
 	}
+
 
 	if len(growables) == 0 {return}
 
@@ -307,7 +310,6 @@ _grow_children_across_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget) 
 
 _layout_all_sizing_pass :: proc(ctx: ^Core_Context) {
 	#reverse for w in ctx.stacks.post_r {
-
 		layout: Layout = _get_layout(w) or_continue
 
 		for sizing, i in layout.sizing {
@@ -445,16 +447,16 @@ _layout_all_sizing_pass :: proc(ctx: ^Core_Context) {
 }
 
 _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
-	for widget, i in ctx.stacks.pre {
+	z_index_offset := 0
+
+	for widget in ctx.stacks.pre {
+
 		defer {
 			if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border) && ctx.active_widget_id == 0 {
 				ctx.hot_widget_id = widget.node.id
 			}
 		}
 
-		if widget.node.parent != nil {
-			widget._z_index = widget.node.parent._z_index + 1 + i
-		}
 
 		switch type in widget.type {
 		case Floating:
@@ -465,16 +467,22 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 		case Text:
 			_expand_widget(widget)
 			_offset_widget(widget)
-			_emit_rect_command(ctx, widget)
-			_emit_text_command(ctx, widget, type)
+			_emit_rect_command(ctx, widget, widget._z_index + z_index_offset)
+			z_index_offset += 1
+			_emit_text_command(ctx, widget, type, widget._z_index + z_index_offset)
+			z_index_offset += 1
 			continue // Text never has children hence skip. This loops goes from top to bottom into the tree. Any text will have its position resolved always 
 		}
 
 		_expand_widget(widget)
 		_offset_widget(widget)
-		_emit_rect_command(ctx, widget)
-		_emit_widget_primitive_commands(ctx, widget)
+		_emit_rect_command(ctx, widget, widget._z_index + z_index_offset)
+		z_index_offset += 1
+		z_index_offset += len(widget.primitives)
+		_emit_widget_primitive_commands(ctx, widget, widget._z_index + z_index_offset - len(widget.primitives))
+		z_index_offset += 1
 	}
+
 	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
 }
 
@@ -675,7 +683,8 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 }
 
 _emit_border_command :: proc() {}
-_emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, text: Text) {
+
+_emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, text: Text, z_index: int) {
 	widget.position.x += widget.style.padding[3]
 	widget.position.y += widget.style.padding[0]
 	command_text: Command_Text
@@ -683,10 +692,10 @@ _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, text: Text) {
 	command_text.style = text.style
 	command_text.end = text._end
 	command_text.start = text._start
-	append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_text})
+	append(&ctx.render_commands, Render_Command{z_index = z_index, type = command_text})
 }
 
-_emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget) {
+_emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
 	command_rect: Command_Rect
 	command_rect.size = widget.size
 	command_rect.position = widget.position
@@ -695,25 +704,23 @@ _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	if style, ok := widget.style.border.(Border_Style); ok {
 		command_rect.border_radius = style.radius
 	}
-	append(&ctx.render_commands, Render_Command{z_index = widget._z_index, type = command_rect})
-}
-_emit_clip_end_command :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	append(&ctx.render_commands, Render_Command{type = Command_Clip_End{}, z_index = widget._z_index + len(widget.primitives)})
+	append(&ctx.render_commands, Render_Command{z_index = z_index, type = command_rect})
 }
 
-_emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget) {
+_emit_clip_end_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
+	append(&ctx.render_commands, Render_Command{type = Command_Clip_End{}, z_index = z_index})
+}
+
+_emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
 	append(
 		&ctx.render_commands,
-		Render_Command{type = Command_Clip_Start{clip_size = widget.size, clip_position = widget.position}, z_index = widget._z_index},
+		Render_Command{type = Command_Clip_Start{clip_size = widget.size, clip_position = widget.position}, z_index = z_index},
 	)
 }
 
-_emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget) {
+_emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
 	if len(widget.primitives) > 0 {
-		_emit_clip_start_command(ctx, widget)
-
-		defer widget._z_index += len(widget.primitives) + 1
-		defer _emit_clip_end_command(ctx, widget)
+		_emit_clip_start_command(ctx, widget, z_index)
 
 		for &p, i in widget.primitives {
 			switch &v in p {
@@ -729,15 +736,9 @@ _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget) {
 					point += widget.position
 				}
 			}
-			append(&ctx.render_commands, Render_Command{z_index = widget._z_index + i + 1, type = p})
+			append(&ctx.render_commands, Render_Command{z_index = z_index + i + 1, type = p})
 		}
-	}
-}
 
-_clamp_border_radius :: proc(widget: ^Widget) {
-	if border, ok := &widget.style.border.(Border_Style); ok {
-		for &r in border.radius {
-			r = clamp(0, min(widget.size.x, widget.size.y) / 2, r)
-		}
+		_emit_clip_end_command(ctx, widget, z_index + len(widget.primitives) + 1)
 	}
 }
