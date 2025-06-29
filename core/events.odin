@@ -103,9 +103,13 @@ _resolve_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event: Widget_E
 	return
 }
 
-_is_point_in_rect :: proc(rect_pos, rect_size, point: Vec2f32, border_radius: Vec4f32) -> bool {
+_is_point_in_rect :: proc(rect_pos, rect_size, point: Vec2f32, border_style: Maybe(Border_Style)) -> bool {
 
-	border_radius := border_radius.zywx
+	border_radius: Vec4f32
+
+	if style, ok := border_style.(Border_Style); ok {
+		border_radius = style.radius.zywx
+	}
 
 	half_size := rect_size / 2
 	rel_pos := point - (rect_pos + half_size)

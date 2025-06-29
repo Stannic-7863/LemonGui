@@ -36,7 +36,8 @@ render_frame()
 TODOS 
 
 API:
-	Errors 
+	Errors
+	Remove the passing of widget pointers. Move to index perhaps? 
 
 LAYOUT: 
 	Support Wrap_Children element perhaps. Wrap_Children will overwrite any layout config of children to confine them into a min max contraint ??? 
@@ -85,6 +86,7 @@ Core_Context :: struct {
 	delta_time:                  f32,
 }
 
+// Data that persists each frame 
 Persistant_Data :: struct {
 	style:                Style,
 	size, position, _min: Vec2f32,
@@ -151,6 +153,7 @@ Command_Primitive :: union {
 }
 
 // TODO: Right Primitives are clipped in the parent widget. Need to provide functionality to override and custom z index  
+
 Primitive_Ellipse :: struct {
 	position: Vec2f32,
 	size:     Vec2f32, // major, minor axis. a, b = size.x, size.y if size.x > size.y else size.y, size.x 
@@ -219,7 +222,7 @@ Layout :: struct {
 	sizing:          [Axis]Sizing,
 	child_gap:       f32,
 	child_alignment: Child_Alignment,
-	direction:       Layout_Direction,
+	direction:       Axis,
 }
 
 Text :: struct {
@@ -243,7 +246,7 @@ Widget :: struct {
 	primitives:     []Command_Primitive,
 	_min:           Vec2f32,
 	size, position: Vec2f32,
-	_z_index:       int,
+	z_index:        int,
 	events:         Widget_Events,
 }
 
@@ -281,9 +284,12 @@ push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
 }
 
 pop_parent :: proc(ctx: ^Core_Context) {
-	ctx.current_parent = ctx.current_parent.node.parent
+	if ctx.current_parent.node.parent != nil {
+		ctx.current_parent = ctx.current_parent.node.parent
+	}
 }
 
+// Clear up context for new frame
 begin_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.widgets)
 	clear(&ctx.text_lines)
@@ -291,10 +297,11 @@ begin_ui :: proc(ctx: ^Core_Context) {
 	ctx.current_parent = nil
 }
 
+// Layout Pass + Positioning + Render commands
 end_ui :: proc(ctx: ^Core_Context) {
 	_build_stacks(ctx)
-	_layout_sizing_pass(ctx)
-	_layout_positioning_pass(ctx)
+	_layout_all_sizing_pass(ctx)
+	_layout_all_positioning_pass(ctx)
 
 	clear_map(&ctx.persistant_data)
 
@@ -344,12 +351,12 @@ create_widget :: proc(
 	w.node.parent = ctx.current_parent
 	w.node.index = len(ctx.widgets) - 1
 
-	if _, ok := w.type.(Floating); ok {
-		w._z_index = cap(ctx.widgets)
-	}
-
 	_add_widget(ctx, w)
 	_generate_widget_hash(w)
+
+	if _, ok := w.type.(Floating); ok {
+		w.z_index += max(int) / 2
+	}
 
 	if !_retrieve_persistant_data(ctx.persistant_data, w) {
 		w.style = style
@@ -358,6 +365,7 @@ create_widget :: proc(
 	return w
 }
 
+// Adds a primitive shape to current parent set in Core_Context
 create_primitive :: proc(ctx: ^Core_Context, primitive: Command_Primitive) {
 	if ctx.current_parent != nil {
 		append(&ctx.primitives, primitive)
@@ -379,6 +387,7 @@ _add_widget :: proc(ctx: ^Core_Context, widget: ^Widget) {
 			ctx.current_parent.node.last_child.node.next = widget
 		}
 		ctx.current_parent.node.last_child = widget
+		widget.z_index = ctx.current_parent.z_index
 	}
 }
 

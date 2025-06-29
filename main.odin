@@ -13,11 +13,12 @@ import cu "core"
 
 WHITE :: cu.Color{255, 255, 255, 255}
 BLACK :: cu.Color{0, 0, 0, 255}
-GREEN :: cu.Color{0, 255, 0, 255}
-BLUE :: cu.Color{0, 0, 255, 255}
-RED :: cu.Color{255, 0, 0, 255}
-CHILD_BACKGROUND :: [4]u8{42, 42, 64, 255} // #2A2A40
-DEFAULT_BACKGROUND :: [4]u8{30, 30, 46, 255} // #1E1E2E
+RED :: cu.Color{255, 130, 100, 255}
+ORANGE :: cu.Color{255, 180, 130, 255}
+GREEN :: cu.Color{230, 255, 170, 255}
+BLUE :: cu.Color{170, 230, 255, 255}
+CHILD_BACKGROUND :: [4]u8{52, 52, 84, 255} // #2A2A40
+DEFAULT_BACKGROUND :: [4]u8{20, 20, 36, 255} // #1E1E2E
 HOVER_COLOR :: [4]u8{58, 58, 90, 255} // #3A3A5A
 PRESS_COLOR :: [4]u8{136, 221, 255, 255} // #88DDFF
 LONG_PRESS_COLOR :: [4]u8{255, 136, 170, 255} // #FF88AA
@@ -38,7 +39,7 @@ print_types :: proc(type: typeid, depth: int = 1, name: string = "") {
 main :: proc() {
 	for args in runtime.args__ {
 		if args == "sizes" {
-
+			print_types(cu.Command_Border)
 		}
 		if args == "app" {
 			run_app()
@@ -50,24 +51,21 @@ slider :: proc(ctx: ^cu.Core_Context, value: ^f32, min, max: f32) {
 
 	main_container := cu.create_widget(
 		ctx,
-		cu.Layout {
-			sizing = cu.sizing(cu.grow(100), cu.fixed(100)),
-			padding = {0, 15, 0, 15},
-			child_gap = 5,
-			direction = .X,
-			child_alignment = {.Center, .Center},
-		},
-		style = cu.Style{color = {200, 200, 200, 255}, border_radius = 5},
+		cu.Layout{sizing = cu.sizing(cu.grow(100), cu.fixed(100)), child_gap = 5, direction = .X, child_alignment = {.Center, .Center}},
+		style = cu.Style{color = {200, 200, 200, 255}, border = cu.Border_Style{radius = 5}, padding = 16},
 	)
 
 	cu.push_parent(ctx, main_container)
 
-	cu.create_widget(ctx, cu.Text{style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 15}, text = fmt.tprint(min)})
+	cu.create_widget(
+		ctx,
+		cu.Text{style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 15, color = {255, 255, 255, 255}}, text = fmt.tprint(min)},
+	)
 
 	railing := cu.create_widget(
 		ctx,
-		cu.Layout{sizing = cu.sizing(cu.grow(), cu.fixed(5)), direction = .Y, child_alignment = {.Center, .Center}},
-		style = cu.Style{color = {128, 128, 128, 255}, border_radius = 50},
+		cu.Layout{sizing = cu.sizing(cu.grow(), cu.fixed(10)), direction = .Y, child_alignment = {.Center, .Center}},
+		style = cu.Style{color = {128, 128, 128, 255}, border = cu.Border_Style{radius = 5}},
 	)
 
 	cu.push_parent(ctx, railing)
@@ -77,17 +75,15 @@ slider :: proc(ctx: ^cu.Core_Context, value: ^f32, min, max: f32) {
 	knob := cu.create_widget(
 		ctx,
 		cu.Layout{sizing = cu.sizing(cu.fixed(20), cu.fixed(20))},
-		offset = {cu.Offset{value = knob_offset, kind = .Percent}, {}},
-		style = cu.Style{color = {0, 0, 0, 255}, border_radius = 50},
+		offset = {cu.Offset{value = knob_offset, kind = .Percent}, cu.offset_percent_self(0.25)},
+		style = cu.Style{color = {0, 0, 0, 255}, border = cu.Border_Style{radius = 5}},
 	)
 
 	if .Left_Pressed in knob.events {
 		cu.animate(ctx, knob.node.index, knob.style.color, cu.Color{0, 0, 255, 255}, 1, "style", "color")
-		cu.animate(ctx, knob.node.index, knob.style.border_radius, cu.Vec4f32{10, 0, 10, 0}, 1, "style", "border_radius")
 	}
 	if .Left_Clicked in knob.events {
 		cu.animate(ctx, knob.node.index, knob.style.color, cu.Color{0, 0, 0, 255}, 1, "style", "color")
-		cu.animate(ctx, knob.node.index, knob.style.border_radius, cu.Vec4f32{100, 100, 100, 100}, 1, "style", "border_radius")
 	}
 
 	if .Left_Down in knob.events {
@@ -98,13 +94,20 @@ slider :: proc(ctx: ^cu.Core_Context, value: ^f32, min, max: f32) {
 
 	t := cu.create_widget(
 		ctx,
-		cu.Text{text = fmt.tprint(value^), style = {font_id = 0, letter_spacing = 1, font_size = 10, line_spacing = 0}},
+		cu.Text {
+			text = fmt.tprint(value^),
+			style = {font_id = 0, letter_spacing = 1, font_size = 10, line_spacing = 0, color = {255, 255, 255, 255}},
+		},
 		{},
-		{cu.Offset{value = knob_offset, kind = .Percent}, {}},
+		{cu.Offset{value = knob_offset, kind = .Percent}, cu.offset_absolute(5)},
 	)
+
 	cu.pop_parent(ctx)
 
-	cu.create_widget(ctx, cu.Text{style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 15}, text = fmt.tprint(max)})
+	cu.create_widget(
+		ctx,
+		cu.Text{style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 0, color = {255, 255, 255, 255}}, text = fmt.tprint(max)},
+	)
 
 	cu.pop_parent(ctx)
 }
@@ -113,21 +116,27 @@ toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool) {
 
 	main_container := cu.create_widget(
 		ctx,
-		cu.Layout{sizing = cu.sizing(cu.grow(), cu.fixed(100)), padding = 10, child_gap = 10, child_alignment = {.Center, .Center}},
-		style = cu.Style{color = {200, 200, 200, 255}, border_radius = 5},
+		cu.Layout{sizing = cu.sizing(cu.grow(), cu.fixed(100)), child_gap = 10, child_alignment = {.Center, .Center}},
+		style = cu.Style{color = {200, 200, 200, 255}},
 	)
 	cu.push_parent(ctx, main_container)
-	color: cu.Color
-	if toggle^ {
-		color = {100, 255, 200, 255}
-	} else {
-		color = {255, 200, 100, 255}
-	}
-	e := cu.create_widget(ctx, cu.Layout{sizing = cu.sizing(cu.fixed(20), cu.fixed(20))}, style = cu.Style{color = color, border_radius = 4})
+	e := cu.create_widget(ctx, cu.Layout{sizing = cu.sizing(cu.fixed(20), cu.fixed(20))}, style = cu.Style{color = RED})
 	if .Left_Clicked in e.events {
 		toggle^ = !(toggle^)
 	}
-	cu.create_widget(ctx, cu.Text{text = label, style = cu.Text_Style{font_id = 0, font_size = 20, line_spacing = 20, letter_spacing = 1}})
+	if toggle^ && .Left_Clicked in e.events {
+		cu.animate(ctx, e.node.index, e.style.color, BLUE, 1, "style", "color")
+	} else if .Left_Clicked in e.events {
+		cu.animate(ctx, e.node.index, e.style.color, RED, 1, "style", "color")
+	}
+
+	cu.create_widget(
+		ctx,
+		cu.Text {
+			text = label,
+			style = cu.Text_Style{font_id = 0, font_size = 20, line_spacing = 0, letter_spacing = 1, color = {255, 255, 255, 255}},
+		},
+	)
 	cu.pop_parent(ctx)
 
 }
@@ -135,15 +144,23 @@ toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool) {
 button :: proc(ctx: ^cu.Core_Context, label: string) -> cu.Widget_Events {
 	main_container := cu.create_widget(
 		ctx,
-		cu.Layout{sizing = cu.sizing(cu.grow(), cu.fixed(100)), padding = 10, child_gap = 10, child_alignment = {.Center, .Center}},
-		style = cu.Style{color = {200, 200, 200, 255}, border_radius = 5},
+		cu.Layout{sizing = cu.sizing(cu.grow(), cu.fixed(100)), child_gap = 10, child_alignment = {.Center, .Center}},
+		style = cu.Style{color = {200, 200, 200, 255}},
 	)
 	cu.push_parent(ctx, main_container)
-	cu.create_widget(ctx, cu.Text{text = label, style = cu.Text_Style{font_id = 0, font_size = 20, line_spacing = 20, letter_spacing = 1}})
+	cu.create_widget(
+		ctx,
+		cu.Text {
+			text = label,
+			style = cu.Text_Style{font_id = 0, font_size = 20, line_spacing = 0, letter_spacing = 1, color = {255, 255, 255, 255}},
+		},
+	)
 	cu.pop_parent(ctx)
 	return main_container.events
 }
+
 import "core:mem"
+
 run_app :: proc() {
 	when ODIN_DEBUG {
 		track: mem.Tracking_Allocator
@@ -184,7 +201,7 @@ run_app :: proc() {
 
 	x_align: cu.Child_Alignment_X
 	y_align: cu.Child_Alignment_Y
-	direc: cu.Layout_Direction
+	direc: cu.Axis = .Y
 
 	slider_val: f32 = 10
 	toggle: bool
@@ -209,130 +226,174 @@ run_app :: proc() {
 		cu.begin_ui(&ctx)
 
 		style := cu.Style {
-			color         = DEFAULT_BACKGROUND,
-			border_radius = {20, 10, 20, 10},
+			color   = CHILD_BACKGROUND,
+			padding = 0,
 		}
 
 		root := cu.create_widget(
 			&ctx,
-			cu.Layout{sizing = cu.sizing(cu.fixed(ctx.window_width), cu.fixed(ctx.window_height)), direction = .Y, child_gap = 16, padding = 16},
-			style = {},
+			cu.Layout{sizing = cu.sizing(cu.fixed(ctx.window_width), cu.fixed(ctx.window_height)), direction = .X, child_gap = 10},
+			style = {padding = 16, color = DEFAULT_BACKGROUND},
 		)
 		cu.push_parent(&ctx, root)
 
-		slider(&ctx, &slider_val, 5, 15)
+		side_bar := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.percent(0.3), cu.grow()), child_gap = 16, direction = .Y}, style = style)
+		if cu.push_parent(&ctx, side_bar) {
+			defer cu.pop_parent(&ctx)
+			slider(&ctx, &slider_val, 5, 15)
 
-		toggle_button(&ctx, "Toggle me Uwu", &toggle)
+			toggle_button(&ctx, "Toggle me Uwu", &toggle)
 
-		if .Hovered in button(&ctx, label) {
-			label = "Hovered"
-		} else {
-			label = "Not Hovered"
+			if .Hovered in button(&ctx, label) {
+				label = "Hovered"
+			} else {
+				label = "Not Hovered"
+			}
 		}
 
-		// w_1 := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, style = style)
-		// w_2 := cu.create_widget(
-		// 	&ctx,
-		// 	cu.Layout{sizing = cu.sizing(cu.grow(), cu.grow()), direction = .X, child_alignment = {x = .Left}, child_gap = 16, padding = 16},
-		// 	style = style,
-		// )
-		// resolve_styling(w_2)
-		//
-		// if cu.push_parent(&ctx, w_2) {
-		// 	defer cu.pop_parent(&ctx)
-		// 	style.color = CHILD_BACKGROUND
-		// 	w_21 := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, style = style, events_mask = ~{})
-		// 	w_22 := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, style = style)
-		// 	w_23 := cu.create_widget(
-		// 		&ctx,
-		// 		cu.Floating {
-		// 			parent = .Center_Center,
-		// 			element = .Center_Center,
-		// 			attachment_to = .Parent,
-		// 			layout = cu.Layout{sizing = cu.sizing(cu.percent(0.5), cu.percent(0.5)), child_gap = 16, padding = 16},
-		// 		},
-		// 		style = style,
-		// 	)
-		//
-		// 	if cu.push_parent(&ctx, w_23) {
-		// 		defer cu.pop_parent(&ctx)
-		// 		style.color = DEFAULT_BACKGROUND
-		// 		cu.create_widget(
-		// 			&ctx,
-		// 			cu.Text{text = "Oi, I am A Floating Widget!", style = {font_id = 0, font_size = 20, line_spacing = 20, letter_spacing = 1}},
-		// 		)
-		// 	}
-		//
-		// }
-		// style.color = DEFAULT_BACKGROUND
-		//
-		// if rl.IsKeyPressed(.UP) {
-		// 	y_align = .Top
-		// }
-		// if rl.IsKeyPressed(.DOWN) {
-		// 	y_align = .Bottom
-		// }
-		// if rl.IsKeyPressed(.LEFT) {
-		// 	x_align = .Left
-		// }
-		// if rl.IsKeyPressed(.RIGHT) {
-		// 	x_align = .Right
-		// }
-		// if rl.IsKeyPressed(.KP_1) {
-		// 	x_align = .Center
-		// }
-		// if rl.IsKeyPressed(.KP_2) {
-		// 	y_align = .Center
-		// }
-		//
-		// if rl.IsKeyPressed(.R) {
-		// 	direc = .X
-		// }
-		// if rl.IsKeyPressed(.C) {
-		// 	direc = .Y
-		// }
-		//
-		// w_3 := cu.create_widget(
-		// 	&ctx,
-		// 	cu.Layout {
-		// 		sizing = cu.sizing(cu.grow(), cu.grow()),
-		// 		direction = direc,
-		// 		child_alignment = {x = x_align, y = y_align},
-		// 		child_gap = 16,
-		// 		padding = 16,
-		// 	},
-		// 	style = style,
-		// )
-		// {
-		// 	cu.push_parent(&ctx, w_3)
-		// 	defer cu.pop_parent(&ctx)
-		// 	style.color = CHILD_BACKGROUND
-		// 	cu.create_widget(
-		// 		&ctx,
-		// 		cu.Text {
-		// 			text = "A quick brown fox jumps over the lazy dog",
-		// 			style = {font_id = 0, letter_spacing = 1, font_size = 30, line_spacing = 30},
-		// 		},
-		// 	)
-		// 	cu.create_widget(
-		// 		&ctx,
-		// 		cu.Text {
-		// 			text = "Why Does A quick brown Jumps over the lazy Dog?",
-		// 			style = {font_id = 0, letter_spacing = 5, font_size = 15, line_spacing = 15},
-		// 		},
-		// 	)
-		// 	cu.create_widget(
-		// 		&ctx,
-		// 		cu.Text {
-		// 			text = "When Does A quick brown Jumps over the lazy Dog?",
-		// 			style = {font_id = 0, letter_spacing = 10, font_size = 10, line_spacing = 10},
-		// 		},
-		// 	)
-		// }
-		//
-		// style.color = DEFAULT_BACKGROUND
-		// w_4 := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(50, 50), cu.grow(50, 50))}, style = style)
-		//
+		w_2 := cu.create_widget(
+			&ctx,
+			cu.Layout{sizing = cu.sizing(cu.grow(), cu.grow()), direction = .X, child_alignment = {x = .Left}, child_gap = 16},
+			style = style,
+		)
+		style.padding = 16
+		if cu.push_parent(&ctx, w_2) {
+			defer cu.pop_parent(&ctx)
+			style.color = DEFAULT_BACKGROUND
+			cu.create_primitive(&ctx, cu.Primitive_Ellipse{size = {50, 50}, position = {200, 200}, color = GREEN})
+			cu.create_primitive(&ctx, cu.Primitive_Rect{size = {100, 100}, position = {50, 50}, color = BLUE})
+			cu.create_primitive(&ctx, cu.Primitive_Line{start_position = {100, 100}, end_position = {200, 200}, thickness = 5, color = RED})
+			style.padding = {0, 16, 0, 16}
+			w_23 := cu.create_widget(
+				&ctx,
+				cu.Floating {
+					parent = .Right_Center,
+					element = .Right_Center,
+					attachment_to = .Parent,
+					layout = cu.Layout{sizing = cu.sizing(cu.percent(0.5), cu.percent(0.5)), child_gap = 16},
+				},
+				style = style,
+			)
+			style.padding = 16
+			cu.create_widget(
+				&ctx,
+				cu.Text{text = "Some primitive Shapes", style = {font_id = 0, font_size = 20, line_spacing = 0, letter_spacing = 1, color = WHITE}},
+				style = {color = ORANGE, padding = 16},
+			)
+			if cu.push_parent(&ctx, w_23) {
+				defer cu.pop_parent(&ctx)
+				style.color = CHILD_BACKGROUND
+				cu.create_widget(
+					&ctx,
+					cu.Text {
+						text = "Oi, I am A Floating Widget!",
+						style = {font_id = 0, font_size = 20, line_spacing = 0, letter_spacing = 1, color = WHITE},
+					},
+					style = {color = ORANGE, padding = 16},
+					offset = {{}, cu.offset_percent_self(-0.5)},
+				)
+			}
+		}
+		style.color = CHILD_BACKGROUND
+
+		if rl.IsKeyPressed(.UP) {
+			y_align = .Top
+		}
+		if rl.IsKeyPressed(.DOWN) {
+			y_align = .Bottom
+		}
+		if rl.IsKeyPressed(.LEFT) {
+			x_align = .Left
+		}
+		if rl.IsKeyPressed(.RIGHT) {
+			x_align = .Right
+		}
+		if rl.IsKeyPressed(.KP_1) {
+			x_align = .Center
+		}
+		if rl.IsKeyPressed(.KP_2) {
+			y_align = .Center
+		}
+
+		if rl.IsKeyPressed(.R) {
+			direc = .X
+		}
+		if rl.IsKeyPressed(.C) {
+			direc = .Y
+		}
+
+		w_3 := cu.create_widget(
+			&ctx,
+			cu.Layout{sizing = cu.sizing(cu.grow(), cu.grow()), direction = direc, child_alignment = {x = x_align, y = y_align}, child_gap = 16},
+			style = style,
+		)
+		{
+			cu.push_parent(&ctx, w_3)
+			defer cu.pop_parent(&ctx)
+			style.color = DEFAULT_BACKGROUND
+			c := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(), cu.fit()), child_gap = 16}, style = {color = RED, padding = 16})
+			cu.push_parent(&ctx, c)
+			cu.create_widget(
+				&ctx,
+				cu.Text {
+					text = "A quick brown fox jumps over the lazy dog",
+					style = {font_id = 0, letter_spacing = 1, font_size = 30, line_spacing = 0, color = ORANGE},
+				},
+				style = {color = DEFAULT_BACKGROUND, padding = 16},
+			)
+			cu.create_widget(
+				&ctx,
+				cu.Text {
+					text = "Why Does A quick brown Jumps over the lazy Dog?",
+					style = {font_id = 0, letter_spacing = 5, font_size = 15, line_spacing = 5, color = BLUE},
+				},
+				style = {color = DEFAULT_BACKGROUND, padding = 16},
+			)
+			cu.create_widget(
+				&ctx,
+				cu.Text {
+					text = "When Does A quick brown Jumps over the lazy Dog?",
+					style = {font_id = 0, letter_spacing = 10, font_size = 10, line_spacing = 0, color = GREEN},
+				},
+				style = {color = DEFAULT_BACKGROUND, padding = 16},
+			)
+			cu.pop_parent(&ctx)
+			e := cu.create_widget(
+				&ctx,
+				cu.Layout{sizing = cu.sizing(cu.grow(), cu.grow()), child_gap = 16, direction = .Y, child_alignment = {.Center, .Center}},
+				style = {color = DEFAULT_BACKGROUND, padding = {16, 0, 16, 0}},
+			)
+			cu.push_parent(&ctx, e)
+			cu.create_widget(
+				&ctx,
+				cu.Text{text = "Text Paddings", style = {font_id = 0, line_spacing = 0, font_size = 20, color = GREEN, letter_spacing = 1}},
+				style = {color = CHILD_BACKGROUND, padding = 16},
+			)
+			cu.create_widget(
+				&ctx,
+				cu.Text{text = "Left padded", style = {font_id = 0, line_spacing = 0, font_size = 20, color = GREEN, letter_spacing = 1}},
+				style = {color = CHILD_BACKGROUND, padding = {0, 0, 0, 16}},
+			)
+			cu.create_widget(
+				&ctx,
+				cu.Text{text = "Right padded", style = {font_id = 0, line_spacing = 0, font_size = 20, color = GREEN, letter_spacing = 1}},
+				style = {color = CHILD_BACKGROUND, padding = {0, 16, 0, 0}},
+			)
+			cu.create_widget(
+				&ctx,
+				cu.Text{text = "Top padded", style = {font_id = 0, line_spacing = 0, font_size = 20, color = GREEN, letter_spacing = 1}},
+				style = {color = CHILD_BACKGROUND, padding = {16, 0, 0, 0}},
+			)
+			cu.create_widget(
+				&ctx,
+				cu.Text{text = "Bottom padded", style = {font_id = 0, line_spacing = 0, font_size = 20, color = GREEN, letter_spacing = 1}},
+				style = {color = CHILD_BACKGROUND, padding = {0, 0, 16, 0}},
+			)
+			cu.pop_parent(&ctx)
+		}
+		style.color = CHILD_BACKGROUND
+		w_4 := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(50, 50), cu.grow(50, 50))}, style = style)
+
 		cu.end_ui(&ctx)
 
 		rl.BeginDrawing()
@@ -377,19 +438,33 @@ render :: proc(ctx: cu.Core_Context, texture: rl.Texture, shader: rl.Shader) {
 
 			for l in ctx.text_lines[v.start:v.end] {
 				// rl.DrawRectangleV({v.position.x, initial_y}, rl.MeasureTextEx(rl.GetFontDefault(), fmt.ctprintf(l), v.font_size, v.spacing), rl.GRAY)
-				rl.DrawTextEx(rl.GetFontDefault(), fmt.ctprint(l), {v.position.x, initial_y}, v.font_size, v.spacing, cast(rl.Color)v.color)
-				initial_y += v.line_height
+				rl.DrawTextEx(
+					rl.GetFontDefault(),
+					fmt.ctprint(l),
+					{v.position.x, initial_y},
+					v.style.font_size,
+					v.style.letter_spacing,
+					cast(rl.Color)v.style.color,
+				)
+				initial_y += v.style.line_spacing + v.style.font_size
 			}
-
+		case cu.Command_Clip_End:
+			rl.EndScissorMode()
+		case cu.Command_Clip_Start:
+			rl.BeginScissorMode(cast(i32)v.clip_position.x, cast(i32)v.clip_position.y, cast(i32)v.clip_size.x, cast(i32)v.clip_size.y)
+		case cu.Command_Primitive:
+			switch p in v {
+			case cu.Primitive_Line:
+				rl.DrawLineEx(p.start_position, p.end_position, p.thickness, cast(rl.Color)p.color)
+			case cu.Primitive_Rect:
+				rl.DrawRectangleV(p.position, p.size, cast(rl.Color)p.color)
+			case cu.Primitive_Points:
+			case cu.Primitive_Ellipse:
+				rl.DrawEllipse(cast(i32)p.position.x, cast(i32)p.position.y, p.size.x, p.size.y, cast(rl.Color)p.color)
+			}
+		case cu.Command_Border:
 		}
 	}
-
-	// for cmd in ctx.render_commands {
-	// 	switch v in cmd.type {
-	// 	case Command_Rect:
-	// 		rl.DrawRectangleV(v.position, v.size, cast(rl.cu.Color)v.color)
-	// 	}
-	// }
 }
 
 measure_text :: proc(text: string, config: cu.Text_Style) -> f32 {

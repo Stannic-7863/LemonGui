@@ -9,10 +9,10 @@ Axis :: enum u8 {
 }
 
 Layout_Kind :: enum u8 {
-	Fit,
-	Grow,
-	Fixed,
-	Percent,
+	Fit, // Fit to content size [Default]
+	Grow, // Grow to take up all space inside parent 
+	Fixed, // A fixed size provided in pixel value 
+	Percent, // Percentage of parent size, provided in range 0.0-1.0
 }
 
 Child_Alignment_X :: enum u8 {
@@ -27,6 +27,7 @@ Child_Alignment_Y :: enum u8 {
 	Bottom,
 }
 
+// Used to set position relative different parts of widget
 Anchor :: enum u8 {
 	Left_Top,
 	Left_Center,
@@ -39,6 +40,7 @@ Anchor :: enum u8 {
 	Right_Bottom,
 }
 
+// Describe where floating is attached
 Attachment_To :: enum u8 {
 	Parent,
 	None,
@@ -47,7 +49,7 @@ Attachment_To :: enum u8 {
 }
 
 Offset_Kind :: enum u8 {
-	None,
+	None, // Not affected [Default]
 	Fixed, // Set position to what was provided
 	Absolute, // Offset Relative to Parent position 
 	Percent, // percent of parent size
@@ -55,7 +57,7 @@ Offset_Kind :: enum u8 {
 }
 
 Expand_Kind :: enum u8 {
-	None,
+	None, // Not affected [Default]
 	Absolute, // exapand to provided size
 	Percent, // expand to percentage of parent size 
 	Percent_Self, // expand to percent of own size
@@ -75,7 +77,6 @@ Expand :: struct {
 	kind:  Expand_Kind,
 }
 
-// I should support anchors for this as well
 Offset :: struct {
 	value: f32,
 	kind:  Offset_Kind,
@@ -177,8 +178,7 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 
 _grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget, growables: ^[dynamic]Growable) {
 	if widget.node.first_child == nil {return}
-	remaining: f32 = widget.size[axis] - _get_axis_padding(axis, widget.style.padding)
-	remaining -= layout.child_gap * f32(widget.node.total_children - 1)
+	remaining: f32 = widget.size[axis] - _get_axis_padding(axis, widget.style.padding) - layout.child_gap * f32(widget.node.total_children - 1)
 
 	for child_widget := widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
 		switch type in child_widget.type {
@@ -475,18 +475,18 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 		case Text:
 			_expand_widget(widget)
 			_offset_widget(widget)
-			_emit_rect_command(ctx, widget, widget._z_index + z_index_offset)
+			_emit_rect_command(ctx, widget, widget.z_index + z_index_offset)
 			z_index_offset += 1
-			_emit_text_command(ctx, widget, type, widget._z_index + z_index_offset)
+			_emit_text_command(ctx, widget, type, widget.z_index + z_index_offset)
 			z_index_offset += 1
 			continue // Text never has children hence skip. This loops goes from top to bottom into the tree. Any text will have its position resolved always 
 		}
 
 		_expand_widget(widget)
 		_offset_widget(widget)
-		_emit_rect_command(ctx, widget, widget._z_index + z_index_offset)
+		_emit_rect_command(ctx, widget, widget.z_index + z_index_offset)
 		z_index_offset += 1
-		_emit_widget_primitive_commands(ctx, widget, widget._z_index + z_index_offset)
+		_emit_widget_primitive_commands(ctx, widget, widget.z_index + z_index_offset)
 		z_index_offset += len(widget.primitives)
 		z_index_offset += 1
 	}
