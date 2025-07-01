@@ -77,7 +77,6 @@ Core_Context :: struct {
 	render_commands:             [dynamic]Render_Command,
 	primitives:                  [dynamic]Command_Primitive,
 	persistant_data:             map[Id]Persistant_Data, // widgets from last frame. Used to query events. Accessed by widget.id
-	animation_hooks:             map[Id]Animation_Hook,
 	hot_widget_id:               Id, //id, widget currently under mouse  
 	active_widget_id:            Id, //id, widget currently being interacted with 
 	current_parent:              ^Widget,
@@ -122,6 +121,7 @@ Command_Border :: struct {
 	radius:    Vec4f32,
 	thickness: Vec4f32,
 	position:  Vec2f32,
+	size:      Vec2f32,
 	color:     [4]Color,
 	type:      [4]Border_Type,
 }
@@ -185,12 +185,10 @@ Style :: struct {
 }
 
 Border_Style :: struct {
-	radius:             Vec4f32,
-	thickness:          Vec4f32,
-	color:              [4]Color,
-	type:               [4]Border_Type,
-	between_child:      bool,
-	between_child_type: Border_Type,
+	radius:    Vec4f32,
+	thickness: Vec4f32,
+	color:     [4]Color,
+	type:      [4]Border_Type,
 }
 
 Text_Style :: struct {
@@ -238,9 +236,9 @@ Widget_Type :: union {
 }
 
 Widget :: struct {
+	style:          Style,
 	type:           Widget_Type,
 	node:           Node,
-	style:          Style,
 	expand:         [2]Expand,
 	offset:         [2]Offset,
 	primitives:     []Command_Primitive,
@@ -271,7 +269,6 @@ deinit_core_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.stacks.pre)
 	delete(ctx.stacks.post_r)
 	delete(ctx.text_lines)
-	delete(ctx.animation_hooks)
 	delete(ctx.primitives)
 }
 
@@ -304,8 +301,6 @@ end_ui :: proc(ctx: ^Core_Context) {
 	_layout_all_positioning_pass(ctx)
 
 	clear_map(&ctx.persistant_data)
-
-	_resolve_animation_hooks(ctx)
 
 	for &w in ctx.widgets {
 		events: Widget_Events

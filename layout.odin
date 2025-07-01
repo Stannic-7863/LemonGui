@@ -50,17 +50,17 @@ Attachment_To :: enum u8 {
 
 Offset_Kind :: enum u8 {
 	None, // Not affected [Default]
-	Fixed, // Set position to what was provided
-	Absolute, // Offset Relative to Parent position 
-	Percent, // percent of parent size
-	Percent_Self, // percent of own size
+	Fixed, // Set position to value provided in pixels
+	Absolute, // Offset position by value provided in pixel relative to parent's position 
+	Percent, // Offset position by percent of parent size
+	Percent_Self, // Offset position by percentange of own size
 }
 
 Expand_Kind :: enum u8 {
 	None, // Not affected [Default]
-	Absolute, // exapand to provided size
-	Percent, // expand to percentage of parent size 
-	Percent_Self, // expand to percent of own size
+	Absolute, // Exapand size by provided size in pixels
+	Percent, // Expand size by percentage of parent size 
+	Percent_Self, // Expand size by percentage of own size
 }
 
 // I still need to implement this : )
@@ -456,16 +456,22 @@ _layout_all_sizing_pass :: proc(ctx: ^Core_Context) {
 }
 
 _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
+	/*
+	   Z ordering : 
+	   |_ 1 
+	   |_2
+	   |_3
+	   |_4
+	   |_5
+	 */
 	z_index_offset := 0
 
 	for widget in ctx.stacks.pre {
-
 		defer {
 			if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border) && ctx.active_widget_id == 0 {
 				ctx.hot_widget_id = widget.node.id
 			}
 		}
-
 		switch type in widget.type {
 		case Floating:
 			_position_layout_floating(ctx, widget, type)
@@ -475,20 +481,17 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 		case Text:
 			_expand_widget(widget)
 			_offset_widget(widget)
-			_emit_rect_command(ctx, widget, widget.z_index + z_index_offset)
-			z_index_offset += 1
-			_emit_text_command(ctx, widget, type, widget.z_index + z_index_offset)
-			z_index_offset += 1
+			_emit_rect_command(ctx, widget, &z_index_offset)
+			_emit_widget_border_command(ctx, widget, &z_index_offset)
+			_emit_text_command(ctx, widget, type, &z_index_offset)
 			continue // Text never has children hence skip. This loops goes from top to bottom into the tree. Any text will have its position resolved always 
 		}
 
 		_expand_widget(widget)
 		_offset_widget(widget)
-		_emit_rect_command(ctx, widget, widget.z_index + z_index_offset)
-		z_index_offset += 1
-		_emit_widget_primitive_commands(ctx, widget, widget.z_index + z_index_offset)
-		z_index_offset += len(widget.primitives)
-		z_index_offset += 1
+		_emit_rect_command(ctx, widget, &z_index_offset)
+		_emit_widget_border_command(ctx, widget, &z_index_offset)
+		_emit_widget_primitive_commands(ctx, widget, &z_index_offset)
 	}
 
 	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
@@ -702,9 +705,25 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 	}
 }
 
-_emit_border_command :: proc() {}
+_emit_border_between_child_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
+}
 
-_emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, text: Text, z_index: int) {
+_emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
+	if border, ok := widget.style.border.(Border_Style); ok {
+		command_border: Command_Border
+		command_border.position = widget.position
+		command_border.size = widget.size
+		command_border.type = border.type
+		command_border.color = border.color
+		command_border.radius = border.radius
+		command_border.thickness = border.thickness
+
+		append(&ctx.render_commands, Render_Command{type = command_border, z_index = z_index^ + widget.z_index})
+		z_index^ += 1
+	}
+}
+
+_emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, text: Text, z_index: ^int) {
 	widget.position.x += widget.style.padding[3]
 	widget.position.y += widget.style.padding[0]
 	command_text: Command_Text
@@ -712,10 +731,11 @@ _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, text: Text, z_in
 	command_text.style = text.style
 	command_text.end = text._end
 	command_text.start = text._start
-	append(&ctx.render_commands, Render_Command{z_index = z_index, type = command_text})
+	append(&ctx.render_commands, Render_Command{z_index = z_index^ + widget.z_index, type = command_text})
+	z_index^ += 1
 }
 
-_emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
+_emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	command_rect: Command_Rect
 	command_rect.size = widget.size
 	command_rect.position = widget.position
@@ -724,7 +744,8 @@ _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
 	if style, ok := widget.style.border.(Border_Style); ok {
 		command_rect.border_radius = style.radius
 	}
-	append(&ctx.render_commands, Render_Command{z_index = z_index, type = command_rect})
+	append(&ctx.render_commands, Render_Command{z_index = z_index^ + widget.z_index, type = command_rect})
+	z_index^ += 1
 }
 
 _emit_clip_end_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
@@ -738,9 +759,9 @@ _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: i
 	)
 }
 
-_emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
+_emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	if len(widget.primitives) > 0 {
-		_emit_clip_start_command(ctx, widget, z_index)
+		_emit_clip_start_command(ctx, widget, z_index^ + widget.z_index)
 
 		for &p, i in widget.primitives {
 			switch &v in p {
@@ -756,9 +777,10 @@ _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_i
 					point += widget.position
 				}
 			}
-			append(&ctx.render_commands, Render_Command{z_index = z_index + i + 1, type = p})
+			append(&ctx.render_commands, Render_Command{z_index = z_index^ + i + 1 + widget.z_index, type = p})
 		}
 
-		_emit_clip_end_command(ctx, widget, z_index + len(widget.primitives) + 1)
+		_emit_clip_end_command(ctx, widget, z_index^ + len(widget.primitives) + 1 + widget.z_index)
 	}
+	z_index^ += len(widget.primitives) + 1
 }

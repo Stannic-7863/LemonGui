@@ -4,12 +4,10 @@ import "base:runtime"
 import "core:reflect"
 
 import "core:fmt"
-import "core:hash"
 import "core:time"
-
 import rl "vendor:raylib"
 
-import cu "core"
+import cu "./../"
 
 WHITE :: cu.Color{255, 255, 255, 255}
 BLACK :: cu.Color{0, 0, 0, 255}
@@ -23,168 +21,7 @@ HOVER_COLOR :: [4]u8{58, 58, 90, 255} // #3A3A5A
 PRESS_COLOR :: [4]u8{136, 221, 255, 255} // #88DDFF
 LONG_PRESS_COLOR :: [4]u8{255, 136, 170, 255} // #FF88AA
 
-print_types :: proc(type: typeid, depth: int = 1, name: string = "") {
-	if depth > 0 {
-		type_info := type_info_of(type)
-		if reflect.is_struct(type_info) {
-			for field_info in reflect.struct_fields_zipped(type) {
-				print_types(field_info.type.id, depth - 1, field_info.name)
-			}
-		}
-	}
-
-	fmt.println(type, name, type_info_of(type).size)
-}
-
 main :: proc() {
-	for args in runtime.args__ {
-		if args == "sizes" {
-			print_types(cu.Command_Border)
-		}
-		if args == "app" {
-			run_app()
-		}
-	}
-}
-
-slider :: proc(ctx: ^cu.Core_Context, value: ^f32, min, max: f32) {
-
-	main_container := cu.create_widget(
-		ctx,
-		cu.Layout{sizing = cu.sizing(cu.grow(100), cu.grow(50, 100)), child_gap = 5, direction = .X, child_alignment = {.Center, .Center}},
-		style = cu.Style{color = DEFAULT_BACKGROUND, border = cu.border_all(255), padding = 16},
-	)
-
-	cu.push_parent(ctx, main_container)
-
-	cu.create_widget(
-		ctx,
-		cu.Text{style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 0, color = {255, 255, 255, 255}}, text = fmt.tprint(min)},
-	)
-
-	railing := cu.create_widget(
-		ctx,
-		cu.Layout{sizing = cu.sizing(cu.grow(), cu.fixed(10)), direction = .Y, child_alignment = {.Center, .Center}},
-		style = cu.Style{color = CHILD_BACKGROUND},
-	)
-
-	cu.push_parent(ctx, railing)
-
-	knob_offset := (value^ - min) / (max - min) - 0.5
-
-	knob := cu.create_widget(
-		ctx,
-		cu.Layout{sizing = cu.sizing(cu.fixed(20), cu.fixed(20))},
-		offset = {cu.Offset{value = knob_offset, kind = .Percent}, cu.offset_percent_self(0.25)},
-		style = cu.Style{color = BLUE, border = cu.Border_Style{}},
-	)
-
-	if .Left_Pressed in knob.events {
-		cu.animate(ctx, knob^, knob.style.color, RED, 1, "style", "color")
-		cu.animate(ctx, knob^, knob.style.border.(cu.Border_Style).radius, cu.Vec4f32{10, 10, 10, 10}, 1, "style", "border", "radius")
-	}
-	if .Left_Clicked in knob.events {
-		cu.animate(ctx, knob^, knob.style.color, BLUE, 1, "style", "color")
-		cu.animate(ctx, knob^, knob.style.border.(cu.Border_Style).radius, cu.Vec4f32{0, 0, 0, 0}, 1, "style", "border", "radius")
-	}
-
-	if .Left_Down in knob.events {
-		rel := ctx.mouse.position.x - railing.position.x
-		normalized := clamp(rel / railing.size.x, 0, 1)
-		value^ = min + (max - min) * normalized
-	}
-
-	t := cu.create_widget(
-		ctx,
-		cu.Text {
-			text = fmt.tprint(value^),
-			style = {font_id = 0, letter_spacing = 1, font_size = 10, line_spacing = 0, color = {255, 255, 255, 255}},
-		},
-		{},
-		{cu.Offset{value = knob_offset, kind = .Percent}, cu.offset_absolute(5)},
-	)
-
-	cu.pop_parent(ctx)
-
-	cu.create_widget(
-		ctx,
-		cu.Text{style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 0, color = {255, 255, 255, 255}}, text = fmt.tprint(max)},
-	)
-
-	cu.pop_parent(ctx)
-}
-
-toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool) {
-	main_container := cu.create_widget(
-		ctx,
-		cu.Layout{sizing = cu.sizing(cu.grow(), cu.grow(50, 100)), child_gap = 10, child_alignment = {.Center, .Center}},
-		style = cu.Style{color = DEFAULT_BACKGROUND, border = cu.border_all(255)},
-	)
-	cu.push_parent(ctx, main_container)
-	e := cu.create_widget(ctx, cu.Layout{sizing = cu.sizing(cu.fixed(20), cu.fixed(20))}, style = cu.Style{color = RED, border = cu.Border_Style{}})
-	if .Left_Clicked in e.events {
-		toggle^ = !(toggle^)
-	}
-	if toggle^ && .Left_Clicked in e.events {
-		cu.animate(ctx, e^, e.style.color, BLUE, 1, "style", "color")
-		cu.animate(ctx, e^, e.style.border.(cu.Border_Style).radius, cu.Vec4f32{10, 10, 10, 10}, 1, "style", "border", "radius")
-	} else if .Left_Clicked in e.events {
-		cu.animate(ctx, e^, e.style.color, RED, 1, "style", "color")
-		cu.animate(ctx, e^, e.style.border.(cu.Border_Style).radius, cu.Vec4f32{0, 0, 0, 0}, 1, "style", "border", "radius")
-	}
-
-	cu.create_widget(
-		ctx,
-		cu.Text {
-			text = label,
-			style = cu.Text_Style{font_id = 0, font_size = 20, line_spacing = 0, letter_spacing = 1, color = {255, 255, 255, 255}},
-		},
-	)
-	cu.pop_parent(ctx)
-}
-
-button :: proc(ctx: ^cu.Core_Context, label: string) -> cu.Widget_Events {
-	main_container := cu.create_widget(
-		ctx,
-		cu.Layout{sizing = cu.sizing(cu.grow(), cu.grow(50, 100)), child_gap = 10, child_alignment = {.Center, .Center}},
-		style = cu.Style{color = DEFAULT_BACKGROUND, border = cu.border_all(255)},
-	)
-	cu.push_parent(ctx, main_container)
-	cu.create_widget(
-		ctx,
-		cu.Text {
-			text = label,
-			style = cu.Text_Style{font_id = 0, font_size = 20, line_spacing = 0, letter_spacing = 1, color = {255, 255, 255, 255}},
-		},
-	)
-	if .Hovered in main_container.events {
-		cu.animate(ctx, main_container^, main_container.style.color, ORANGE, 0.5, "style", "color")
-	} else {
-		cu.animate(ctx, main_container^, main_container.style.color, DEFAULT_BACKGROUND, 0.5, "style", "color")
-	}
-	cu.pop_parent(ctx)
-	return main_container.events
-}
-
-import "core:mem"
-
-run_app :: proc() {
-	when ODIN_DEBUG {
-		track: mem.Tracking_Allocator
-		mem.tracking_allocator_init(&track, context.allocator)
-		context.allocator = mem.tracking_allocator(&track)
-
-		defer {
-			if len(track.allocation_map) > 0 {
-				fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-				for _, entry in track.allocation_map {
-					fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-				}
-			}
-			mem.tracking_allocator_destroy(&track)
-		}
-	}
-
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
 	rl.InitWindow(700, 700, "Balls?")
 	defer rl.CloseWindow()
@@ -194,10 +31,9 @@ run_app :: proc() {
 
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
-
 	ctx.text_measure_proc = measure_text
 
-	sdf_shader := rl.LoadShader("", "./sdf_rect_shader.frag")
+	sdf_shader := rl.LoadShader("", "./rounded_rect_shader.frag")
 
 	img := rl.GenImageColor(1, 1, rl.WHITE)
 	render_texture := rl.LoadTextureFromImage(img)
@@ -239,7 +75,7 @@ run_app :: proc() {
 		style := cu.Style {
 			color   = CHILD_BACKGROUND,
 			padding = 16,
-			border  = cu.border_all(255),
+			border  = cu.border(255),
 		}
 
 		root := cu.create_widget(
@@ -282,7 +118,7 @@ run_app :: proc() {
 			cu.create_widget(
 				&ctx,
 				cu.Text{text = "Some primitive Shapes", style = {font_id = 0, font_size = 20, line_spacing = 0, letter_spacing = 1, color = WHITE}},
-				style = {color = ORANGE, padding = 16, border = cu.border_all(255)},
+				style = {color = ORANGE, padding = 16, border = cu.border(255)},
 			)
 			cu.create_primitive(&ctx, cu.Primitive_Ellipse{size = {100, 50}, position = {300, 300}, color = ellipse_color})
 			cu.create_primitive(&ctx, cu.Primitive_Rect{size = {100, 100}, position = {100, 100}, color = rect_color})
@@ -307,7 +143,7 @@ run_app :: proc() {
 						text = "Oi, I am A Floating Widget!",
 						style = {font_id = 0, font_size = 20, line_spacing = 0, letter_spacing = 1, color = WHITE},
 					},
-					style = {color = ORANGE, padding = 16, border = cu.border_all(255)},
+					style = {color = ORANGE, padding = 16, border = cu.border(255)},
 				)
 
 				cont_1 := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fit(), cu.fit()), child_alignment = {.Center, .Center}})
@@ -386,12 +222,12 @@ run_app :: proc() {
 					text = "Text wrapping and padding",
 					style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 0, color = ORANGE},
 				},
-				style = {color = DEFAULT_BACKGROUND, padding = 16, border = cu.border_all(255)},
+				style = {color = DEFAULT_BACKGROUND, padding = 16, border = cu.border(255)},
 			)
 			c := cu.create_widget(
 				&ctx,
 				cu.Layout{sizing = cu.sizing(cu.grow(), cu.fit()), child_gap = 16},
-				style = {color = RED, padding = 16, border = cu.border_all(255)},
+				style = {color = RED, padding = 16, border = cu.border(255)},
 			)
 			cu.push_parent(&ctx, c)
 			cu.create_widget(
@@ -400,7 +236,7 @@ run_app :: proc() {
 					text = "A quick brown fox jumps over the lazy dog",
 					style = {font_id = 0, letter_spacing = 1, font_size = 30, line_spacing = 0, color = ORANGE},
 				},
-				style = {color = DEFAULT_BACKGROUND, padding = 16, border = cu.border_all(255)},
+				style = {color = DEFAULT_BACKGROUND, padding = 16, border = cu.border(255)},
 			)
 			cu.create_widget(
 				&ctx,
@@ -408,7 +244,7 @@ run_app :: proc() {
 					text = "Why Does A quick brown Jumps over the lazy Dog?",
 					style = {font_id = 0, letter_spacing = 5, font_size = 15, line_spacing = 5, color = BLUE},
 				},
-				style = {color = DEFAULT_BACKGROUND, padding = 16, border = cu.border_all(255)},
+				style = {color = DEFAULT_BACKGROUND, padding = 16, border = cu.border(255)},
 			)
 			cu.create_widget(
 				&ctx,
@@ -416,39 +252,39 @@ run_app :: proc() {
 					text = "When Does A quick brown Jumps over the lazy Dog?",
 					style = {font_id = 0, letter_spacing = 10, font_size = 10, line_spacing = 0, color = GREEN},
 				},
-				style = {color = DEFAULT_BACKGROUND, padding = 16, border = cu.border_all(255)},
+				style = {color = DEFAULT_BACKGROUND, padding = 16, border = cu.border(255)},
 			)
 			cu.pop_parent(&ctx)
 			e := cu.create_widget(
 				&ctx,
 				cu.Layout{sizing = cu.sizing(cu.grow(), cu.grow()), child_gap = 16, direction = .Y, child_alignment = {.Center, .Center}},
-				style = {color = DEFAULT_BACKGROUND, padding = {16, 0, 16, 0}, border = cu.border_all(255)},
+				style = {color = DEFAULT_BACKGROUND, padding = {16, 0, 16, 0}, border = cu.border(255)},
 			)
 			cu.push_parent(&ctx, e)
 			cu.create_widget(
 				&ctx,
 				cu.Text{text = "Text Paddings", style = {font_id = 0, line_spacing = 0, font_size = 20, color = GREEN, letter_spacing = 1}},
-				style = {color = CHILD_BACKGROUND, padding = 16, border = cu.border_all(255)},
+				style = {color = CHILD_BACKGROUND, padding = 16, border = cu.border(GREEN)},
 			)
 			cu.create_widget(
 				&ctx,
 				cu.Text{text = "Left padded", style = {font_id = 0, line_spacing = 0, font_size = 20, color = GREEN, letter_spacing = 1}},
-				style = {color = CHILD_BACKGROUND, padding = {0, 0, 0, 16}, border = cu.border_all(255)},
+				style = {color = CHILD_BACKGROUND, padding = {0, 0, 0, 16}, border = cu.border(GREEN)},
 			)
 			cu.create_widget(
 				&ctx,
 				cu.Text{text = "Right padded", style = {font_id = 0, line_spacing = 0, font_size = 20, color = GREEN, letter_spacing = 1}},
-				style = {color = CHILD_BACKGROUND, padding = {0, 16, 0, 0}, border = cu.border_all(255)},
+				style = {color = CHILD_BACKGROUND, padding = {0, 16, 0, 0}, border = cu.border(GREEN)},
 			)
 			cu.create_widget(
 				&ctx,
 				cu.Text{text = "Top padded", style = {font_id = 0, line_spacing = 0, font_size = 20, color = GREEN, letter_spacing = 1}},
-				style = {color = CHILD_BACKGROUND, padding = {16, 0, 0, 0}, border = cu.border_all(255)},
+				style = {color = CHILD_BACKGROUND, padding = {16, 0, 0, 0}, border = cu.border(GREEN)},
 			)
 			cu.create_widget(
 				&ctx,
 				cu.Text{text = "Bottom padded", style = {font_id = 0, line_spacing = 0, font_size = 20, color = GREEN, letter_spacing = 1}},
-				style = {color = CHILD_BACKGROUND, padding = {0, 0, 16, 0}, border = cu.border_all(255)},
+				style = {color = CHILD_BACKGROUND, padding = {0, 0, 16, 0}, border = cu.border(GREEN)},
 			)
 			cu.pop_parent(&ctx)
 		}
@@ -498,7 +334,6 @@ render :: proc(ctx: cu.Core_Context, texture: rl.Texture, shader: rl.Shader) {
 			initial_y := v.position.y
 
 			for l in ctx.text_lines[v.start:v.end] {
-				// rl.DrawRectangleV({v.position.x, initial_y}, rl.MeasureTextEx(rl.GetFontDefault(), fmt.ctprintf(l), v.font_size, v.spacing), rl.GRAY)
 				rl.DrawTextEx(
 					rl.GetFontDefault(),
 					fmt.ctprint(l),
@@ -546,4 +381,101 @@ measure_text :: proc(text: string, config: cu.Text_Style) -> f32 {
 		width += advance
 	}
 	return width
+}
+
+slider :: proc(ctx: ^cu.Core_Context, value: ^f32, min, max: f32) {
+	main_container := cu.create_widget(
+		ctx,
+		cu.Layout{sizing = cu.sizing(cu.grow(100), cu.grow(50, 100)), child_gap = 5, direction = .X, child_alignment = {.Center, .Center}},
+		style = cu.Style{color = DEFAULT_BACKGROUND, border = cu.border(255), padding = 16},
+	)
+
+	cu.push_parent(ctx, main_container)
+
+	cu.create_widget(
+		ctx,
+		cu.Text{style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 0, color = {255, 255, 255, 255}}, text = fmt.tprint(min)},
+	)
+
+	railing := cu.create_widget(
+		ctx,
+		cu.Layout{sizing = cu.sizing(cu.grow(), cu.fixed(10)), direction = .Y, child_alignment = {.Center, .Center}},
+		style = cu.Style{color = CHILD_BACKGROUND},
+	)
+
+	cu.push_parent(ctx, railing)
+
+	knob_offset := (value^ - min) / (max - min) - 0.5
+
+	knob := cu.create_widget(
+		ctx,
+		cu.Layout{sizing = cu.sizing(cu.fixed(20), cu.fixed(20))},
+		offset = {cu.Offset{value = knob_offset, kind = .Percent}, cu.offset_percent_self(0.25)},
+		style = cu.Style{color = BLUE, border = cu.Border_Style{}},
+	)
+
+	if .Left_Down in knob.events {
+		rel := ctx.mouse.position.x - railing.position.x
+		normalized := clamp(rel / railing.size.x, 0, 1)
+		value^ = min + (max - min) * normalized
+	}
+
+	t := cu.create_widget(
+		ctx,
+		cu.Text {
+			text = fmt.tprint(value^),
+			style = {font_id = 0, letter_spacing = 1, font_size = 10, line_spacing = 0, color = {255, 255, 255, 255}},
+		},
+		{},
+		{cu.Offset{value = knob_offset, kind = .Percent}, cu.offset_absolute(5)},
+	)
+
+	cu.pop_parent(ctx)
+
+	cu.create_widget(
+		ctx,
+		cu.Text{style = {font_id = 0, letter_spacing = 1, font_size = 20, line_spacing = 0, color = {255, 255, 255, 255}}, text = fmt.tprint(max)},
+	)
+
+	cu.pop_parent(ctx)
+}
+
+toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool) {
+	main_container := cu.create_widget(
+		ctx,
+		cu.Layout{sizing = cu.sizing(cu.grow(), cu.grow(50, 100)), child_gap = 10, child_alignment = {.Center, .Center}},
+		style = cu.Style{color = DEFAULT_BACKGROUND, border = cu.border(255)},
+	)
+	cu.push_parent(ctx, main_container)
+	e := cu.create_widget(ctx, cu.Layout{sizing = cu.sizing(cu.fixed(20), cu.fixed(20))}, style = cu.Style{color = RED, border = cu.Border_Style{}})
+	if .Left_Clicked in e.events {
+		toggle^ = !(toggle^)
+	}
+
+	cu.create_widget(
+		ctx,
+		cu.Text {
+			text = label,
+			style = cu.Text_Style{font_id = 0, font_size = 20, line_spacing = 0, letter_spacing = 1, color = {255, 255, 255, 255}},
+		},
+	)
+	cu.pop_parent(ctx)
+}
+
+button :: proc(ctx: ^cu.Core_Context, label: string) -> cu.Widget_Events {
+	main_container := cu.create_widget(
+		ctx,
+		cu.Layout{sizing = cu.sizing(cu.grow(), cu.grow(50, 100)), child_gap = 10, child_alignment = {.Center, .Center}},
+		style = cu.Style{color = DEFAULT_BACKGROUND, border = cu.border(255)},
+	)
+	cu.push_parent(ctx, main_container)
+	cu.create_widget(
+		ctx,
+		cu.Text {
+			text = label,
+			style = cu.Text_Style{font_id = 0, font_size = 20, line_spacing = 0, letter_spacing = 1, color = {255, 255, 255, 255}},
+		},
+	)
+	cu.pop_parent(ctx)
+	return main_container.events
 }

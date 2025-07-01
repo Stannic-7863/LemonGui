@@ -76,6 +76,11 @@ fixed :: proc "contextless" (size: f32) -> Sizing {
 	return Sizing{size, size, .Fixed}
 }
 
+// Configure border style 
+border :: proc(color: [4]Color, type: [4]Border_Type = Border_Type.Single, radius: Vec4f32 = 0, thickness: Vec4f32 = 1) -> Border_Style {
+	return Border_Style{color = color, type = type, radius = radius, thickness = thickness}
+}
+
 _get_axis_padding :: proc "contextless" (axis: Axis, padding: Vec4f32) -> f32 {
 	switch axis {
 	case .X:
@@ -110,6 +115,7 @@ _build_stacks :: proc(ctx: ^Core_Context) {
 	append(&ctx.stacks.temp, &ctx.widgets[0]) // append root node 
 
 	// Perhaps I should make this a breathd first tree instead of depth first tree
+	// Insight: Widgets are inserted in "pre order traversal" order
 
 	for {
 		widget := pop_safe(&ctx.stacks.temp) or_break
@@ -135,31 +141,4 @@ _build_stacks :: proc(ctx: ^Core_Context) {
 	}
 
 	clear(&ctx.stacks.temp)
-}
-
-_get_field_value_by_name :: proc(a: any, names: ..string) -> any {
-	a := a
-	for name in names {
-		ti := runtime.type_info_base(type_info_of(a.id))
-		if ts, ok := ti.variant.(runtime.Type_Info_Struct); ok {
-			for n, i in ts.names[:ts.field_count] {
-				if n == name {
-					a.id = ts.types[i].id
-					a.data = rawptr(uintptr(a.data) + ts.offsets[i])
-				}
-			}
-		} else if ts, ok := ti.variant.(runtime.Type_Info_Union); ok {
-			a = reflect.get_union_variant(a)
-			ti := runtime.type_info_base(type_info_of(a.id))
-			if ts, ok := ti.variant.(runtime.Type_Info_Struct); ok {
-				for n, i in ts.names[:ts.field_count] {
-					if n == name {
-						a.id = ts.types[i].id
-						a.data = rawptr(uintptr(a.data) + ts.offsets[i])
-					}
-				}
-			}
-		}
-	}
-	return a
 }
