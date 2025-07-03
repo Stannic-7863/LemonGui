@@ -51,6 +51,16 @@ offset_fixed :: proc "contextless" (value: f32) -> Offset {
 	return Offset{value = value, kind = .Fixed}
 }
 
+// Layout
+layout :: proc "contextless" (
+	sizing: [Axis]Sizing,
+	child_gap: f32 = 0,
+	direction: Axis = .X,
+	child_alignment: Child_Alignment = {.Left, .Top},
+) -> Layout {
+	return Layout{sizing = sizing, child_gap = child_gap, direction = direction, child_alignment = child_alignment}
+}
+
 // Sizing along axis. Default to Fit
 sizing :: proc "contextless" (x: Sizing = {}, y: Sizing = {}) -> [Axis]Sizing {
 	return {.X = x, .Y = y}

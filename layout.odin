@@ -3,6 +3,10 @@ package ui_core
 import "core:fmt"
 import "core:sort"
 
+/*
+	Layout is totally inspired by CLAY. If you want more indepth explanation or just better layout system, check out CLAY :)
+*/
+
 Axis :: enum u8 {
 	X,
 	Y,
@@ -27,7 +31,7 @@ Child_Alignment_Y :: enum u8 {
 	Bottom,
 }
 
-// Used to set position relative different parts of widget
+// Used to set position relative to different parts of widget
 Anchor :: enum u8 {
 	Left_Top,
 	Left_Center,
@@ -108,17 +112,94 @@ Growable :: struct {
 	is_text: bool,
 }
 
+_layout_all_sizing_pass :: proc(ctx: ^Core_Context) {
+
+	_sizing_fixed_pass(ctx)
+
+	#reverse for w in ctx.stacks.post_r {
+		_fit_into_parent(.X, w)
+		switch type in w.type {
+		case Layout:
+		case Floating:
+		case Text:
+			w.size += ctx.text_measure_proc(type.text, type.style)
+		}
+	}
+
+	growables := make([dynamic]Growable, 0, 16, context.temp_allocator)
+	for w in ctx.stacks.pre {
+		layout: Layout = _get_layout(w) or_continue
+		if layout.direction == .X {
+			_grow_shrink_children_along_axis(.X, layout, w, &growables)
+			clear(&growables)
+		} else {
+			_grow_children_across_axis(.X, layout, w)
+			clear(&growables)
+		}
+	}
+
+	_sizing_word_wrap(ctx)
+
+	#reverse for w in ctx.stacks.post_r {
+		_fit_into_parent(.Y, w)
+	}
+
+	for w in ctx.stacks.pre {
+		layout: Layout = _get_layout(w) or_continue
+		if layout.direction == .Y {
+			_grow_shrink_children_along_axis(.Y, layout, w, &growables)
+			clear(&growables)
+		} else {
+			_grow_children_across_axis(.Y, layout, w)
+			clear(&growables)
+		}
+	}
+}
+
+_layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
+	z_index_offset := 0
+	for widget in ctx.stacks.pre {
+		defer {
+			if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border) && ctx.active_widget_id == 0 {
+				ctx.hot_widget_id = widget.node.id
+			}
+		}
+		switch type in widget.type {
+		case Floating:
+			_position_layout_floating(ctx, widget, type)
+			_position_layout_childs(widget, type.layout)
+		case Layout:
+			_position_layout_childs(widget, type)
+		case Text:
+			_expand_widget(widget)
+			_offset_widget(widget)
+			_emit_rect_command(ctx, widget, &z_index_offset)
+			_emit_widget_border_command(ctx, widget, &z_index_offset)
+			_emit_text_command(ctx, widget, type, &z_index_offset)
+			continue // Text never has children hence skip. This loops goes from top to bottom into the tree. Any text will have its position resolved always 
+		}
+
+		_expand_widget(widget)
+		_offset_widget(widget)
+		_emit_rect_command(ctx, widget, &z_index_offset)
+		_emit_widget_border_command(ctx, widget, &z_index_offset)
+		_emit_image_command(ctx, widget, &z_index_offset)
+		_emit_widget_primitive_commands(ctx, widget, &z_index_offset)
+	}
+
+	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
+}
+
 _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 	/* 
 		This function is called in reverse post order. Childs will be come first, then their parents
 		That is why accumalating size into parents and figuring out the min max padding adjustment in the same function works
 	*/
 
-	// Accumulate Into Parents size
+	// Accumulate Into Parents size if parent is of .Fit type
 	parent := widget.node.parent
 
-	if parent == nil {return}
-
+	if parent == nil {return} 	// reached root node
 
 	parent_layout, parent_is_layout := _get_layout(parent)
 
@@ -134,92 +215,86 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 		}
 	}
 
-	// Apply padding adjustments and min max constraints to non text widgets.
-	// Propagate min sizes upward to parent for text widgets
-	widget_layout, widget_is_layout := _get_layout(widget)
-	padding: f32 = _get_axis_padding(axis, widget.style.padding)
-
-	if !widget_is_layout {
-		// Suppose grow_1 parent of grow_2 parent of text. 
-		// text will propagate its _min to grow_2, but grow_2 will only propagate its own size to grow_1's min. 
-		// TODO: Remove the above goofy behaviour and correctly define _min shenanigans
-		if parent_layout.direction == axis {
-			if parent_layout.sizing[axis].kind != .Fit { 	// we add widget size to parent in above snippet
-				parent.size[axis] += widget._min[axis] + padding
+	defer {
+		if parent.is_floating_descendant == widget.is_floating_descendant {
+			if parent_layout.direction == axis {
+				parent.accumulated_min[axis] += max(widget.accumulated_min[axis], widget.size[axis])
+			} else {
+				parent.accumulated_min[axis] = max(parent.accumulated_min[axis], max(widget.accumulated_min[axis], widget.size[axis]))
 			}
-			parent._min[axis] += widget._min[axis]
-		} else {
-			parent.size[axis] = max(parent.size[axis], widget._min[axis])
-			parent._min[axis] = max(parent._min[axis], widget._min[axis])
 		}
-		return
 	}
+
+	widget_layout, widget_is_layout := _get_layout(widget)
+	widget_axis_padding: f32 = _get_axis_padding(axis, widget.style.padding)
+
+	widget.size[axis] += widget_axis_padding // resolve padding 
+
+	if !widget_is_layout {return}
+
+	widget.accumulated_min[axis] += widget_axis_padding
 
 	if widget_layout.direction == axis {
-		if widget_layout.sizing[axis].kind == .Fit {
-			widget.size[axis] += max(0, f32(widget.node.total_children - 1) * widget_layout.child_gap)
-		}
-		widget._min[axis] += max(0, f32(widget.node.total_children - 1) * widget_layout.child_gap)
+		child_gaps := max(0, f32(widget.node.total_children - 1) * widget_layout.child_gap)
+		widget.accumulated_min[axis] += child_gaps
+		widget.size[axis] += child_gaps
 	}
 
-	widget._min[axis] += padding
-	widget.size[axis] += padding
-	widget.size[axis] = max(widget.size[axis], widget_layout.sizing[axis].min)
-	widget.size[axis] = min(widget.size[axis], widget_layout.sizing[axis].max)
-
-	if parent_layout.direction == axis {
-		parent._min[axis] += widget.size[axis]
-	} else {
-		parent._min[axis] = max(parent._min[axis], widget.size[axis])
+	if widget_layout.sizing[axis].kind == .Fit {
+		widget.size[axis] = max(widget.size[axis], widget.accumulated_min[axis])
+		widget.size[axis] = max(widget.size[axis], widget_layout.sizing[axis].min)
+		widget.size[axis] = min(widget.size[axis], widget_layout.sizing[axis].max)
 	}
-
-	return
 }
 
-_grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget, growables: ^[dynamic]Growable) {
-	if widget.node.first_child == nil {return}
-	remaining: f32 = widget.size[axis] - _get_axis_padding(axis, widget.style.padding) - layout.child_gap * f32(widget.node.total_children - 1)
+_grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, parent: ^Widget, growables: ^[dynamic]Growable) {
+	if parent.node.first_child == nil {return}
 
-	for child_widget := widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
-		switch type in child_widget.type {
+	parent_axis_padding := _get_axis_padding(axis, parent.style.padding)
+	remaining_space: f32 = parent.size[axis] - parent_axis_padding - parent_layout.child_gap * f32(parent.node.total_children - 1)
+
+	for child := parent.node.first_child; child != nil; child = child.node.next {
+		switch type in child.type {
 		case Floating:
 			if type.layout.sizing[axis].kind == .Grow {
-				child_widget.size[axis] = widget.size[axis]
+				child.size[axis] = parent.size[axis] - parent_axis_padding
 			}
 			if type.layout.sizing[axis].kind == .Percent {
-				child_widget.size[axis] = max(child_widget._min[axis], widget.size[axis] * type.layout.sizing[axis].min)
+				child.size[axis] = parent.size[axis] * type.layout.sizing[axis].min - parent_axis_padding
+				child.size[axis] = max(child.size[axis], child.accumulated_min[axis])
 			}
 			continue
 		case Layout:
 			switch type.sizing[axis].kind {
 			case .Grow:
-				child_widget.size[axis] = max(child_widget._min[axis], type.sizing[axis].min)
-				append(growables, Growable{&child_widget.size, child_widget.size[axis], type.sizing[axis].max, false})
+				child.size[axis] = max(child.accumulated_min[axis], type.sizing[axis].min)
+				append(growables, Growable{&child.size, child.size[axis], type.sizing[axis].max, false})
 			case .Percent:
-				s :=
-					(widget.size[axis] - _get_axis_padding(axis, widget.style.padding) - f32(widget.node.total_children - 1) * layout.child_gap) *
+				child.size[axis] =
+					(parent.size[axis] -
+						_get_axis_padding(axis, parent.style.padding) -
+						f32(parent.node.total_children - 1) * parent_layout.child_gap) *
 					type.sizing[axis].min
-				child_widget.size[axis] = max(child_widget._min[axis], s)
+				child.size[axis] = max(child.accumulated_min[axis], child.size[axis])
 			case .Fixed:
 			case .Fit:
 			}
 		case Text:
 			if axis != .Y {
-				append(growables, Growable{&child_widget.size, child_widget._min.x, max(f32), true})
+				append(growables, Growable{&child.size, child.accumulated_min.x, max(f32), true})
 			}
 		}
-		remaining -= child_widget.size[axis]
+		remaining_space -= child.size[axis]
 	}
-
 
 	if len(growables) == 0 {return}
 
-	if remaining >= 0 {
+	if remaining_space >= 0 {
 		// as long as there is space, distribute it, 1e-9 for floating point err   
-		for remaining >= 1e-9 && len(growables) > 0 {
+		for remaining_space >= 1e-9 && len(growables) > 0 {
 			smallest: f32 = growables[0].size[axis]
 			second_smallest: f32 = max(f32)
-			to_add: f32 = remaining
+			to_add: f32 = remaining_space
 			// We find the smallest and second smallest along the axis we to expand to. 
 			// Once we find the smallest, we grow it until its the size of second smallest and repeat this process until all space is distributed 
 			for child, i in growables {
@@ -238,27 +313,28 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Wi
 			}
 
 			// If all growables are smallest then we distribute remaining space equally, other wise we add space to smallest one only 
-			to_add = min(to_add, remaining / cast(f32)len(growables))
+			to_add = min(to_add, remaining_space / cast(f32)len(growables))
 			#reverse for child, i in growables {
 				if child.size[axis] == smallest {
 					child.size[axis] += to_add
-					remaining -= to_add
+					remaining_space -= to_add
 				}
 				if child.size[axis] > child.max {
 					size := child.size[axis]
 					child.size[axis] = child.max
-					remaining += size - child.max
+					remaining_space += size - child.max
 					ordered_remove(growables, i)
 				}
 			}
 		}
 	} else {
 		// if remaining width is negative we need to shrink largest containers to make space 
-		remaining = abs(remaining)
-		for remaining >= 1e-9 && len(growables) > 0 {
+		remaining_space = abs(remaining_space)
+
+		for remaining_space >= 1e-9 && len(growables) > 0 {
 			largest: f32 = growables[0].size[axis]
 			second_largest: f32 = min(f32)
-			to_subtract: f32 = remaining
+			to_subtract: f32 = remaining_space
 
 			for child in growables {
 				if child.size[axis] > largest {
@@ -271,15 +347,15 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, layout: Layout, widget: ^Wi
 				}
 			}
 
-			to_subtract = min(to_subtract, remaining / cast(f32)len(growables))
+			to_subtract = min(to_subtract, remaining_space / cast(f32)len(growables))
 
 			#reverse for child, i in growables {
 				if child.size[axis] == largest {
 					child.size[axis] -= to_subtract
-					remaining -= to_subtract
+					remaining_space -= to_subtract
 				}
 				if child.size[axis] < child.min {
-					remaining += child.min - child.size[axis]
+					remaining_space += child.min - child.size[axis]
 					child.size[axis] = child.min
 					ordered_remove(growables, i)
 				}
@@ -294,61 +370,63 @@ _grow_children_across_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget) 
 	axis_padding: f32 = _get_axis_padding(axis, widget.style.padding)
 
 	for child_widget := widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
-		layout, is_text := _get_layout(child_widget)
-		if !is_text {
-			parent_layout, _ := _get_layout(widget)
-			if parent_layout.direction == .Y && axis == .X && child_widget.size.x > widget.size.x {
+		child_layout, is_layout := _get_layout(child_widget)
+		if !is_layout {
+			if layout.direction == .Y && axis == .X && child_widget.size.x > widget.size.x - _get_axis_padding(.X, widget.style.padding) {
 				child_widget.size.x = widget.size.x - _get_axis_padding(.X, widget.style.padding)
 			}
 			continue
 		}
 
-		if layout.sizing[axis].kind == .Percent {
+		if child_layout.sizing[axis].kind == .Percent {
 			child_widget.size[axis] =
 				(widget.size[axis] - _get_axis_padding(axis, widget.style.padding) - f32(widget.node.total_children - 1) * layout.child_gap) *
-				layout.sizing[axis].min
-			child_widget.size[axis] = max(child_widget._min[axis], child_widget.size[axis])
+				child_layout.sizing[axis].min
+			child_widget.size[axis] = max(child_widget.accumulated_min[axis], child_widget.size[axis])
 		}
-		if layout.sizing[axis].kind == .Grow {
-			child_min := max(child_widget._min[axis], layout.sizing[axis].min)
+		if child_layout.sizing[axis].kind == .Grow {
+			child_min := max(child_widget.accumulated_min[axis], child_layout.sizing[axis].min)
 			child_widget.size[axis] = max(widget.size[axis] - axis_padding, child_min)
-			child_widget.size[axis] = min(child_widget.size[axis], layout.sizing[axis].max)
+			child_widget.size[axis] = min(child_widget.size[axis], child_layout.sizing[axis].max)
 		}
 	}
 }
 
-_layout_all_sizing_pass :: proc(ctx: ^Core_Context) {
+_sizing_fixed_pass :: proc(ctx: ^Core_Context) {
 	#reverse for w in ctx.stacks.post_r {
-		layout: Layout = _get_layout(w) or_continue
-
-		for sizing, i in layout.sizing {
-			w.size[i] = sizing.min
+		layout, is_layout := _get_layout(w)
+		if !is_layout {
+			w.size = 0
+		}
+		for &sizing, i in layout.sizing {
+			switch sizing.kind {
+			case .Fit, .Percent:
+				w.size[i] = 0
+			case .Fixed, .Grow:
+				w.size[i] = sizing.min
+			}
 		}
 	}
+}
 
-	#reverse for w in ctx.stacks.post_r {
-		_fit_into_parent(.X, w)
-		switch &type in w.type {
+_sizing_apply_aspect_ratio :: proc(widget: ^Widget) {
+	if aspect_ratio, ok := widget.aspect_ratio.(f32); ok {
+		switch &type in widget.type {
 		case Layout:
+			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / aspect_ratio
+			type.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
+			type.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
 		case Floating:
+			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / aspect_ratio
+			type.layout.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
+			type.layout.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
 		case Text:
-			w.size = ctx.text_measure_proc(type.text, type.style) + _get_axis_padding(.X, w.style.padding)
+			return
 		}
 	}
+}
 
-	growables := make([dynamic]Growable, 0, 16, context.temp_allocator)
-	for w in ctx.stacks.pre {
-		layout: Layout = _get_layout(w) or_continue
-
-		if layout.direction == .X {
-			_grow_shrink_children_along_axis(.X, layout, w, &growables)
-			clear(&growables)
-		} else {
-			_grow_children_across_axis(.X, layout, w)
-			clear(&growables)
-		}
-	}
-
+_sizing_word_wrap :: proc(ctx: ^Core_Context) {
 	measured_words := make([dynamic]Word_Measure, context.temp_allocator)
 	for widget in ctx.stacks.pre {
 		switch &type in widget.type {
@@ -433,68 +511,11 @@ _layout_all_sizing_pass :: proc(ctx: ^Core_Context) {
 			}
 			type._start = widget_lines_start
 			type._end = len(ctx.text_lines)
-			widget.size.y = f32(type._end - type._start) * (type.style.font_size + type.style.line_spacing) + y_padding
-			widget._min = {largest_width + x_padding, widget.size.y}
+			widget.size.y = f32(type._end - type._start) * (type.style.font_size + type.style.line_spacing)
+			widget.accumulated_min = {largest_width + x_padding, widget.size.y}
 			clear(&measured_words)
 		}
 	}
-
-	#reverse for w in ctx.stacks.post_r {
-		_fit_into_parent(.Y, w)
-	}
-
-	for w in ctx.stacks.pre {
-		layout: Layout = _get_layout(w) or_continue
-		if layout.direction == .Y {
-			_grow_shrink_children_along_axis(.Y, layout, w, &growables)
-			clear(&growables)
-		} else {
-			_grow_children_across_axis(.Y, layout, w)
-			clear(&growables)
-		}
-	}
-}
-
-_layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
-	/*
-	   Z ordering : 
-	   |_ 1 
-	   |_2
-	   |_3
-	   |_4
-	   |_5
-	 */
-	z_index_offset := 0
-
-	for widget in ctx.stacks.pre {
-		defer {
-			if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border) && ctx.active_widget_id == 0 {
-				ctx.hot_widget_id = widget.node.id
-			}
-		}
-		switch type in widget.type {
-		case Floating:
-			_position_layout_floating(ctx, widget, type)
-			_position_layout_childs(widget, type.layout)
-		case Layout:
-			_position_layout_childs(widget, type)
-		case Text:
-			_expand_widget(widget)
-			_offset_widget(widget)
-			_emit_rect_command(ctx, widget, &z_index_offset)
-			_emit_widget_border_command(ctx, widget, &z_index_offset)
-			_emit_text_command(ctx, widget, type, &z_index_offset)
-			continue // Text never has children hence skip. This loops goes from top to bottom into the tree. Any text will have its position resolved always 
-		}
-
-		_expand_widget(widget)
-		_offset_widget(widget)
-		_emit_rect_command(ctx, widget, &z_index_offset)
-		_emit_widget_border_command(ctx, widget, &z_index_offset)
-		_emit_widget_primitive_commands(ctx, widget, &z_index_offset)
-	}
-
-	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
 }
 
 _offset_widget :: proc(widget: ^Widget) {
@@ -631,7 +652,7 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 				child.position.x = increment.x
 			}
 		case .Center:
-			increment.x = widget.position.x + widget.size.x / 2 - total_size.x / 2 + padding[3] / 2
+			increment.x = widget.position.x + widget.size.x / 2 - total_size.x / 2 + layout.child_gap / 2
 			for child := widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = increment.x
@@ -681,7 +702,7 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 		}
 		switch layout.child_alignment.y {
 		case .Center:
-			increment.y = widget.position.y + widget.size.y / 2 - total_size.y / 2 + padding[0] / 2
+			increment.y = widget.position.y + widget.size.y / 2 - total_size.y / 2 + layout.child_gap / 2
 			for child := widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = increment.y
@@ -757,6 +778,20 @@ _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: i
 		&ctx.render_commands,
 		Render_Command{type = Command_Clip_Start{clip_size = widget.size, clip_position = widget.position}, z_index = z_index},
 	)
+}
+
+_emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
+	image, ok := widget.image.(Image)
+	if ok {
+		append(
+			&ctx.render_commands,
+			Render_Command {
+				type = Command_Image{position = widget.position, size = widget.size, image_data = image.image_data},
+				z_index = z_index^ + widget.z_index,
+			},
+		)
+		z_index^ += 1
+	}
 }
 
 _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {

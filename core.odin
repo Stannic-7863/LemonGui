@@ -2,6 +2,7 @@ package ui_core
 
 import "core:fmt"
 import "core:hash"
+import "core:image"
 import "core:math"
 import "core:math/linalg"
 import "core:time"
@@ -62,6 +63,7 @@ Id :: distinct i64
 when ODIN_DEBUG {
 	Core_Errors :: enum u8 {
 		No_Parent_To_Bind_Primitive,
+		Image_Provided_With_No_Aspect_Ratio,
 	}
 }
 
@@ -87,9 +89,20 @@ Core_Context :: struct {
 
 // Data that persists each frame 
 Persistant_Data :: struct {
-	style:                Style,
-	size, position, _min: Vec2f32,
-	events:               Widget_Events,
+	style:                           Style,
+	size, position, accumulated_min: Vec2f32,
+	events:                          Widget_Events,
+}
+
+Border_Type :: enum u8 {
+	None,
+	Single,
+	Double,
+	Dotted,
+	Dashed,
+	Grooved,
+	Inset,
+	Outset,
 }
 
 Render_Command :: struct {
@@ -104,17 +117,13 @@ Render_Command_Type :: union {
 	Command_Primitive,
 	Command_Clip_End,
 	Command_Clip_Start,
+	Command_Image,
 }
 
-Border_Type :: enum u8 {
-	None,
-	Single,
-	Double,
-	Dotted,
-	Dashed,
-	Grooved,
-	Inset,
-	Outset,
+Command_Image :: struct {
+	position:   Vec2f32,
+	size:       Vec2f32,
+	image_data: rawptr,
 }
 
 Command_Border :: struct {
@@ -145,6 +154,7 @@ Command_Clip_Start :: struct {
 
 Command_Clip_End :: struct {}
 
+// Primitives are added to command list as they are. With out any changes
 Command_Primitive :: union {
 	Primitive_Line,
 	Primitive_Rect,
@@ -152,23 +162,33 @@ Command_Primitive :: union {
 	Primitive_Ellipse,
 }
 
-// TODO: Right Primitives are clipped in the parent widget. Need to provide functionality to override and custom z index  
+// Thickness fields in primitives used by line mode
+Primitive_Fill_Mode :: enum {
+	Solid,
+	Line,
+}
 
 Primitive_Ellipse :: struct {
-	position: Vec2f32,
-	size:     Vec2f32, // major, minor axis. a, b = size.x, size.y if size.x > size.y else size.y, size.x 
-	color:    Color,
+	position:  Vec2f32,
+	size:      Vec2f32, // interpretation upto renderer?  
+	color:     Color,
+	thickness: f32,
+	fill:      Primitive_Fill_Mode,
 }
 
 Primitive_Rect :: struct {
-	position: Vec2f32,
-	size:     Vec2f32,
-	color:    Color,
+	position:  Vec2f32,
+	size:      Vec2f32,
+	color:     Color,
+	thickness: f32,
+	fill:      Primitive_Fill_Mode,
 }
 
 Primitive_Points :: struct {
-	points: []Vec2f32,
-	color:  Color,
+	points:    []Vec2f32,
+	color:     Color,
+	thickness: f32,
+	fill:      Primitive_Fill_Mode,
 }
 
 Primitive_Line :: struct {
@@ -229,23 +249,32 @@ Text :: struct {
 	_start, _end: int, // index into ctx.text_lines
 }
 
+Image :: struct {
+	image_data: rawptr,
+}
+
 Widget_Type :: union {
 	Layout,
 	Floating,
 	Text,
 }
 
+// Question : Should aspect ratio respect sizes or force sizes? For now it forces
+
 Widget :: struct {
-	style:          Style,
-	type:           Widget_Type,
-	node:           Node,
-	expand:         [2]Expand,
-	offset:         [2]Offset,
-	primitives:     []Command_Primitive,
-	_min:           Vec2f32,
-	size, position: Vec2f32,
-	z_index:        int,
-	events:         Widget_Events,
+	style:                  Style,
+	type:                   Widget_Type,
+	node:                   Node,
+	expand:                 [2]Expand,
+	offset:                 [2]Offset,
+	image:                  Maybe(Image),
+	aspect_ratio:           Maybe(f32), // If nil, calculated from image if image != nil other wise ignore ? formula width / heigth.
+	primitives:             []Command_Primitive,
+	accumulated_min:        Vec2f32,
+	size, position:         Vec2f32,
+	z_index:                int,
+	is_floating_descendant: bool,
+	events:                 Widget_Events,
 }
 
 init_core_context :: proc(widget_arr_backing_length: int) -> Core_Context {
@@ -313,11 +342,11 @@ end_ui :: proc(ctx: ^Core_Context) {
 		}
 
 		ctx.persistant_data[w.node.id] = Persistant_Data {
-			events   = events,
-			style    = w.style,
-			size     = w.size,
-			position = w.position,
-			_min     = w._min,
+			events          = events,
+			style           = w.style,
+			size            = w.size,
+			position        = w.position,
+			accumulated_min = w.accumulated_min,
 		}
 	}
 
@@ -332,6 +361,8 @@ end_ui :: proc(ctx: ^Core_Context) {
 create_widget :: proc(
 	ctx: ^Core_Context,
 	widget_type: Widget_Type = nil,
+	aspect_ratio: Maybe(f32) = nil,
+	image: Maybe(Image) = nil,
 	expand: [2]Expand = {},
 	offset: [2]Offset = {},
 	style: Style = {},
@@ -341,16 +372,25 @@ create_widget :: proc(
 	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
 	w^ = {} // zero out
 	w.type = widget_type
+	w.image = image
+	w.aspect_ratio = aspect_ratio
 	w.offset = offset
 	w.expand = expand
 	w.node.parent = ctx.current_parent
 	w.node.index = len(ctx.widgets) - 1
+
+	if image, ok := w.image.(Image); ok {
+		if aspect_ratio, ok := w.aspect_ratio.(f32); !ok {
+			// IMPL: Error 
+		}
+	}
 
 	_add_widget(ctx, w)
 	_generate_widget_hash(w)
 
 	if _, ok := w.type.(Floating); ok {
 		w.z_index += max(int) / 2
+		w.is_floating_descendant = true
 	}
 
 	if !_retrieve_persistant_data(ctx.persistant_data, w) {
@@ -362,7 +402,7 @@ create_widget :: proc(
 
 // Adds a primitive shape to current parent set in Core_Context
 create_primitive :: proc(ctx: ^Core_Context, primitive: Command_Primitive) {
-	if ctx.current_parent != nil {
+	if ctx.current_parent != nil { 	// IMPL: Error
 		append(&ctx.primitives, primitive)
 		ctx.current_parent.primitives = ctx.primitives[len(ctx.primitives) - 1 - len(ctx.current_parent.primitives):len(ctx.primitives)]
 	}
@@ -382,7 +422,9 @@ _add_widget :: proc(ctx: ^Core_Context, widget: ^Widget) {
 			ctx.current_parent.node.last_child.node.next = widget
 		}
 		ctx.current_parent.node.last_child = widget
+
 		widget.z_index = ctx.current_parent.z_index
+		widget.is_floating_descendant = ctx.current_parent.is_floating_descendant
 	}
 }
 
@@ -422,7 +464,7 @@ _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widge
 	widget.style = val.style
 
 	if _, ok := widget.type.(Text); ok {
-		widget._min = val._min
+		widget.accumulated_min = val.accumulated_min
 	}
 
 	return true
