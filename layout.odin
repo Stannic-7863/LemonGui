@@ -141,10 +141,12 @@ _layout_all_sizing_pass :: proc(ctx: ^Core_Context) {
 	_sizing_word_wrap(ctx)
 
 	#reverse for w in ctx.stacks.post_r {
+		_sizing_apply_aspect_ratio(w)
 		_fit_into_parent(.Y, w)
 	}
 
 	for w in ctx.stacks.pre {
+		_sizing_apply_aspect_ratio(w)
 		layout: Layout = _get_layout(w) or_continue
 		if layout.direction == .Y {
 			_grow_shrink_children_along_axis(.Y, layout, w, &growables)
@@ -414,12 +416,14 @@ _sizing_apply_aspect_ratio :: proc(widget: ^Widget) {
 		switch &type in widget.type {
 		case Layout:
 			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / aspect_ratio
-			type.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
-			type.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
+			widget.size[Axis.Y] = widget.accumulated_min[Axis.Y]
+		// type.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
+		// type.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
 		case Floating:
 			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / aspect_ratio
-			type.layout.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
-			type.layout.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
+			widget.size[Axis.Y] = widget.accumulated_min[Axis.Y]
+		// type.layout.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
+		// type.layout.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
 		case Text:
 			return
 		}

@@ -100,7 +100,6 @@ render :: proc(ctx: cu.Core_Context, texture: rl.Texture, shader: rl.Shader) {
 			rl.DrawRectangleLinesEx({v.position.x, v.position.y, v.size.x, v.size.y}, v.thickness[0], cast(rl.Color)v.color[0])
 		case cu.Command_Image:
 			image := cast(^rl.Texture)v.image_data
-			fmt.println(image)
 			rl.DrawTextureEx(image^, v.position, 0, v.size.x / cast(f32)image.width, rl.WHITE)
 		}
 	}

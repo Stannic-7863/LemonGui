@@ -24,10 +24,15 @@ Widget_Event :: enum u8 {
 	Right_Clicked,
 	Right_Pressed,
 	Right_Down,
+	Middle_Clicked,
+	Middle_Pressed,
+	Middle_Down,
 	Long_Left_Down,
 	Long_Right_Down,
+	Long_Middle_Down,
 	Double_Left_Clicked,
 	Double_Right_Clicked,
+	Double_Middle_Clicked,
 	Hovered,
 	Dragged,
 }
@@ -51,55 +56,70 @@ Mouse_Context :: struct {
 
 _resolve_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event: Widget_Events) {
 
-	if .Left_Released in ctx.mouse.events {
-		event += {.Left_Clicked}
-		ctx.active_widget_id = 0
-		if time.since(ctx.mouse.last_left_click) < ctx.mouse.double_click_timeout {
-			event += {.Double_Left_Clicked}
-		} else {
-			ctx.mouse.last_left_click = time.now()
+	for events in ctx.mouse.events {
+		switch events {
+		case .Left_Pressed:
+			event += {.Left_Pressed}
+			ctx.mouse.left_down_start = time.now()
+			ctx.active_widget_id = widget.node.id
+		case .Left_Down:
+			event += {.Left_Down}
+			ctx.active_widget_id = widget.node.id
+
+			if time.since(ctx.mouse.left_down_start) > ctx.mouse.long_down_timeout {
+				event += {.Long_Left_Down}
+			}
+		case .Left_Released:
+			event += {.Left_Clicked}
+			ctx.active_widget_id = 0
+			if time.since(ctx.mouse.last_left_click) < ctx.mouse.double_click_timeout {
+				event += {.Double_Left_Clicked}
+			} else {
+				ctx.mouse.last_left_click = time.now()
+			}
+		case .Right_Pressed:
+			event += {.Right_Pressed}
+			ctx.mouse.right_down_start = time.now()
+			ctx.active_widget_id = widget.node.id
+		case .Right_Down:
+			event += {.Right_Down}
+			ctx.active_widget_id = widget.node.id
+
+			if time.since(ctx.mouse.right_down_start) > ctx.mouse.long_down_timeout {
+				event += {.Long_Right_Down}
+			}
+		case .Right_Released:
+			event += {.Right_Clicked}
+			ctx.active_widget_id = 0
+			if time.since(ctx.mouse.last_right_click) < ctx.mouse.double_click_timeout {
+				event += {.Double_Right_Clicked}
+			} else {
+				ctx.mouse.last_right_click = time.now()
+			}
+		case .Middle_Pressed:
+			event += {.Middle_Pressed}
+			ctx.mouse.right_down_start = time.now()
+			ctx.active_widget_id = widget.node.id
+		case .Middle_Down:
+			event += {.Middle_Down}
+			ctx.active_widget_id = widget.node.id
+
+			if time.since(ctx.mouse.right_down_start) > ctx.mouse.long_down_timeout {
+				event += {.Long_Middle_Down}
+			}
+		case .Middle_Released:
+			event += {.Middle_Clicked}
+			ctx.active_widget_id = 0
+			if time.since(ctx.mouse.last_right_click) < ctx.mouse.double_click_timeout {
+				event += {.Double_Middle_Clicked}
+			} else {
+				ctx.mouse.last_right_click = time.now()
+			}
+		case .Scroll_Up:
+		case .Scroll_Down:
 		}
 	}
 
-	if .Right_Released in ctx.mouse.events {
-		event += {.Right_Clicked}
-		ctx.active_widget_id = 0
-		if time.since(ctx.mouse.last_right_click) < ctx.mouse.double_click_timeout {
-			event += {.Double_Right_Clicked}
-		} else {
-			ctx.mouse.last_right_click = time.now()
-		}
-	}
-
-	if .Left_Pressed in ctx.mouse.events {
-		event += {.Left_Pressed}
-		ctx.mouse.left_down_start = time.now()
-		ctx.active_widget_id = widget.node.id
-	}
-
-	if .Left_Down in ctx.mouse.events {
-		event += {.Left_Down}
-		ctx.active_widget_id = widget.node.id
-
-		if time.since(ctx.mouse.left_down_start) > ctx.mouse.long_down_timeout {
-			event += {.Long_Left_Down}
-		}
-	}
-
-	if .Right_Pressed in ctx.mouse.events {
-		event += {.Right_Pressed}
-		ctx.mouse.right_down_start = time.now()
-		ctx.active_widget_id = widget.node.id
-	}
-
-	if .Right_Down in ctx.mouse.events {
-		event += {.Right_Down}
-		ctx.active_widget_id = widget.node.id
-
-		if time.since(ctx.mouse.right_down_start) > ctx.mouse.long_down_timeout {
-			event += {.Long_Right_Down}
-		}
-	}
 	return
 }
 

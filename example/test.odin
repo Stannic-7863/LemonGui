@@ -80,6 +80,10 @@ test :: proc() {
 			test_mode = cast(type_of(test_mode))((cast(int)test_mode + 1) % (cast(int)max(type_of(test_mode)) + 1))
 		}
 
+		if rl.IsKeyPressed(.UP) {
+			test_mode = cast(type_of(test_mode))((cast(int)test_mode - 1) %% (cast(int)max(type_of(test_mode)) + 1))
+		}
+
 		cu.begin_ui(&ctx)
 
 		style := cu.Style {
@@ -127,23 +131,21 @@ test :: proc() {
 			grow_x_1 := cu.create_widget(
 				&ctx,
 				cu.Layout{sizing = cu.sizing(cu.grow(50), cu.grow(50)), child_gap = 0, child_alignment = {.Center, .Center}, direction = .Y},
+				aspect_ratio = 16.0 / 9.0,
 				style = style,
 			)
 			if cu.push_parent(&ctx, grow_x_1) {
 				defer cu.pop_parent(&ctx)
-				cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, style = style)
-				cu.create_widget(&ctx, cu.Text{text = "TESTING TEXT 1", style = {font_size = 20, color = WHITE, letter_spacing = 1}}, style = style)
-				// g := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(70), cu.grow(70))}, style = style)
-				// if cu.push_parent(&ctx, g) {
-				// 	cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(70), cu.grow(70))}, style = style)
-				// 	fit_x_1 := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fit(50), cu.fit(50)), child_gap = 8}, style = style)
-				// 	if cu.push_parent(&ctx, fit_x_1) {
-				// 		defer cu.pop_parent(&ctx)
-				// 		cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, style = style)
-				// 		cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(70), cu.grow(70))}, style = style)
-				// 	}
-				// 	cu.pop_parent(&ctx)
-				// }
+				cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, aspect_ratio = 16.0 / 9.0, style = style)
+				cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fit(50), cu.fit(50))}, aspect_ratio = 16.0 / 9.0, style = style)
+				cu.create_widget(
+					&ctx,
+					cu.Layout{sizing = cu.sizing(cu.fit(50), cu.fit(50))},
+					aspect_ratio = 16.0 / 9.0,
+					image = cu.Image{&nerd},
+					style = style,
+				)
+				// cu.create_widget(&ctx, cu.Text{text = "TESTING TEXT 1", style = {font_size = 20, color = WHITE, letter_spacing = 1}}, style = style)
 			}
 			cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, style = style)
 		case .Text:
@@ -178,7 +180,6 @@ test :: proc() {
 					},
 					style = style,
 				)
-				cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(70), cu.grow(70))}, style = style)
 				style.padding = 8 //16
 				grow_x_1 := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(100), cu.grow(50)), child_gap = 16}, style = style)
 				if cu.push_parent(&ctx, grow_x_1) {
@@ -188,7 +189,6 @@ test :: proc() {
 						cu.Text{text = "TEST_TEXT 2. INSIDE GROW", style = {font_id = 0, letter_spacing = 1, font_size = 20, color = GREEN}},
 						style = style,
 					)
-					cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, style = style)
 					style.padding = 8 //32
 					g := cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(70), cu.grow(70)), child_gap = 16}, style = style)
 					if cu.push_parent(&ctx, g) {
@@ -209,8 +209,6 @@ test :: proc() {
 								},
 								style = style,
 							)
-							cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, style = style)
-							cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(70), cu.grow(70))}, style = style)
 						}
 						cu.pop_parent(&ctx)
 					}
@@ -237,6 +235,7 @@ test :: proc() {
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.BLANK)
 		render(ctx, render_texture, sdf_shader)
+		rl.DrawText(rl.TextFormat("%v", test_mode), 0, 0, 20, rl.WHITE)
 		rl.EndDrawing()
 		free_all(context.temp_allocator)
 	}
