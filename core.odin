@@ -78,10 +78,12 @@ Core_Context :: struct {
 	text_lines:                  [dynamic]string,
 	render_commands:             [dynamic]Render_Command,
 	primitives:                  [dynamic]Command_Primitive,
+	clips:                       [dynamic]^Widget,
 	persistant_data:             map[Id]Persistant_Data, // widgets from last frame. Used to query events. Accessed by widget.id
-	hot_widget_id:               Id, //id, widget currently under mouse  
-	active_widget_id:            Id, //id, widget currently being interacted with 
-	current_parent:              ^Widget,
+	hot_widget_id:               Id, // widget currently under mouse  
+	active_widget_id:            Id, // widget currently being interacted with 
+	active_clipper:              ^Widget,
+	active_parent:               ^Widget,
 	text_measure_proc:           proc(text: string, style: Text_Style) -> f32,
 	window_height, window_width: f32,
 	delta_time:                  f32,
@@ -89,7 +91,6 @@ Core_Context :: struct {
 
 // Data that persists each frame 
 Persistant_Data :: struct {
-	style:                           Style,
 	size, position, accumulated_min: Vec2f32,
 	events:                          Widget_Events,
 }
@@ -114,15 +115,22 @@ Render_Command_Type :: union {
 	Command_Rect,
 	Command_Text,
 	Command_Border,
-	Command_Primitive,
 	Command_Clip_End,
 	Command_Clip_Start,
+	Command_Primitive,
 	Command_Image,
+	Command_Custom,
+}
+
+Command_Custom :: struct {
+	position: Vec2f32,
+	data:     rawptr,
 }
 
 Command_Image :: struct {
 	position:   Vec2f32,
 	size:       Vec2f32,
+	color:      Color,
 	image_data: rawptr,
 }
 
@@ -160,6 +168,7 @@ Command_Primitive :: union {
 	Primitive_Rect,
 	Primitive_Points,
 	Primitive_Ellipse,
+	Primitive_Custom,
 }
 
 // Thickness fields in primitives used by line mode
@@ -168,9 +177,13 @@ Primitive_Fill_Mode :: enum {
 	Line,
 }
 
+Primitive_Custom :: struct {
+	custom_primitive_data: rawptr,
+}
+
 Primitive_Ellipse :: struct {
 	position:  Vec2f32,
-	size:      Vec2f32, // interpretation upto renderer?  
+	size:      Vec2f32, // interpretation upto renderer
 	color:     Color,
 	thickness: f32,
 	fill:      Primitive_Fill_Mode,
@@ -220,13 +233,13 @@ Text_Style :: struct {
 }
 
 Node :: struct {
-	id:                    Id,
-	next:                  ^Widget,
-	prev:                  ^Widget,
-	parent:                ^Widget,
-	last_child:            ^Widget,
-	first_child:           ^Widget,
-	index, total_children: int,
+	id:                                             Id,
+	next:                                           ^Widget,
+	prev:                                           ^Widget,
+	parent:                                         ^Widget,
+	last_child:                                     ^Widget,
+	first_child:                                    ^Widget,
+	index, total_children, total_floating_children: int,
 }
 
 Floating :: struct {
@@ -251,6 +264,12 @@ Text :: struct {
 
 Image :: struct {
 	image_data: rawptr,
+	tint:       Color,
+}
+
+Clip :: struct {
+	direction: bit_set[Axis],
+	value:     [Axis]f32,
 }
 
 Widget_Type :: union {
@@ -259,8 +278,6 @@ Widget_Type :: union {
 	Text,
 }
 
-// Question : Should aspect ratio respect sizes or force sizes? For now it forces
-
 Widget :: struct {
 	style:                  Style,
 	type:                   Widget_Type,
@@ -268,12 +285,16 @@ Widget :: struct {
 	expand:                 [2]Expand,
 	offset:                 [2]Offset,
 	image:                  Maybe(Image),
-	aspect_ratio:           Maybe(f32), // If nil, calculated from image if image != nil other wise ignore ? formula width / heigth.
 	primitives:             []Command_Primitive,
+	string_id:              string,
+	clip:                   Maybe(Clip),
 	accumulated_min:        Vec2f32,
 	size, position:         Vec2f32,
+	custom_data:            Maybe(rawptr),
 	z_index:                int,
+	aspect_ratio:           Maybe(f32),
 	is_floating_descendant: bool,
+	event_passthrough:      bool,
 	events:                 Widget_Events,
 }
 
@@ -305,13 +326,13 @@ deinit_core_context :: proc(ctx: ^Core_Context) {
 push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
 	_, ok := widget.type.(Text)
 	(!ok) or_return
-	ctx.current_parent = widget
+	ctx.active_parent = widget
 	return true
 }
 
 pop_parent :: proc(ctx: ^Core_Context) {
-	if ctx.current_parent.node.parent != nil {
-		ctx.current_parent = ctx.current_parent.node.parent
+	if ctx.active_parent.node.parent != nil {
+		ctx.active_parent = ctx.active_parent.node.parent
 	}
 }
 
@@ -320,7 +341,7 @@ begin_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.widgets)
 	clear(&ctx.text_lines)
 	clear(&ctx.render_commands)
-	ctx.current_parent = nil
+	ctx.active_parent = nil
 }
 
 // Layout Pass + Positioning + Render commands
@@ -343,7 +364,6 @@ end_ui :: proc(ctx: ^Core_Context) {
 
 		ctx.persistant_data[w.node.id] = Persistant_Data {
 			events          = events,
-			style           = w.style,
 			size            = w.size,
 			position        = w.position,
 			accumulated_min = w.accumulated_min,
@@ -361,23 +381,29 @@ end_ui :: proc(ctx: ^Core_Context) {
 create_widget :: proc(
 	ctx: ^Core_Context,
 	widget_type: Widget_Type = nil,
+	string_id: string = "",
 	aspect_ratio: Maybe(f32) = nil,
 	image: Maybe(Image) = nil,
+	clip: Maybe(Clip) = nil,
 	expand: [2]Expand = {},
 	offset: [2]Offset = {},
 	style: Style = {},
+	event_passthrough: bool = false,
 ) -> ^Widget {
 
 	append(&ctx.widgets, Widget{})
 	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
-	w^ = {} // zero out
+	w^ = {}
+	w.string_id = string_id
+	w.clip = clip
 	w.type = widget_type
 	w.image = image
 	w.aspect_ratio = aspect_ratio
 	w.offset = offset
 	w.expand = expand
-	w.node.parent = ctx.current_parent
+	w.node.parent = ctx.active_parent
 	w.node.index = len(ctx.widgets) - 1
+	w.event_passthrough = event_passthrough
 
 	if image, ok := w.image.(Image); ok {
 		if aspect_ratio, ok := w.aspect_ratio.(f32); !ok {
@@ -386,49 +412,52 @@ create_widget :: proc(
 	}
 
 	_add_widget(ctx, w)
-	_generate_widget_hash(w)
+	_generate_widget_id(w)
 
 	if _, ok := w.type.(Floating); ok {
 		w.z_index += max(int) / 2
 		w.is_floating_descendant = true
 	}
 
-	if !_retrieve_persistant_data(ctx.persistant_data, w) {
-		w.style = style
-	}
+	_retrieve_persistant_data(ctx.persistant_data, w)
+	w.style = style
 
 	return w
 }
 
 // Adds a primitive shape to current parent set in Core_Context
 create_primitive :: proc(ctx: ^Core_Context, primitive: Command_Primitive) {
-	if ctx.current_parent != nil { 	// IMPL: Error
+	if ctx.active_parent != nil { 	// IMPL: Error
 		append(&ctx.primitives, primitive)
-		ctx.current_parent.primitives = ctx.primitives[len(ctx.primitives) - 1 - len(ctx.current_parent.primitives):len(ctx.primitives)]
+		ctx.active_parent.primitives = ctx.primitives[len(ctx.primitives) - 1 - len(ctx.active_parent.primitives):len(ctx.primitives)]
 	}
 }
 
 _add_widget :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	if ctx.current_parent != nil {
-		ctx.current_parent.node.total_children += 1
-
-		if ctx.current_parent.node.first_child == nil {
-			ctx.current_parent.node.first_child = widget
+	if ctx.active_parent != nil {
+		if _, ok := widget.type.(Floating); !ok {
+			ctx.active_parent.node.total_children += 1
+		} else {
+			ctx.active_parent.node.total_floating_children += 1
 		}
 
-		widget.node.prev = ctx.current_parent.node.last_child
-
-		if ctx.current_parent.node.last_child != nil {
-			ctx.current_parent.node.last_child.node.next = widget
+		if ctx.active_parent.node.first_child == nil {
+			ctx.active_parent.node.first_child = widget
 		}
-		ctx.current_parent.node.last_child = widget
 
-		widget.z_index = ctx.current_parent.z_index
-		widget.is_floating_descendant = ctx.current_parent.is_floating_descendant
+		widget.node.prev = ctx.active_parent.node.last_child
+
+		if ctx.active_parent.node.last_child != nil {
+			ctx.active_parent.node.last_child.node.next = widget
+		}
+		ctx.active_parent.node.last_child = widget
+
+		widget.z_index = ctx.active_parent.z_index
+		widget.is_floating_descendant = ctx.active_parent.is_floating_descendant
 	}
 }
 
-_generate_widget_hash :: proc(widget: ^Widget) {
+_generate_widget_id :: proc(widget: ^Widget) {
 	buffer: [size_of(int) * 4]byte
 	offset: int
 	temp: [size_of(int)]u8
@@ -461,7 +490,6 @@ _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widge
 	widget.position = val.position
 	widget.size = val.size
 	widget.events = val.events
-	widget.style = val.style
 
 	if _, ok := widget.type.(Text); ok {
 		widget.accumulated_min = val.accumulated_min

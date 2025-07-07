@@ -4,7 +4,7 @@ import "core:fmt"
 import "core:sort"
 
 /*
-	Layout is totally inspired by CLAY. If you want more indepth explanation or just better layout system, check out CLAY :)
+	Layout is totally inspired by CLAY. for better layout shtuff, check out CLAY :)
 */
 
 Axis :: enum u8 {
@@ -162,7 +162,9 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 	z_index_offset := 0
 	for widget in ctx.stacks.pre {
 		defer {
-			if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border) && ctx.active_widget_id == 0 {
+			if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border) &&
+			   ctx.active_widget_id == 0 &&
+			   !widget.event_passthrough {
 				ctx.hot_widget_id = widget.node.id
 			}
 		}
@@ -173,20 +175,13 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 		case Layout:
 			_position_layout_childs(widget, type)
 		case Text:
-			_expand_widget(widget)
-			_offset_widget(widget)
-			_emit_rect_command(ctx, widget, &z_index_offset)
-			_emit_widget_border_command(ctx, widget, &z_index_offset)
-			_emit_text_command(ctx, widget, type, &z_index_offset)
-			continue // Text never has children hence skip. This loops goes from top to bottom into the tree. Any text will have its position resolved always 
 		}
+
+		_position_clip_childs(widget)
 
 		_expand_widget(widget)
 		_offset_widget(widget)
-		_emit_rect_command(ctx, widget, &z_index_offset)
-		_emit_widget_border_command(ctx, widget, &z_index_offset)
-		_emit_image_command(ctx, widget, &z_index_offset)
-		_emit_widget_primitive_commands(ctx, widget, &z_index_offset)
+		_emit_all(ctx, widget, &z_index_offset)
 	}
 
 	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
@@ -210,10 +205,12 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 	}
 
 	if parent_layout.sizing[axis].kind == .Fit {
-		if parent_layout.direction == axis {
-			parent.size[axis] += widget.size[axis]
-		} else {
-			parent.size[axis] = max(parent.size[axis], widget.size[axis])
+		if parent.is_floating_descendant == widget.is_floating_descendant { 	// we don't want floating elements contributing into non floating widgets
+			if parent_layout.direction == axis {
+				parent.size[axis] += widget.size[axis]
+			} else {
+				parent.size[axis] = max(parent.size[axis], widget.size[axis])
+			}
 		}
 	}
 
@@ -417,13 +414,13 @@ _sizing_apply_aspect_ratio :: proc(widget: ^Widget) {
 		case Layout:
 			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / aspect_ratio
 			widget.size[Axis.Y] = widget.accumulated_min[Axis.Y]
-		// type.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
-		// type.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
+			type.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
+			type.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
 		case Floating:
 			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / aspect_ratio
 			widget.size[Axis.Y] = widget.accumulated_min[Axis.Y]
-		// type.layout.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
-		// type.layout.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
+			type.layout.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
+			type.layout.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
 		case Text:
 			return
 		}
@@ -442,7 +439,6 @@ _sizing_word_wrap :: proc(ctx: ^Core_Context) {
 			if len(type.text) == 0 {
 				continue
 			}
-
 			word_start: int
 			in_word: bool
 			largest_width: f32
@@ -632,6 +628,7 @@ _position_layout_floating :: proc(ctx: ^Core_Context, widget: ^Widget, floating:
 _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 	total_size: Vec2f32
 	for child := widget.node.first_child; child != nil; child = child.node.next {
+		if _, ok := child.type.(Floating); ok {continue}
 		total_size += child.size + layout.child_gap
 	}
 
@@ -730,7 +727,51 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 	}
 }
 
-_emit_border_between_child_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
+_position_clip_childs :: proc(widget: ^Widget) {
+	if clip, ok := widget.clip.(Clip); ok {
+		for child := widget.node.first_child; child != nil; child = child.node.next {
+			if _, ok := child.type.(Floating); ok {continue}
+			for direction in clip.direction {
+				child.position[direction] += clip.value[direction]
+			}
+		}
+	}
+}
+
+_emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
+
+	if clip, ok := widget.clip.(Clip); ok {
+		if ctx.active_clipper != nil {append(&ctx.clips, ctx.active_clipper)}
+		ctx.active_clipper = widget
+		_emit_clip_start_command(ctx, ctx.active_clipper, widget.z_index + z_index_offset^)
+	}
+
+	_emit_rect_command(ctx, widget, z_index_offset)
+	_emit_widget_border_command(ctx, widget, z_index_offset)
+	_emit_image_command(ctx, widget, z_index_offset)
+	_emit_widget_primitive_commands(ctx, widget, z_index_offset)
+	_emit_custom_command(ctx, widget, z_index_offset)
+	_emit_text_command(ctx, widget, z_index_offset)
+
+	if widget.node.next == nil && widget.node.first_child == nil {
+		should_pop: bool
+		for parent := widget.node.parent;; parent = parent.node.parent {
+			if parent == nil || parent == ctx.active_clipper {
+				should_pop = true
+				break
+			}
+			(parent.node.next == nil) or_break
+		}
+
+		if should_pop {
+			old_active, exists := pop_safe(&ctx.clips)
+			ctx.active_clipper = old_active
+			_emit_clip_end_command(ctx, widget.z_index + z_index_offset^)
+			if ctx.active_clipper != nil {
+				_emit_clip_start_command(ctx, ctx.active_clipper, widget.z_index + z_index_offset^)
+			}
+		}
+	}
 }
 
 _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
@@ -742,22 +783,23 @@ _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index
 		command_border.color = border.color
 		command_border.radius = border.radius
 		command_border.thickness = border.thickness
-
 		append(&ctx.render_commands, Render_Command{type = command_border, z_index = z_index^ + widget.z_index})
 		z_index^ += 1
 	}
 }
 
-_emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, text: Text, z_index: ^int) {
-	widget.position.x += widget.style.padding[3]
-	widget.position.y += widget.style.padding[0]
-	command_text: Command_Text
-	command_text.position = widget.position
-	command_text.style = text.style
-	command_text.end = text._end
-	command_text.start = text._start
-	append(&ctx.render_commands, Render_Command{z_index = z_index^ + widget.z_index, type = command_text})
-	z_index^ += 1
+_emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
+	if text, ok := widget.type.(Text); ok {
+		widget.position.x += widget.style.padding[3]
+		widget.position.y += widget.style.padding[0]
+		command_text: Command_Text
+		command_text.position = widget.position
+		command_text.style = text.style
+		command_text.end = text._end
+		command_text.start = text._start
+		append(&ctx.render_commands, Render_Command{z_index = z_index^ + widget.z_index, type = command_text})
+		z_index^ += 1
+	}
 }
 
 _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
@@ -773,7 +815,7 @@ _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	z_index^ += 1
 }
 
-_emit_clip_end_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
+_emit_clip_end_command :: proc(ctx: ^Core_Context, z_index: int) {
 	append(&ctx.render_commands, Render_Command{type = Command_Clip_End{}, z_index = z_index})
 }
 
@@ -790,7 +832,7 @@ _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) 
 		append(
 			&ctx.render_commands,
 			Render_Command {
-				type = Command_Image{position = widget.position, size = widget.size, image_data = image.image_data},
+				type = Command_Image{position = widget.position, size = widget.size, image_data = image.image_data, color = image.tint},
 				z_index = z_index^ + widget.z_index,
 			},
 		)
@@ -800,8 +842,6 @@ _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) 
 
 _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	if len(widget.primitives) > 0 {
-		_emit_clip_start_command(ctx, widget, z_index^ + widget.z_index)
-
 		for &p, i in widget.primitives {
 			switch &v in p {
 			case Primitive_Rect:
@@ -815,11 +855,21 @@ _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_i
 				for &point in v.points {
 					point += widget.position
 				}
+			case Primitive_Custom:
 			}
-			append(&ctx.render_commands, Render_Command{z_index = z_index^ + i + 1 + widget.z_index, type = p})
-		}
 
-		_emit_clip_end_command(ctx, widget, z_index^ + len(widget.primitives) + 1 + widget.z_index)
+			append(&ctx.render_commands, Render_Command{z_index = z_index^ + i + widget.z_index, type = p})
+		}
 	}
 	z_index^ += len(widget.primitives) + 1
+}
+
+_emit_custom_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
+	if custom_data, ok := widget.custom_data.(rawptr); ok {
+		append(
+			&ctx.render_commands,
+			Render_Command{type = Command_Custom{position = widget.position, data = custom_data}, z_index = z_index^ + widget.z_index},
+		)
+		z_index^ += 1
+	}
 }

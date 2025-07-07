@@ -16,6 +16,28 @@ hex :: proc "contextless" (hex: u32 = 0xFFFFFFFF) -> Color {
 	return (transmute([4]u8)hex).abgr
 }
 
+// Specify alignment of child along each axis
+child_alignment :: proc "contextless" (x: Child_Alignment_X = .Left, y: Child_Alignment_Y = .Top) -> Child_Alignment {
+	return {x, y}
+}
+
+clip_x :: proc "contextless" (x: f32) -> Clip {
+	return Clip{{.X}, {.X = x, .Y = 0}}
+}
+
+clip_y :: proc "contextless" (y: f32) -> Clip {
+	return Clip{{.Y}, {.X = 0, .Y = y}}
+}
+
+clip_xy :: proc "contextless" (x, y: f32) -> Clip {
+	return Clip{{.X, .Y}, {.X = x, .Y = y}}
+}
+
+// Expand widget size after layout sizing pass
+expand :: proc "contextless" (x: Expand = {}, y: Expand = {}) -> [2]Expand {
+	return {x, y}
+}
+
 // Increase size by given percentage of parent size
 expand_percent :: proc "contextless" (value: f32) -> Expand {
 	return Expand{value = value, kind = .Percent}
@@ -29,6 +51,11 @@ expand_percent_self :: proc "contextless" (value: f32) -> Expand {
 // Increase size by given value in pixels
 expand_absolute :: proc "contextless" (value: f32) -> Expand {
 	return Expand{value = value, kind = .Absolute}
+}
+
+// Offset widget position after layout position pass
+offset :: proc "contextless" (x: Offset = {}, y: Offset = {}) -> [2]Offset {
+	return {x, y}
 }
 
 // Offset position by given percentage of parent size
@@ -51,7 +78,22 @@ offset_fixed :: proc "contextless" (value: f32) -> Offset {
 	return Offset{value = value, kind = .Fixed}
 }
 
+text :: proc "contextless" (text: string, style: Text_Style = {}) -> Text {
+	return Text{text = text, style = style}
+}
+
 // Layout
+
+floating :: proc "contextless" (
+	layout: Layout = {},
+	parent: Anchor = .Left_Top,
+	element: Anchor = .Left_Top,
+	attachment_to: Attachment_To = .Parent,
+	id: Id = 0,
+) -> Floating {
+	return {layout = layout, id = id, parent = parent, attachment_to = attachment_to, element = element}
+}
+
 layout :: proc "contextless" (
 	sizing: [Axis]Sizing,
 	child_gap: f32 = 0,
@@ -87,7 +129,7 @@ fixed :: proc "contextless" (size: f32) -> Sizing {
 }
 
 // Configure border style 
-border :: proc(color: [4]Color, type: [4]Border_Type = Border_Type.Single, radius: Vec4f32 = 0, thickness: Vec4f32 = 1) -> Border_Style {
+border_style :: proc(color: [4]Color, type: [4]Border_Type = Border_Type.Single, radius: Vec4f32 = 0, thickness: Vec4f32 = 1) -> Border_Style {
 	return Border_Style{color = color, type = type, radius = radius, thickness = thickness}
 }
 
@@ -125,7 +167,7 @@ _build_stacks :: proc(ctx: ^Core_Context) {
 	append(&ctx.stacks.temp, &ctx.widgets[0]) // append root node 
 
 	// Perhaps I should make this a breathd first tree instead of depth first tree
-	// Insight: Widgets are inserted in "pre order traversal" order
+	// Insight: Widgets are inserted in "depth first pre order" order
 
 	for {
 		widget := pop_safe(&ctx.stacks.temp) or_break

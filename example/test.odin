@@ -56,8 +56,8 @@ test :: proc() {
 		Text,
 		Pure_Layout,
 		Floating_Layout,
-	} = .Pure_Layout
-
+		Clip,
+	} = .Clip
 	rl.SetTargetFPS(60)
 
 	for !rl.WindowShouldClose() {
@@ -87,15 +87,15 @@ test :: proc() {
 		cu.begin_ui(&ctx)
 
 		style := cu.Style {
-			color   = CHILD_BACKGROUND,
+			color   = BACKGROUND_COLOR,
 			padding = 2,
-			border  = cu.border(255),
+			border  = cu.border_style(255),
 		}
 
 		root := cu.create_widget(
 			&ctx,
 			cu.Layout{sizing = cu.sizing(cu.fixed(ctx.window_width), cu.fixed(ctx.window_height)), direction = .X, child_gap = 16},
-			style = {padding = 32, color = DEFAULT_BACKGROUND},
+			style = {padding = 32, color = BACKGROUND_COLOR},
 		)
 		cu.push_parent(&ctx, root)
 
@@ -142,10 +142,9 @@ test :: proc() {
 					&ctx,
 					cu.Layout{sizing = cu.sizing(cu.fit(50), cu.fit(50))},
 					aspect_ratio = 16.0 / 9.0,
-					image = cu.Image{&nerd},
+					image = cu.Image{&nerd, 255},
 					style = style,
 				)
-				// cu.create_widget(&ctx, cu.Text{text = "TESTING TEXT 1", style = {font_size = 20, color = WHITE, letter_spacing = 1}}, style = style)
 			}
 			cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, style = style)
 		case .Text:
@@ -162,7 +161,7 @@ test :: proc() {
 					&ctx,
 					cu.Text {
 						text = "TEST_TEXT 1. A QUICK BROWN FOX JUMPS OVER THE LAZY DOG. PERCENT",
-						style = {font_id = 0, letter_spacing = 1, font_size = 20, color = GREEN},
+						style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_PRIMARY_COLOR},
 					},
 					style = style,
 				)
@@ -176,7 +175,7 @@ test :: proc() {
 					&ctx,
 					cu.Text {
 						text = "TEST_TEXT 1. A QUICK BROWN FOX JUMPS OVER THE LAZY DOG. GROW",
-						style = {font_id = 0, letter_spacing = 1, font_size = 20, color = GREEN},
+						style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_PRIMARY_COLOR},
 					},
 					style = style,
 				)
@@ -186,7 +185,10 @@ test :: proc() {
 					defer cu.pop_parent(&ctx)
 					cu.create_widget(
 						&ctx,
-						cu.Text{text = "TEST_TEXT 2. INSIDE GROW", style = {font_id = 0, letter_spacing = 1, font_size = 20, color = GREEN}},
+						cu.Text {
+							text = "TEST_TEXT 2. INSIDE GROW",
+							style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_DISABLED_COLOR},
+						},
 						style = style,
 					)
 					style.padding = 8 //32
@@ -194,7 +196,10 @@ test :: proc() {
 					if cu.push_parent(&ctx, g) {
 						cu.create_widget(
 							&ctx,
-							cu.Text{text = "TEST_TEXT 3. INSIDE GROW 2", style = {font_id = 0, letter_spacing = 1, font_size = 20, color = GREEN}},
+							cu.Text {
+								text = "TEST_TEXT 3. INSIDE GROW 2",
+								style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_SECONDARY_COLOR},
+							},
 							style = style,
 						)
 						cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(70), cu.grow(70))}, style = style)
@@ -205,7 +210,7 @@ test :: proc() {
 								&ctx,
 								cu.Text {
 									text = "TEST_TEXT 4. INSIDE FIT 1",
-									style = {font_id = 0, letter_spacing = 1, font_size = 20, color = GREEN},
+									style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_SECONDARY_COLOR},
 								},
 								style = style,
 							)
@@ -222,12 +227,42 @@ test :: proc() {
 					&ctx,
 					cu.Text {
 						text = "TEST_TEXT 1. A QUICK BROWN FOX JUMPS OVER THE LAZY DOG. FIT",
-						style = {font_id = 0, letter_spacing = 1, font_size = 20, color = GREEN},
+						style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_PRIMARY_COLOR},
 					},
 					style = style,
 				)
 			}
 		case .Floating_Layout:
+			grow_0 := cu.create_widget(&ctx, cu.layout(cu.sizing(cu.grow(), cu.grow())), style = style)
+			grow_1 := cu.create_widget(&ctx, cu.layout(cu.sizing(cu.grow(), cu.grow())), style = style)
+			grow_2 := cu.create_widget(&ctx, cu.layout(cu.sizing(cu.grow(), cu.grow())), style = style)
+			if cu.push_parent(&ctx, grow_0) {
+				grow := cu.create_widget(&ctx, cu.floating(cu.layout(cu.sizing(cu.grow(), cu.grow()))), style = style)
+				cu.pop_parent(&ctx)
+			}
+			if cu.push_parent(&ctx, grow_1) {
+				grow := cu.create_widget(&ctx, cu.floating(cu.layout(cu.sizing(cu.grow(), cu.grow()))), style = style)
+				cu.pop_parent(&ctx)
+			}
+			if cu.push_parent(&ctx, grow_2) {
+				grow := cu.create_widget(&ctx, cu.floating(cu.layout(cu.sizing(cu.grow(), cu.grow()))), style = style)
+				cu.pop_parent(&ctx)
+			}
+		case .Clip:
+			style.padding = 16
+			@(static) clip_val: f32
+			clip_val -= rl.GetMouseWheelMove() * rl.GetFrameTime() * 100
+			fmt.println(clip_val)
+			grow_0 := cu.create_widget(
+				&ctx,
+				cu.layout(cu.sizing(cu.grow(), cu.grow())),
+				clip = cu.Clip{{.Y, .X}, {.X = clip_val, .Y = clip_val}},
+				style = style,
+			)
+			if cu.push_parent(&ctx, grow_0) {
+				grow := cu.create_widget(&ctx, cu.layout(cu.sizing(cu.grow(), cu.grow())), style = style)
+				cu.pop_parent(&ctx)
+			}
 		}
 
 		cu.end_ui(&ctx)

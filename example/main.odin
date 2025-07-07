@@ -7,19 +7,10 @@ import "core:fmt"
 import "core:time"
 import rl "vendor:raylib"
 
+import "vendor:sdl3"
+
 import cu "./../"
 
-WHITE :: cu.Color{255, 255, 255, 255}
-BLACK :: cu.Color{0, 0, 0, 255}
-RED :: cu.Color{255, 130, 100, 255}
-ORANGE :: cu.Color{255, 180, 130, 255}
-GREEN :: cu.Color{230, 255, 170, 255}
-BLUE :: cu.Color{170, 230, 255, 255}
-CHILD_BACKGROUND :: [4]u8{52, 52, 84, 255} // #2A2A40
-DEFAULT_BACKGROUND :: [4]u8{20, 20, 36, 255} // #1E1E2E
-HOVER_COLOR :: [4]u8{58, 58, 90, 255} // #3A3A5A
-PRESS_COLOR :: [4]u8{136, 221, 255, 255} // #88DDFF
-LONG_PRESS_COLOR :: [4]u8{255, 136, 170, 255} // #FF88AA
 
 main :: proc() {
 	for arg in runtime.args__ {
@@ -43,32 +34,32 @@ render :: proc(ctx: cu.Core_Context, texture: rl.Texture, shader: rl.Shader) {
 	for cmd in ctx.render_commands {
 		switch v in cmd.type {
 		case cu.Command_Rect:
-			rl.DrawRectangleV(v.position, v.size, cast(rl.Color)v.color)
-		// size := v.size / 2
-		// pos := v.position + size
-		// rad := v.border_radius
-		// color: [4]f32
-		// for c, i in v.color {
-		// 	color[i] = f32(c) / 255
-		// }
-		//
-		// rl.BeginShaderMode(shader)
-		// rl.SetShaderValue(shader, rect_center_loc, &pos, .VEC2)
-		// rl.SetShaderValue(shader, rect_size_loc, &size, .VEC2)
-		// rl.SetShaderValue(shader, border_radius_loc, &rad, .VEC4)
-		// rl.SetShaderValue(shader, color_loc, &color, .VEC4)
-		//
-		// src := rl.Rectangle{0, 0, 1, 1}
-		// dst := rl.Rectangle{v.position.x, v.position.y, v.size.x, v.size.y}
-		//
-		// rl.DrawTexturePro(texture, src, dst, {}, 0.0, rl.WHITE)
-		// rl.EndShaderMode()
+			// rl.DrawRectangleV(v.position, v.size, cast(rl.Color)v.color)
+			size := v.size / 2
+			pos := v.position + size
+			rad := v.border_radius
+			color: [4]f32
+			for c, i in v.color {
+				color[i] = f32(c) / 255
+			}
+
+			rl.BeginShaderMode(shader)
+			rl.SetShaderValue(shader, rect_center_loc, &pos, .VEC2)
+			rl.SetShaderValue(shader, rect_size_loc, &size, .VEC2)
+			rl.SetShaderValue(shader, border_radius_loc, &rad, .VEC4)
+			rl.SetShaderValue(shader, color_loc, &color, .VEC4)
+
+			src := rl.Rectangle{0, 0, 1, 1}
+			dst := rl.Rectangle{v.position.x, v.position.y, v.size.x, v.size.y}
+
+			rl.DrawTexturePro(texture, src, dst, {}, 0.0, rl.WHITE)
+			rl.EndShaderMode()
 		case cu.Command_Text:
 			initial_y := v.position.y
 
 			for l in ctx.text_lines[v.start:v.end] {
 				rl.DrawTextEx(
-					rl.GetFontDefault(),
+					jet_brains_mono,
 					fmt.ctprint(l),
 					{v.position.x, initial_y},
 					v.style.font_size,
@@ -95,19 +86,21 @@ render :: proc(ctx: cu.Core_Context, texture: rl.Texture, shader: rl.Shader) {
 			case cu.Primitive_Points:
 			case cu.Primitive_Ellipse:
 				rl.DrawEllipse(cast(i32)p.position.x, cast(i32)p.position.y, p.size.x, p.size.y, cast(rl.Color)p.color)
+			case cu.Primitive_Custom:
 			}
 		case cu.Command_Border:
 			rl.DrawRectangleLinesEx({v.position.x, v.position.y, v.size.x, v.size.y}, v.thickness[0], cast(rl.Color)v.color[0])
 		case cu.Command_Image:
 			image := cast(^rl.Texture)v.image_data
-			rl.DrawTextureEx(image^, v.position, 0, v.size.x / cast(f32)image.width, rl.WHITE)
+			rl.DrawTextureEx(image^, v.position, 0, v.size.x / cast(f32)image.width, cast(rl.Color)v.color)
+		case cu.Command_Custom:
 		}
 	}
 }
 
 measure_text :: proc(text: string, config: cu.Text_Style) -> f32 {
 	width: f32
-	font := rl.GetFontDefault()
+	font := jet_brains_mono
 	scale := config.font_size / f32(font.baseSize)
 	for r in text {
 		advance: f32
