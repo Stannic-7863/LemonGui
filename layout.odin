@@ -171,16 +171,19 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 		switch type in widget.type {
 		case Floating:
 			_position_layout_floating(ctx, widget, type)
+			_expand_widget(widget)
+			_offset_widget(widget)
 			_position_layout_childs(widget, type.layout)
 		case Layout:
+			_expand_widget(widget)
+			_offset_widget(widget)
 			_position_layout_childs(widget, type)
 		case Text:
+			_expand_widget(widget)
+			_offset_widget(widget)
 		}
 
 		_position_clip_childs(widget)
-
-		_expand_widget(widget)
-		_offset_widget(widget)
 		_emit_all(ctx, widget, &z_index_offset)
 	}
 
@@ -240,9 +243,9 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 	}
 
 	if widget_layout.sizing[axis].kind == .Fit {
-		widget.size[axis] = max(widget.size[axis], widget.accumulated_min[axis])
-		widget.size[axis] = max(widget.size[axis], widget_layout.sizing[axis].min)
-		widget.size[axis] = min(widget.size[axis], widget_layout.sizing[axis].max)
+		widget.accumulated_min[axis] = max(widget.accumulated_min[axis], widget_layout.sizing[axis].min)
+		widget.accumulated_min[axis] = min(widget.accumulated_min[axis], widget_layout.sizing[axis].max)
+		widget.size[axis] = widget.accumulated_min[axis]
 	}
 }
 
@@ -740,10 +743,19 @@ _position_clip_childs :: proc(widget: ^Widget) {
 
 _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
 
+	// NOTE: I have no clue as to wtf z index voodoo happens here. For now it works. Any clipping issues should stem from here
+
+	z_index_offset^ += 10 // offset each batch of commands 
+
 	if clip, ok := widget.clip.(Clip); ok {
-		if ctx.active_clipper != nil {append(&ctx.clips, ctx.active_clipper)}
+
+		if ctx.active_clipper != nil && ctx.active_clipper != widget {
+			append(&ctx.clips, ctx.active_clipper)
+		}
+
 		ctx.active_clipper = widget
 		_emit_clip_start_command(ctx, ctx.active_clipper, widget.z_index + z_index_offset^)
+		z_index_offset^ += 5
 	}
 
 	_emit_rect_command(ctx, widget, z_index_offset)
@@ -760,15 +772,19 @@ _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
 				should_pop = true
 				break
 			}
-			(parent.node.next == nil) or_break
+			if parent.node.next != nil {
+				break
+			}
 		}
 
 		if should_pop {
+			z_index_offset^ += 5
+			_emit_clip_end_command(ctx, widget.z_index + z_index_offset^)
 			old_active, exists := pop_safe(&ctx.clips)
 			ctx.active_clipper = old_active
-			_emit_clip_end_command(ctx, widget.z_index + z_index_offset^)
 			if ctx.active_clipper != nil {
 				_emit_clip_start_command(ctx, ctx.active_clipper, widget.z_index + z_index_offset^)
+				z_index_offset^ += 5
 			}
 		}
 	}
@@ -820,10 +836,17 @@ _emit_clip_end_command :: proc(ctx: ^Core_Context, z_index: int) {
 }
 
 _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
-	append(
-		&ctx.render_commands,
-		Render_Command{type = Command_Clip_Start{clip_size = widget.size, clip_position = widget.position}, z_index = z_index},
-	)
+	clip_size := widget.size
+	clip_position := widget.position
+
+	if border, ok := widget.style.border.(Border_Style); ok {
+		clip_position.x -= border.thickness[3]
+		clip_position.y -= border.thickness[0]
+		clip_size.x += border.thickness[1] + border.thickness[3]
+		clip_size.y += border.thickness[2] + border.thickness[0]
+	}
+
+	append(&ctx.render_commands, Render_Command{type = Command_Clip_Start{clip_size = clip_size, clip_position = clip_position}, z_index = z_index})
 }
 
 _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
@@ -836,8 +859,8 @@ _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) 
 				z_index = z_index^ + widget.z_index,
 			},
 		)
-		z_index^ += 1
 	}
+	z_index^ += 1
 }
 
 _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
@@ -861,7 +884,7 @@ _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_i
 			append(&ctx.render_commands, Render_Command{z_index = z_index^ + i + widget.z_index, type = p})
 		}
 	}
-	z_index^ += len(widget.primitives) + 1
+	z_index^ += len(widget.primitives)
 }
 
 _emit_custom_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
@@ -870,6 +893,6 @@ _emit_custom_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int)
 			&ctx.render_commands,
 			Render_Command{type = Command_Custom{position = widget.position, data = custom_data}, z_index = z_index^ + widget.z_index},
 		)
-		z_index^ += 1
 	}
+	z_index^ += 1
 }

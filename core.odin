@@ -372,6 +372,7 @@ end_ui :: proc(ctx: ^Core_Context) {
 
 	ctx.mouse.events = {}
 	ctx.mouse.old_position = ctx.mouse.position
+	ctx.active_clipper = nil // Technically it should not remain but it does?
 	clear(&ctx.primitives)
 	clear(&ctx.stacks.post_r)
 	clear(&ctx.stacks.pre)
