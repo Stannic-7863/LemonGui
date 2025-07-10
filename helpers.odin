@@ -21,16 +21,8 @@ child_alignment :: proc "contextless" (x: Child_Alignment_X = .Left, y: Child_Al
 	return {x, y}
 }
 
-clip_x :: proc "contextless" (x: f32) -> Clip {
-	return Clip{{.X}, {.X = x, .Y = 0}}
-}
-
-clip_y :: proc "contextless" (y: f32) -> Clip {
-	return Clip{{.Y}, {.X = 0, .Y = y}}
-}
-
-clip_xy :: proc "contextless" (x, y: f32) -> Clip {
-	return Clip{{.X, .Y}, {.X = x, .Y = y}}
+clip :: proc "contextless" (x: Clip = {}, y: Clip = {}) -> [2]Clip {
+	return {x, y}
 }
 
 // Expand widget size after layout sizing pass

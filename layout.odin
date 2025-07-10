@@ -747,19 +747,18 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 }
 
 _position_clip_childs :: proc(widget: ^Widget) {
-	if clip, ok := widget.clip.(Clip); ok {
+	if clip, ok := widget.clip.([2]Clip); ok {
 		for child := widget.node.first_child; child != nil; child = child.node.next {
 			if _, ok := child.type.(Floating); ok {continue}
-			for direction in clip.direction {
-				child.position[direction] += clip.value[direction]
-			}
+			child.position.x += clip.x.value
+			child.position.y += clip.y.value
 		}
 	}
 }
 
 
 _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
-	if clip, ok := widget.clip.(Clip); ok {
+	if clip, ok := widget.clip.([2]Clip); ok {
 		if ctx.active_clipper != nil {
 			if ctx.active_clipper == widget.node.prev {
 				_emit_clip_end_command(ctx, ctx.active_clipper, ctx.active_clipper.z_index + z_index_offset^)

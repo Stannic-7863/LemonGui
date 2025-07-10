@@ -270,15 +270,14 @@ Image :: struct {
 	tint:       Color,
 }
 
-Clip :: struct {
-	direction: bit_set[Axis],
-	value:     [Axis]f32,
-}
-
 Widget_Type :: union {
 	Layout,
 	Floating,
 	Text,
+}
+
+Clip :: struct {
+	value: f32,
 }
 
 Widget :: struct {
@@ -290,7 +289,7 @@ Widget :: struct {
 	image:                  Maybe(Image),
 	primitives:             []Command_Primitive,
 	string_id:              string,
-	clip:                   Maybe(Clip),
+	clip:                   Maybe([2]Clip),
 	accumulated_min:        Vec2f32,
 	size, position:         Vec2f32,
 	custom_data:            Maybe(rawptr),
@@ -389,7 +388,7 @@ create_widget :: proc(
 	string_id: string = "",
 	aspect_ratio: Maybe(f32) = nil,
 	image: Maybe(Image) = nil,
-	clip: Maybe(Clip) = nil,
+	clip: Maybe([2]Clip) = nil,
 	expand: [2]Expand = {},
 	offset: [2]Offset = {},
 	style: Style = {},
