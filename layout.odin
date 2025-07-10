@@ -2,6 +2,7 @@ package ui_core
 
 import "core:fmt"
 import "core:sort"
+import "core:unicode/utf8"
 
 /*
 	Layout is totally inspired by CLAY. for better layout shtuff, check out CLAY :)
@@ -97,10 +98,10 @@ Sizing :: struct {
 }
 
 @(private = "file")
-Word_Measure :: struct {
-	text:          string,
-	start_index:   int,
-	spaces_before: i32,
+Measured_Word :: struct {
+	word:          string,
+	word_start:    int,
+	spaces_before: int,
 	width:         f32,
 }
 
@@ -431,82 +432,41 @@ _sizing_apply_aspect_ratio :: proc(widget: ^Widget) {
 }
 
 _sizing_word_wrap :: proc(ctx: ^Core_Context) {
-	measured_words := make([dynamic]Word_Measure, context.temp_allocator)
+	measured_words := make([dynamic]Measured_Word, context.temp_allocator)
 	for widget in ctx.stacks.pre {
 		switch &type in widget.type {
-		case Layout:
-			continue
-		case Floating:
+		case Layout, Floating:
 			continue
 		case Text:
-			if len(type.text) == 0 {
-				continue
-			}
-			word_start: int
-			in_word: bool
-			largest_width: f32
-			for r, i in type.text {
-				if r == ' ' {
-					if in_word {
-						w := type.text[word_start:i]
+			_sizing_get_measured_words(ctx, type, &measured_words)
 
-						spaces_before: i32 = 0
-						for r_w in w {
-							if r_w != ' ' {
-								break
-							}
-							spaces_before += 1
-							word_start += 1
-						}
-						word := type.text[word_start:i]
-						width := ctx.text_measure_proc(word, type.style)
-						largest_width = max(width, largest_width)
-						append(&measured_words, Word_Measure{text = word, width = width, spaces_before = spaces_before, start_index = word_start})
-
-						word_start = i
-						in_word = false
-					}
-				} else {
-					if !in_word {
-						in_word = true
-					}
-				}
-			}
-
-			if in_word && word_start < len(type.text) {
-				word := type.text[word_start:]
-				space_count: i32 = 0
-
-				for wr, _ in word {
-					if wr != ' ' {
-						break
-					}
-					space_count += 1
-					word_start += 1
-				}
-				word = type.text[word_start:]
-				width := ctx.text_measure_proc(word, type.style)
-				largest_width = max(width, largest_width)
-				append(&measured_words, Word_Measure{text = word, width = width, spaces_before = space_count, start_index = word_start})
-			}
-
-			x: f32 = 0
+			accumulated_width: f32 = 0
 			space_width := ctx.text_measure_proc(" ", type.style)
 
-			wrapping: bool
 			line_start: int = 0
 
+			largest_width: f32
 			widget_lines_start := len(ctx.text_lines)
-			x_padding, y_padding := _get_axis_padding(.X, widget.style.padding), _get_axis_padding(.Y, widget.style.padding)
-			for w in measured_words {
-				x += space_width * f32(w.spaces_before)
-				if x + w.width > widget.size.x - x_padding {
-					x = 0
-					append(&ctx.text_lines, type.text[line_start:w.start_index])
-					line_start = w.start_index
-					wrapping = true
+			x_padding := _get_axis_padding(.X, widget.style.padding)
+			additional_height: f32 = 0
+			for w, index in measured_words {
+				if w.word == "\n" {
+					accumulated_width = 0
+					append(&ctx.text_lines, type.text[line_start:w.word_start])
+					line_start = w.word_start
+					if index == len(measured_words) - 1 {
+						additional_height += (type.style.font_size + type.style.line_spacing)
+					}
+					continue
 				}
-				x += w.width
+				largest_width = max(largest_width, w.width)
+				accumulated_width += space_width * f32(w.spaces_before)
+				if accumulated_width + w.width > widget.size.x - x_padding {
+					accumulated_width = 0
+					append(&ctx.text_lines, type.text[line_start:w.word_start])
+					line_start = w.word_start
+				}
+				accumulated_width += w.width
 			}
 
 			if line_start < len(type.text) {
@@ -514,10 +474,66 @@ _sizing_word_wrap :: proc(ctx: ^Core_Context) {
 			}
 			type._start = widget_lines_start
 			type._end = len(ctx.text_lines)
-			widget.size.y = f32(type._end - type._start) * (type.style.font_size + type.style.line_spacing)
+			widget.size.y = f32(type._end - type._start) * (type.style.font_size + type.style.line_spacing) + additional_height
 			widget.accumulated_min = {largest_width + x_padding, widget.size.y}
+
+
 			clear(&measured_words)
 		}
+	}
+}
+
+_sizing_get_measured_words :: proc(ctx: ^Core_Context, text: Text, measured_words: ^[dynamic]Measured_Word) {
+	word_start_byte_index, spaces_before_word, byte_index: int
+
+	for byte_index < len(text.text) {
+		r := utf8.rune_at(text.text, byte_index)
+
+		if r == '\n' {
+			if byte_index > word_start_byte_index {
+				word := text.text[word_start_byte_index:byte_index]
+				width := ctx.text_measure_proc(word, text.style)
+				append(measured_words, Measured_Word{word = word, width = width, word_start = word_start_byte_index})
+			}
+			byte_index += 1
+			word_start_byte_index = byte_index
+			append(measured_words, Measured_Word{word = "\n", spaces_before = spaces_before_word, word_start = word_start_byte_index})
+			spaces_before_word = 0
+			continue
+		}
+
+		if r == ' ' {
+			for byte_index < len(text.text) {
+				r2 := utf8.rune_at(text.text, byte_index)
+				if r2 != ' ' {
+					break
+				}
+				spaces_before_word += 1
+				byte_index += 1
+			}
+			word_start_byte_index = byte_index
+			continue
+		}
+
+		for byte_index < len(text.text) {
+			r2 := utf8.rune_at(text.text, byte_index)
+			if r2 == ' ' || r2 == '\n' {
+				break
+			}
+			byte_index += 1
+		}
+
+		word := text.text[word_start_byte_index:byte_index]
+		width := ctx.text_measure_proc(word, text.style)
+		append(measured_words, Measured_Word{word = word, width = width, spaces_before = spaces_before_word, word_start = word_start_byte_index})
+		word_start_byte_index = byte_index
+		spaces_before_word = 0
+	}
+
+	if word_start_byte_index < len(text.text) {
+		word := text.text[word_start_byte_index:]
+		width := ctx.text_measure_proc(word, text.style)
+		append(measured_words, Measured_Word{word = word, width = width, spaces_before = spaces_before_word, word_start = word_start_byte_index})
 	}
 }
 
@@ -741,21 +757,24 @@ _position_clip_childs :: proc(widget: ^Widget) {
 	}
 }
 
+
 _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
-
-	// NOTE: I have no clue as to wtf z index voodoo happens here. For now it works. Any clipping issues should stem from here
-
-	z_index_offset^ += 10 // offset each batch of commands 
-
 	if clip, ok := widget.clip.(Clip); ok {
-
-		if ctx.active_clipper != nil && ctx.active_clipper != widget {
-			append(&ctx.clips, ctx.active_clipper)
+		if ctx.active_clipper != nil {
+			if ctx.active_clipper == widget.node.prev {
+				_emit_clip_end_command(ctx, ctx.active_clipper, ctx.active_clipper.z_index + z_index_offset^)
+				z_index_offset^ += 1
+				ctx.active_clipper = nil
+			} else if ctx.active_clipper != widget {
+				_emit_clip_end_command(ctx, ctx.active_clipper, ctx.active_clipper.z_index + z_index_offset^)
+				z_index_offset^ += 1
+				append(&ctx.clips, ctx.active_clipper)
+			}
 		}
 
 		ctx.active_clipper = widget
-		_emit_clip_start_command(ctx, ctx.active_clipper, widget.z_index + z_index_offset^)
-		z_index_offset^ += 5
+		_emit_clip_start_command(ctx, widget, widget.z_index + z_index_offset^)
+		z_index_offset^ += 1
 	}
 
 	_emit_rect_command(ctx, widget, z_index_offset)
@@ -766,28 +785,49 @@ _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
 	_emit_text_command(ctx, widget, z_index_offset)
 
 	if widget.node.next == nil && widget.node.first_child == nil {
-		should_pop: bool
-		for parent := widget.node.parent;; parent = parent.node.parent {
-			if parent == nil || parent == ctx.active_clipper {
-				should_pop = true
+		for parent := widget.node.parent; parent != nil; parent = parent.node.parent {
+			if parent == ctx.active_clipper {
+				_emit_clip_end_command(ctx, ctx.active_clipper, ctx.active_clipper.z_index + z_index_offset^)
+				z_index_offset^ += 1
+				ctx.active_clipper = nil
+
+				if len(ctx.clips) > 0 {
+					ctx.active_clipper = pop(&ctx.clips)
+					_emit_clip_start_command(ctx, ctx.active_clipper, ctx.active_clipper.z_index + z_index_offset^)
+					z_index_offset^ += 1
+				}
 				break
 			}
 			if parent.node.next != nil {
 				break
 			}
 		}
-
-		if should_pop {
-			z_index_offset^ += 5
-			_emit_clip_end_command(ctx, widget.z_index + z_index_offset^)
-			old_active, exists := pop_safe(&ctx.clips)
-			ctx.active_clipper = old_active
-			if ctx.active_clipper != nil {
-				_emit_clip_start_command(ctx, ctx.active_clipper, widget.z_index + z_index_offset^)
-				z_index_offset^ += 5
-			}
-		}
 	}
+}
+
+
+_emit_clip_end_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
+	append(&ctx.render_commands, Render_Command{type = Command_Clip_End{clipper_id = widget.string_id}, z_index = z_index})
+}
+
+_emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
+	clip_size := widget.size
+	clip_position := widget.position
+
+	if border, ok := widget.style.border.(Border_Style); ok {
+		clip_position.x -= border.thickness[3]
+		clip_position.y -= border.thickness[0]
+		clip_size.x += border.thickness[1] + border.thickness[3]
+		clip_size.y += border.thickness[2] + border.thickness[0]
+	}
+
+	append(
+		&ctx.render_commands,
+		Render_Command {
+			type = Command_Clip_Start{clip_size = clip_size, clip_position = clip_position, clipper_id = widget.string_id},
+			z_index = z_index,
+		},
+	)
 }
 
 _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
@@ -831,24 +871,6 @@ _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	z_index^ += 1
 }
 
-_emit_clip_end_command :: proc(ctx: ^Core_Context, z_index: int) {
-	append(&ctx.render_commands, Render_Command{type = Command_Clip_End{}, z_index = z_index})
-}
-
-_emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
-	clip_size := widget.size
-	clip_position := widget.position
-
-	if border, ok := widget.style.border.(Border_Style); ok {
-		clip_position.x -= border.thickness[3]
-		clip_position.y -= border.thickness[0]
-		clip_size.x += border.thickness[1] + border.thickness[3]
-		clip_size.y += border.thickness[2] + border.thickness[0]
-	}
-
-	append(&ctx.render_commands, Render_Command{type = Command_Clip_Start{clip_size = clip_size, clip_position = clip_position}, z_index = z_index})
-}
-
 _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	image, ok := widget.image.(Image)
 	if ok {
@@ -859,8 +881,8 @@ _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) 
 				z_index = z_index^ + widget.z_index,
 			},
 		)
+		z_index^ += 1
 	}
-	z_index^ += 1
 }
 
 _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
@@ -883,8 +905,8 @@ _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_i
 
 			append(&ctx.render_commands, Render_Command{z_index = z_index^ + i + widget.z_index, type = p})
 		}
+		z_index^ += len(widget.primitives)
 	}
-	z_index^ += len(widget.primitives)
 }
 
 _emit_custom_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
@@ -893,6 +915,6 @@ _emit_custom_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int)
 			&ctx.render_commands,
 			Render_Command{type = Command_Custom{position = widget.position, data = custom_data}, z_index = z_index^ + widget.z_index},
 		)
+		z_index^ += 1
 	}
-	z_index^ += 1
 }

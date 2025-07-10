@@ -158,9 +158,12 @@ Command_Text :: struct {
 Command_Clip_Start :: struct {
 	clip_position: Vec2f32,
 	clip_size:     Vec2f32,
+	clipper_id:    string,
 }
 
-Command_Clip_End :: struct {}
+Command_Clip_End :: struct {
+	clipper_id: string,
+}
 
 // Primitives are added to command list as they are. With out any changes
 Command_Primitive :: union {
@@ -372,7 +375,8 @@ end_ui :: proc(ctx: ^Core_Context) {
 
 	ctx.mouse.events = {}
 	ctx.mouse.old_position = ctx.mouse.position
-	ctx.active_clipper = nil // Technically it should not remain but it does?
+	ctx.active_clipper = nil
+	clear(&ctx.clips)
 	clear(&ctx.primitives)
 	clear(&ctx.stacks.post_r)
 	clear(&ctx.stacks.pre)
