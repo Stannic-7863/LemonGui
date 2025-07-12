@@ -21,14 +21,17 @@ child_alignment :: proc "contextless" (x: Child_Alignment_X = .Left, y: Child_Al
 	return {x, y}
 }
 
+// Set clip to custom amount provided. Negative values to move children up. Positive values to move children down. Value is multiplied by speed before being added to children position.
 clip_custom :: proc "contextless" (value: f32, speed: f32 = 1) -> Clip {
 	return Clip{type = .Custom, value = value, speed = speed}
 }
 
+// Set clip to auto. Only handles scroll events.
 clip_auto :: proc "contextless" (speed: f32 = 1) -> Clip {
 	return Clip{type = .Auto, speed = speed}
 }
 
+// Return clipping structure. Defaults to custom
 clip :: proc "contextless" (x: Clip = {}, y: Clip = {}) -> [2]Clip {
 	return {x, y}
 }
@@ -83,7 +86,6 @@ text :: proc "contextless" (text: string, wrap: Wrap_Kind = .Words, style: Text_
 }
 
 // Layout
-
 floating :: proc "contextless" (
 	layout: Layout = {},
 	parent: Anchor = .Left_Top,

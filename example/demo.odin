@@ -65,7 +65,10 @@ demo :: proc() {
 	edit.init(&state, context.allocator, context.allocator)
 	edit.setup_once(&state, &buffer)
 
+	buttons_event_log: [dynamic]string
+
 	for !rl.WindowShouldClose() {
+		defer clear(&buttons_event_log)
 		ctx.window_width = cast(f32)rl.GetScreenWidth()
 		ctx.window_height = cast(f32)rl.GetScreenHeight()
 		ctx.delta_time = rl.GetFrameTime()
@@ -173,10 +176,24 @@ demo :: proc() {
 		@(static) sidebar_clip_val: f32
 		sidebar_clip_val += rl.GetMouseWheelMove() * 15
 
-		if frame(&ctx, "Buttons", {24, 12, 12, 12}, 8, clip_value = sidebar_clip_val) {
-			button(&ctx, "Test 1", &tick, "A VERY BIG TOOL TIP. A VERY BIG TOOL TIP INDEED. A VERY BIG TOOL TIP INDEED.")
-			button(&ctx, "Test 2", &tick, "A VERY BIG TOOL TIP. A VERY BIG TOOL TIP INDEED. A VERY BIG TOOL TIP INDEED.")
-			button(&ctx, "Test 3", &tick, "A VERY BIG TOOL TIP. A VERY BIG TOOL TIP INDEED. A VERY BIG TOOL TIP INDEED.")
+		if frame(&ctx, "Buttons", {24, 12, 12, 12}, 16, clip_value = sidebar_clip_val) {
+			e_1 := button(&ctx, "Test 1", &tick, "Flickering is due to Id's not being created with constant data.")
+			e_2 := button(&ctx, "Test 2", &tick, "Reading tool tips?")
+			e_3 := button(&ctx, "Test 3", &tick, "Well well well")
+
+			for e in e_1 {
+				e_string := reflect.enum_string(e)
+				append(&buttons_event_log, e_string)
+			}
+			for e in e_2 {
+				e_string := reflect.enum_string(e)
+				append(&buttons_event_log, e_string)
+			}
+			for e in e_3 {
+				e_string := reflect.enum_string(e)
+				append(&buttons_event_log, e_string)
+			}
+
 			@(static) toggle: bool
 			@(static) label: string
 			toggle_button(&ctx, label, &toggle, nil, "Toggle to reveal secrets of universe")
@@ -190,6 +207,15 @@ demo :: proc() {
 				}
 			} else {
 				label = "Toggle"
+			}
+
+			if frame(&ctx, "Button_logs") {
+
+				for log in buttons_event_log {
+					cu.create_widget(&ctx, cu.text(log, .None, {color = TEXT_PRIMARY_COLOR, font_size = 20, letter_spacing = 1}))
+				}
+
+				cu.pop_parent(&ctx)
 			}
 
 			cu.pop_parent(&ctx)
@@ -367,8 +393,10 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: rawptr, tooltip: Mayb
 toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool, icon: rawptr, tooltip: Maybe(string)) -> cu.Widget_Events {
 
 	border_style := cu.border_style({BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, ERROR_COLOR}, cu.Border_Type.Single, 0, 1)
+	text_color := TEXT_DISABLED_COLOR
 	if toggle^ {
 		border_style = cu.border_style({BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, SUCCESS_COLOR}, cu.Border_Type.Single, 0, {1, 1, 1, 1})
+		text_color = TEXT_PRIMARY_COLOR
 	}
 
 	body := cu.create_widget(
@@ -387,7 +415,7 @@ toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool, icon:
 
 		label_widget := cu.create_widget(
 			ctx,
-			cu.text(label, style = cu.Text_Style{color = TEXT_PRIMARY_COLOR, font_size = 16, letter_spacing = 1}),
+			cu.text(label, style = cu.Text_Style{color = text_color, font_size = 16, letter_spacing = 1}),
 			event_passthrough = true,
 		)
 
