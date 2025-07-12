@@ -41,23 +41,22 @@ test :: proc() {
 	defer cu.deinit_core_context(&ctx)
 	ctx.text_measure_proc = measure_text
 
-	sdf_shader := rl.LoadShader("", "./rounded_rect_shader.frag")
+	sdf_shader := rl.LoadShader("", "./assets/rounded_rect_shader.frag")
 	img := rl.GenImageColor(1, 1, rl.WHITE)
 	render_texture := rl.LoadTextureFromImage(img)
 	rl.UnloadImage(img)
 
-	nerd := rl.LoadTexture("./nerd.jpg")
-
-	defer rl.UnloadTexture(nerd)
 	defer rl.UnloadTexture(render_texture)
 	defer rl.UnloadShader(sdf_shader)
+
+	jet_brains_mono = rl.LoadFontEx("./assets/JetBrainsMono-Regular.ttf", 64, nil, 0)
 
 	test_mode: enum {
 		Text,
 		Pure_Layout,
 		Floating_Layout,
 		Clip,
-	} = .Clip
+	} = .Text
 	rl.SetTargetFPS(60)
 
 	for !rl.WindowShouldClose() {
@@ -65,6 +64,8 @@ test :: proc() {
 		ctx.window_height = cast(f32)rl.GetScreenHeight()
 		ctx.delta_time = rl.GetFrameTime() * 2
 		ctx.mouse.position = rl.GetMousePosition()
+		ctx.mouse.scroll = rl.GetMouseWheelMove()
+		ctx.mouse.scroll_v = rl.GetMouseWheelMoveV()
 
 		if rl.IsMouseButtonDown(.LEFT) {ctx.mouse.events += {.Left_Down}}
 		if rl.IsMouseButtonDown(.RIGHT) {ctx.mouse.events += {.Right_Down}}
@@ -138,13 +139,7 @@ test :: proc() {
 				defer cu.pop_parent(&ctx)
 				cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, aspect_ratio = 16.0 / 9.0, style = style)
 				cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fit(50), cu.fit(50))}, aspect_ratio = 16.0 / 9.0, style = style)
-				cu.create_widget(
-					&ctx,
-					cu.Layout{sizing = cu.sizing(cu.fit(50), cu.fit(50))},
-					aspect_ratio = 16.0 / 9.0,
-					image = cu.Image{&nerd, 255},
-					style = style,
-				)
+				cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fit(50), cu.fit(50))}, aspect_ratio = 16.0 / 9.0, style = style)
 			}
 			cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.fixed(50), cu.fixed(50))}, style = style)
 		case .Text:
@@ -161,7 +156,7 @@ test :: proc() {
 					&ctx,
 					cu.Text {
 						text = "TEST_TEXT 1. A QUICK BROWN FOX JUMPS OVER THE LAZY DOG. PERCENT",
-						style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_PRIMARY_COLOR},
+						style = {letter_spacing = 1, font_size = 20, color = TEXT_PRIMARY_COLOR},
 					},
 					style = style,
 				)
@@ -175,7 +170,7 @@ test :: proc() {
 					&ctx,
 					cu.Text {
 						text = "TEST_TEXT 1. A QUICK BROWN FOX JUMPS OVER THE LAZY DOG. GROW",
-						style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_PRIMARY_COLOR},
+						style = {letter_spacing = 1, font_size = 20, color = TEXT_PRIMARY_COLOR},
 					},
 					style = style,
 				)
@@ -185,10 +180,7 @@ test :: proc() {
 					defer cu.pop_parent(&ctx)
 					cu.create_widget(
 						&ctx,
-						cu.Text {
-							text = "TEST_TEXT 2. INSIDE GROW",
-							style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_DISABLED_COLOR},
-						},
+						cu.Text{text = "TEST_TEXT 2. INSIDE GROW", style = {letter_spacing = 1, font_size = 20, color = TEXT_DISABLED_COLOR}},
 						style = style,
 					)
 					style.padding = 8 //32
@@ -196,10 +188,7 @@ test :: proc() {
 					if cu.push_parent(&ctx, g) {
 						cu.create_widget(
 							&ctx,
-							cu.Text {
-								text = "TEST_TEXT 3. INSIDE GROW 2",
-								style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_SECONDARY_COLOR},
-							},
+							cu.Text{text = "TEST_TEXT 3. INSIDE GROW 2", style = {letter_spacing = 1, font_size = 20, color = TEXT_SECONDARY_COLOR}},
 							style = style,
 						)
 						cu.create_widget(&ctx, cu.Layout{sizing = cu.sizing(cu.grow(70), cu.grow(70))}, style = style)
@@ -210,7 +199,7 @@ test :: proc() {
 								&ctx,
 								cu.Text {
 									text = "TEST_TEXT 4. INSIDE FIT 1",
-									style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_SECONDARY_COLOR},
+									style = {letter_spacing = 1, font_size = 20, color = TEXT_SECONDARY_COLOR},
 								},
 								style = style,
 							)
@@ -227,7 +216,7 @@ test :: proc() {
 					&ctx,
 					cu.Text {
 						text = "TEST_TEXT 1. A QUICK BROWN FOX JUMPS OVER THE LAZY DOG. FIT",
-						style = {font_id = 0, letter_spacing = 1, font_size = 20, color = TEXT_PRIMARY_COLOR},
+						style = {letter_spacing = 1, font_size = 20, color = TEXT_PRIMARY_COLOR},
 					},
 					style = style,
 				)
@@ -256,7 +245,7 @@ test :: proc() {
 			grow_0 := cu.create_widget(
 				&ctx,
 				cu.layout(cu.sizing(cu.grow(), cu.grow())),
-				clip = cu.Clip{{.Y, .X}, {.X = clip_val, .Y = clip_val}},
+				clip = [2]cu.Clip{cu.clip_custom(clip_val), cu.clip_custom(clip_val)},
 				style = style,
 			)
 			if cu.push_parent(&ctx, grow_0) {

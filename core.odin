@@ -50,14 +50,15 @@ LAYOUT:
 	Support overgrowing elements (Comes naturally with clipping :O)
 */
 
-Vec2f32 :: [2]f32
 /*
    Padding order : Top, right, bottom, left (Layout depends on this order)
    border radius order : top left corner, top right corner, bottom right corner, bottom left corner (Layout does not depend on this order)
 */
 Vec4f32 :: [4]f32
+Vec2f32 :: [2]f32
 Color :: [4]u8 // TODO: Turn this into a gradient type 
 Id :: distinct i64
+
 
 // TODO: Error handling 
 when ODIN_DEBUG {
@@ -82,8 +83,10 @@ Core_Context :: struct {
 	persistant_data:             map[Id]Persistant_Data, // widgets from last frame. Used to query events. Accessed by widget.id
 	hot_widget_id:               Id, // widget currently under mouse  
 	active_widget_id:            Id, // widget currently being interacted with 
+	last_hot_widget_id:          Id,
+	last_active_widget_id:       Id,
 	active_clipper:              ^Widget,
-	active_parent:               ^Widget,
+	active_parent:               ^Widget, // parent set by push parent 
 	text_measure_proc:           proc(text: string, style: Text_Style) -> f32,
 	window_height, window_width: f32,
 	delta_time:                  f32,
@@ -93,6 +96,7 @@ Core_Context :: struct {
 Persistant_Data :: struct {
 	size, position, accumulated_min: Vec2f32,
 	events:                          Widget_Events,
+	clip:                            Maybe([2]Clip),
 }
 
 Border_Type :: enum u8 {
@@ -107,8 +111,10 @@ Border_Type :: enum u8 {
 }
 
 Render_Command :: struct {
-	type:    Render_Command_Type,
-	z_index: int,
+	type:              Render_Command_Type,
+	z_index:           int,
+	emitter_id:        Id,
+	emitter_string_id: string,
 }
 
 Render_Command_Type :: union {
@@ -135,12 +141,9 @@ Command_Image :: struct {
 }
 
 Command_Border :: struct {
-	radius:    Vec4f32,
-	thickness: Vec4f32,
-	position:  Vec2f32,
-	size:      Vec2f32,
-	color:     [4]Color,
-	type:      [4]Border_Type,
+	position: Vec2f32,
+	size:     Vec2f32,
+	style:    Border_Style,
 }
 
 Command_Rect :: struct {
@@ -150,20 +153,18 @@ Command_Rect :: struct {
 }
 
 Command_Text :: struct {
-	start, end: int, // usage : ctx.lines[start:end] 
 	position:   Vec2f32,
 	style:      Text_Style,
+	cursor:     Maybe([2]int),
+	start, end: int, // usage : ctx.lines[start:end]
 }
 
 Command_Clip_Start :: struct {
 	clip_position: Vec2f32,
 	clip_size:     Vec2f32,
-	clipper_id:    string,
 }
 
-Command_Clip_End :: struct {
-	clipper_id: string,
-}
+Command_Clip_End :: struct {}
 
 // Primitives are added to command list as they are. With out any changes
 Command_Primitive :: union {
@@ -229,20 +230,20 @@ Border_Style :: struct {
 
 Text_Style :: struct {
 	color:          Color,
-	font_id:        int,
+	font:           rawptr,
 	font_size:      f32,
 	letter_spacing: f32,
 	line_spacing:   f32,
 }
 
 Node :: struct {
-	id:                                             Id,
-	next:                                           ^Widget,
-	prev:                                           ^Widget,
-	parent:                                         ^Widget,
-	last_child:                                     ^Widget,
-	first_child:                                    ^Widget,
-	index, total_children, total_floating_children: int,
+	id:                    Id,
+	next:                  ^Widget,
+	prev:                  ^Widget,
+	parent:                ^Widget,
+	last_child:            ^Widget,
+	first_child:           ^Widget,
+	index, total_children: int,
 }
 
 Floating :: struct {
@@ -263,6 +264,8 @@ Text :: struct {
 	style:        Text_Style,
 	text:         string,
 	_start, _end: int, // index into ctx.text_lines
+	wrap:         Wrap_Kind,
+	cursor:       Maybe([2]int), // .x = head, .y = tail
 }
 
 Image :: struct {
@@ -277,7 +280,14 @@ Widget_Type :: union {
 }
 
 Clip :: struct {
+	type:  Clip_Type,
 	value: f32,
+	speed: f32,
+}
+
+Clip_Type :: enum {
+	Custom,
+	Auto,
 }
 
 Widget :: struct {
@@ -369,13 +379,13 @@ end_ui :: proc(ctx: ^Core_Context) {
 			size            = w.size,
 			position        = w.position,
 			accumulated_min = w.accumulated_min,
+			clip            = w.clip,
 		}
 	}
 
 	ctx.mouse.events = {}
 	ctx.mouse.old_position = ctx.mouse.position
-	ctx.active_clipper = nil
-	clear(&ctx.clips)
+	ctx.last_hot_widget_id = ctx.hot_widget_id
 	clear(&ctx.primitives)
 	clear(&ctx.stacks.post_r)
 	clear(&ctx.stacks.pre)
@@ -423,6 +433,10 @@ create_widget :: proc(
 		w.is_floating_descendant = true
 	}
 
+	if w.is_floating_descendant {
+		w.node.parent.node.total_children -= 1
+	}
+
 	_retrieve_persistant_data(ctx.persistant_data, w)
 	w.style = style
 
@@ -439,11 +453,7 @@ create_primitive :: proc(ctx: ^Core_Context, primitive: Command_Primitive) {
 
 _add_widget :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	if ctx.active_parent != nil {
-		if _, ok := widget.type.(Floating); !ok {
-			ctx.active_parent.node.total_children += 1
-		} else {
-			ctx.active_parent.node.total_floating_children += 1
-		}
+		ctx.active_parent.node.total_children += 1
 
 		if ctx.active_parent.node.first_child == nil {
 			ctx.active_parent.node.first_child = widget
@@ -494,6 +504,19 @@ _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widge
 	widget.position = val.position
 	widget.size = val.size
 	widget.events = val.events
+
+	if clip, widget_clip_ok := &widget.clip.([2]Clip); widget_clip_ok {
+		val_clip, val_clip_ok := val.clip.([2]Clip)
+
+		if clip.x.type == .Auto && val_clip_ok {
+			clip.x.value = val_clip.x.value
+		}
+
+		if clip.y.type == .Auto && val_clip_ok {
+			clip.y.value = val_clip.y.value
+		}
+
+	}
 
 	if _, ok := widget.type.(Text); ok {
 		widget.accumulated_min = val.accumulated_min

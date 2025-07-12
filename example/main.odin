@@ -1,13 +1,9 @@
 package main
 
 import "base:runtime"
-import "core:reflect"
 
 import "core:fmt"
-import "core:time"
 import rl "vendor:raylib"
-
-import "vendor:sdl3"
 
 import cu "./../"
 
@@ -55,18 +51,129 @@ render :: proc(ctx: cu.Core_Context, texture: rl.Texture, shader: rl.Shader) {
 			rl.DrawTexturePro(texture, src, dst, {}, 0.0, rl.WHITE)
 			rl.EndShaderMode()
 		case cu.Command_Text:
-			initial_y := v.position.y
+			if cursor, ok := v.cursor.([2]int); ok {
+				{
+					total_length: int
+					line_position_y := v.position.y
+					last_line: string
+					for l, i in ctx.text_lines[v.start:v.end] {
+						if cursor.x >= total_length && cursor.x < total_length + len(l) {
+							relative := cursor.x - total_length
+							rl.DrawRectangleV(
+								{v.position.x + ctx.text_measure_proc(l[:relative], v.style), line_position_y},
+								{1, v.style.font_size},
+								rl.GREEN,
+							)
+							break
+						}
+						total_length += len(l)
+						last_line = l
+						line_position_y += v.style.line_spacing + v.style.font_size
+					}
+					if cursor.x == total_length {
+						if len(last_line) > 0 {
+							if last_line[len(last_line) - 1] != '\n' {
+								line_position_y -= v.style.line_spacing + v.style.font_size
+								rl.DrawRectangleV(
+									{v.position.x + ctx.text_measure_proc(last_line, v.style), line_position_y},
+									{1, v.style.font_size},
+									rl.GREEN,
+								)
+							} else {
+								rl.DrawRectangleV({v.position.x, line_position_y}, {1, v.style.font_size}, rl.GREEN)
+							}
+						}
+					}
+				}
 
-			for l in ctx.text_lines[v.start:v.end] {
+				if cursor.x != cursor.y {
+					if cursor.x > cursor.y {
+						cursor.x, cursor.y = cursor.y, cursor.x
+					}
+
+					line_x: int
+					line_y: int
+					relative_x: int
+					relative_y: int
+					total_length: int
+					last_line: int
+					for l, i in ctx.text_lines[v.start:v.end] {
+						if cursor.x >= total_length && cursor.x < total_length + len(l) {
+							line_x = i + v.start
+							relative_x = cursor.x - total_length
+						}
+						if cursor.y >= total_length && cursor.y < total_length + len(l) {
+							line_y = i + v.start
+							relative_y = cursor.y - total_length
+						}
+						last_line = i + v.start
+						total_length += len(l)
+					}
+
+					if cursor.x == total_length {
+						if len(ctx.text_lines[last_line]) > 0 {
+							if ctx.text_lines[last_line][max(len(ctx.text_lines[last_line]) - 1, 0)] != '\n' {
+								line_x = last_line
+								relative_x = len(ctx.text_lines[line_x])
+							}
+						}
+					}
+					if cursor.y == total_length {
+						if len(ctx.text_lines[last_line]) > 0 {
+							if ctx.text_lines[last_line][max(len(ctx.text_lines[last_line]) - 1, 0)] != '\n' {
+								line_y = last_line
+								relative_y = len(ctx.text_lines[line_y])
+							}
+						}
+					}
+
+					if line_x == line_y {
+						rl.DrawRectangleV(
+							{
+								v.position.x + ctx.text_measure_proc(ctx.text_lines[line_x][:relative_x], v.style),
+								v.position.y + f32(line_x - v.start) * (v.style.font_size + v.style.line_spacing),
+							},
+							{ctx.text_measure_proc(ctx.text_lines[line_x][relative_x:relative_y], v.style), v.style.font_size},
+							rl.BLUE,
+						)
+					} else {
+						rl.DrawRectangleV(
+							{
+								v.position.x + ctx.text_measure_proc(ctx.text_lines[line_x][:relative_x], v.style),
+								v.position.y + f32(line_x - v.start) * (v.style.font_size + v.style.line_spacing),
+							},
+							{ctx.text_measure_proc(ctx.text_lines[line_x][relative_x:], v.style), v.style.font_size},
+							rl.BLUE,
+						)
+
+						for i in line_x + 1 ..< line_y {
+							rl.DrawRectangleV(
+								{v.position.x, v.position.y + f32(i - v.start) * (v.style.font_size + v.style.line_spacing)},
+								{ctx.text_measure_proc(ctx.text_lines[i], v.style), v.style.font_size},
+								rl.BLUE,
+							)
+						}
+
+						rl.DrawRectangleV(
+							{v.position.x, v.position.y + f32(line_y - v.start) * (v.style.font_size + v.style.line_spacing)},
+							{ctx.text_measure_proc(ctx.text_lines[line_y][:relative_y], v.style), v.style.font_size},
+							rl.BLUE,
+						)
+					}
+				}
+			}
+
+			line_y := v.position.y
+			for l, i in ctx.text_lines[v.start:v.end] {
 				rl.DrawTextEx(
 					jet_brains_mono,
 					fmt.ctprint(l),
-					{v.position.x, initial_y},
+					{v.position.x, line_y},
 					v.style.font_size,
 					v.style.letter_spacing,
 					cast(rl.Color)v.style.color,
 				)
-				initial_y += v.style.line_spacing + v.style.font_size
+				line_y += v.style.line_spacing + v.style.font_size
 			}
 		case cu.Command_Clip_End:
 			rl.EndScissorMode()
@@ -88,8 +195,30 @@ render :: proc(ctx: cu.Core_Context, texture: rl.Texture, shader: rl.Shader) {
 				rl.DrawEllipse(cast(i32)p.position.x, cast(i32)p.position.y, p.size.x, p.size.y, cast(rl.Color)p.color)
 			case cu.Primitive_Custom:
 			}
+
 		case cu.Command_Border:
-			rl.DrawRectangleLinesEx({v.position.x, v.position.y, v.size.x, v.size.y}, v.thickness[0], cast(rl.Color)v.color[0])
+			{
+				pos := v.position
+				size := v.size
+				t := v.style.thickness
+				c := v.style.color
+
+				if t[0] > 0 {
+					rl.DrawRectangleRec(rl.Rectangle{pos.x, pos.y, size.x, t[0]}, cast(rl.Color)c[0])
+				}
+
+				if t[1] > 0 {
+					rl.DrawRectangleRec(rl.Rectangle{pos.x + size.x - t[1], pos.y, t[1], size.y}, cast(rl.Color)c[1])
+				}
+
+				if t[2] > 0 {
+					rl.DrawRectangleRec(rl.Rectangle{pos.x, pos.y + size.y - t[2], size.x, t[2]}, cast(rl.Color)c[2])
+				}
+
+				if t[3] > 0 {
+					rl.DrawRectangleRec(rl.Rectangle{pos.x, pos.y, t[3], size.y}, cast(rl.Color)c[3])
+				}
+			}
 		case cu.Command_Image:
 			image := cast(^rl.Texture)v.image_data
 			rl.DrawTextureEx(image^, v.position, 0, v.size.x / cast(f32)image.width, cast(rl.Color)v.color)

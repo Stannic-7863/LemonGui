@@ -21,6 +21,14 @@ child_alignment :: proc "contextless" (x: Child_Alignment_X = .Left, y: Child_Al
 	return {x, y}
 }
 
+clip_custom :: proc "contextless" (value: f32, speed: f32 = 1) -> Clip {
+	return Clip{type = .Custom, value = value, speed = speed}
+}
+
+clip_auto :: proc "contextless" (speed: f32 = 1) -> Clip {
+	return Clip{type = .Auto, speed = speed}
+}
+
 clip :: proc "contextless" (x: Clip = {}, y: Clip = {}) -> [2]Clip {
 	return {x, y}
 }
@@ -70,8 +78,8 @@ offset_fixed :: proc "contextless" (value: f32) -> Offset {
 	return Offset{value = value, kind = .Fixed}
 }
 
-text :: proc "contextless" (text: string, style: Text_Style = {}) -> Text {
-	return Text{text = text, style = style}
+text :: proc "contextless" (text: string, wrap: Wrap_Kind = .Words, style: Text_Style = {}, cursor: Maybe([2]int) = nil) -> Text {
+	return Text{text = text, style = style, wrap = wrap, cursor = cursor}
 }
 
 // Layout

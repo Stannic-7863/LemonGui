@@ -68,7 +68,6 @@ Expand_Kind :: enum u8 {
 	Percent_Self, // Expand size by percentage of own size
 }
 
-// I still need to implement this : )
 // I should offload some rendering quirks like putting dashes and dots at wrap site to command emittion stage 
 Wrap_Kind :: enum u8 {
 	None,
@@ -184,7 +183,7 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 			_offset_widget(widget)
 		}
 
-		_position_clip_childs(widget)
+		_position_clip_childs(ctx, widget)
 		_emit_all(ctx, widget, &z_index_offset)
 	}
 
@@ -199,14 +198,11 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 
 	// Accumulate Into Parents size if parent is of .Fit type
 	parent := widget.node.parent
-
-	if parent == nil {return} 	// reached root node
+	if parent == nil {return}
 
 	parent_layout, parent_is_layout := _get_layout(parent)
 
-	if !parent_is_layout {
-		return
-	}
+	if !parent_is_layout {return}
 
 	if parent_layout.sizing[axis].kind == .Fit {
 		if parent.is_floating_descendant == widget.is_floating_descendant { 	// we don't want floating elements contributing into non floating widgets
@@ -322,6 +318,12 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, pare
 					child.size[axis] += to_add
 					remaining_space -= to_add
 				}
+				if child.size[axis] < child.min {
+					size := child.size[axis]
+					child.size[axis] = child.min
+					remaining_space += size - child.min
+					ordered_remove(growables, i)
+				}
 				if child.size[axis] > child.max {
 					size := child.size[axis]
 					child.size[axis] = child.max
@@ -358,8 +360,15 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, pare
 					remaining_space -= to_subtract
 				}
 				if child.size[axis] < child.min {
-					remaining_space += child.min - child.size[axis]
+					size := child.size[axis]
 					child.size[axis] = child.min
+					remaining_space += size - child.min
+					ordered_remove(growables, i)
+				}
+				if child.size[axis] > child.max {
+					size := child.size[axis]
+					child.size[axis] = child.max
+					remaining_space += size - child.max
 					ordered_remove(growables, i)
 				}
 			}
@@ -439,45 +448,94 @@ _sizing_word_wrap :: proc(ctx: ^Core_Context) {
 			continue
 		case Text:
 			_sizing_get_measured_words(ctx, type, &measured_words)
-
-			accumulated_width: f32 = 0
 			space_width := ctx.text_measure_proc(" ", type.style)
-
 			line_start: int = 0
-
 			largest_width: f32
-			widget_lines_start := len(ctx.text_lines)
 			x_padding := _get_axis_padding(.X, widget.style.padding)
+			widget_lines_start := len(ctx.text_lines)
 			additional_height: f32 = 0
-			for w, index in measured_words {
-				if w.word == "\n" {
-					accumulated_width = 0
-					append(&ctx.text_lines, type.text[line_start:w.word_start])
-					line_start = w.word_start
-					if index == len(measured_words) - 1 {
-						additional_height += (type.style.font_size + type.style.line_spacing)
+			accumulated_width: f32 = 0
+			cursor_found: bool
+
+			switch type.wrap {
+			case .None:
+			case .Words:
+				for w, index in measured_words {
+					if w.word == "\n" {
+						accumulated_width = 0
+						append(&ctx.text_lines, type.text[line_start:w.word_start])
+						line_start = w.word_start
+						if index == len(measured_words) - 1 {
+							additional_height += (type.style.font_size + type.style.line_spacing)
+						}
+						continue
 					}
-					continue
+					largest_width = max(largest_width, w.width)
+					accumulated_width += space_width * f32(w.spaces_before)
+					if accumulated_width + w.width > widget.size.x - x_padding {
+						accumulated_width = 0
+						append(&ctx.text_lines, type.text[line_start:w.word_start])
+						line_start = w.word_start
+					}
+					accumulated_width += w.width
 				}
-				largest_width = max(largest_width, w.width)
-				accumulated_width += space_width * f32(w.spaces_before)
-				if accumulated_width + w.width > widget.size.x - x_padding {
-					accumulated_width = 0
-					append(&ctx.text_lines, type.text[line_start:w.word_start])
-					line_start = w.word_start
+			case .Letters:
+				for w, index in measured_words {
+					if w.word == "\n" {
+						append(&ctx.text_lines, type.text[line_start:w.word_start])
+						line_start = w.word_start
+						if index == len(measured_words) - 1 {
+							additional_height += (type.style.font_size + type.style.line_spacing)
+						}
+						accumulated_width = 0
+						continue
+					}
+
+
+					total_width := w.width + space_width * f32(w.spaces_before)
+					if accumulated_width + total_width > widget.size.x - x_padding {
+						accumulated_width += space_width * f32(w.spaces_before)
+						word_index := w.word_start
+						i := 0
+						for i < len(w.word) {
+							r, size := utf8.decode_rune(w.word[i:])
+							rune_str := w.word[i:i + size]
+							letter_width := ctx.text_measure_proc(rune_str, type.style)
+							if accumulated_width + letter_width >= widget.size.x - x_padding {
+								accumulated_width = 0
+								append(&ctx.text_lines, type.text[line_start:word_index + i])
+								line_start = word_index + i
+							}
+							accumulated_width += letter_width
+							i += size
+						}
+					} else {
+						accumulated_width += space_width * f32(w.spaces_before)
+						accumulated_width += w.width
+					}
 				}
-				accumulated_width += w.width
+			case .New_Lines:
+				for w, index in measured_words {
+					largest_width = max(largest_width, w.width)
+					if w.word == "\n" {
+						accumulated_width = 0
+						append(&ctx.text_lines, type.text[line_start:w.word_start])
+						line_start = w.word_start
+						if index == len(measured_words) - 1 {
+							additional_height += (type.style.font_size + type.style.line_spacing)
+						}
+					}
+				}
 			}
 
 			if line_start < len(type.text) {
 				append(&ctx.text_lines, type.text[line_start:])
 			}
+
 			type._start = widget_lines_start
 			type._end = len(ctx.text_lines)
 			widget.size.y = f32(type._end - type._start) * (type.style.font_size + type.style.line_spacing) + additional_height
 			widget.accumulated_min = {largest_width + x_padding, widget.size.y}
-
-
 			clear(&measured_words)
 		}
 	}
@@ -746,8 +804,17 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 	}
 }
 
-_position_clip_childs :: proc(widget: ^Widget) {
-	if clip, ok := widget.clip.([2]Clip); ok {
+_position_clip_childs :: proc(ctx: ^Core_Context, widget: ^Widget) {
+	if clip, ok := &widget.clip.([2]Clip); ok {
+		if widget.node.id == ctx.last_hot_widget_id {
+			if clip.x.type == .Auto {
+				clip.x.value += ctx.mouse.scroll * ctx.delta_time * clip.x.speed
+			}
+			if clip.y.type == .Auto {
+				clip.y.value += ctx.mouse.scroll * ctx.delta_time * clip.y.speed
+			}
+		}
+
 		for child := widget.node.first_child; child != nil; child = child.node.next {
 			if _, ok := child.type.(Floating); ok {continue}
 			child.position.x += clip.x.value
@@ -755,7 +822,6 @@ _position_clip_childs :: proc(widget: ^Widget) {
 		}
 	}
 }
-
 
 _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
 	if clip, ok := widget.clip.([2]Clip); ok {
@@ -806,7 +872,7 @@ _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
 
 
 _emit_clip_end_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
-	append(&ctx.render_commands, Render_Command{type = Command_Clip_End{clipper_id = widget.string_id}, z_index = z_index})
+	append(&ctx.render_commands, Render_Command{type = Command_Clip_End{}, z_index = z_index})
 }
 
 _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
@@ -820,13 +886,7 @@ _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: i
 		clip_size.y += border.thickness[2] + border.thickness[0]
 	}
 
-	append(
-		&ctx.render_commands,
-		Render_Command {
-			type = Command_Clip_Start{clip_size = clip_size, clip_position = clip_position, clipper_id = widget.string_id},
-			z_index = z_index,
-		},
-	)
+	append(&ctx.render_commands, Render_Command{type = Command_Clip_Start{clip_size = clip_size, clip_position = clip_position}, z_index = z_index})
 }
 
 _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
@@ -834,10 +894,7 @@ _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index
 		command_border: Command_Border
 		command_border.position = widget.position
 		command_border.size = widget.size
-		command_border.type = border.type
-		command_border.color = border.color
-		command_border.radius = border.radius
-		command_border.thickness = border.thickness
+		command_border.style = border
 		append(&ctx.render_commands, Render_Command{type = command_border, z_index = z_index^ + widget.z_index})
 		z_index^ += 1
 	}
@@ -845,9 +902,10 @@ _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index
 
 _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	if text, ok := widget.type.(Text); ok {
+		command_text: Command_Text
 		widget.position.x += widget.style.padding[3]
 		widget.position.y += widget.style.padding[0]
-		command_text: Command_Text
+		command_text.cursor = text.cursor
 		command_text.position = widget.position
 		command_text.style = text.style
 		command_text.end = text._end
