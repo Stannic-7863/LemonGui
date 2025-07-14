@@ -23,12 +23,12 @@ child_alignment :: proc "contextless" (x: Child_Alignment_X = .Left, y: Child_Al
 
 // Set clip to custom amount provided. Negative values to move children up. Positive values to move children down. Value is multiplied by speed before being added to children position.
 clip_custom :: proc "contextless" (value: f32, speed: f32 = 1) -> Clip {
-	return Clip{type = .Custom, value = value, speed = speed}
+	return Clip{kind = .Custom, value = value, speed = speed}
 }
 
 // Set clip to auto. Only handles scroll events.
 clip_auto :: proc "contextless" (speed: f32 = 1) -> Clip {
-	return Clip{type = .Auto, speed = speed}
+	return Clip{kind = .Auto, speed = speed}
 }
 
 // Return clipping structure. Defaults to custom
@@ -146,7 +146,7 @@ _get_axis_padding :: proc "contextless" (axis: Axis, padding: Vec4f32) -> f32 {
 }
 
 _get_layout :: proc "contextless" (widget: ^Widget) -> (Layout, bool) {
-	switch v in widget.type {
+	switch v in widget.kind {
 	case Layout:
 		return v, true
 	case Floating:

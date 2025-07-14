@@ -111,7 +111,7 @@ Border_Kind :: enum u8 {
 }
 
 Render_Command :: struct {
-	type:              Render_Command_Kind,
+	kind:              Render_Command_Kind,
 	z_index:           int,
 	emitter_id:        Id,
 	emitter_string_id: string,
@@ -280,7 +280,7 @@ Widget_Kind :: union {
 }
 
 Clip :: struct {
-	type:  Clip_Kind,
+	kind:  Clip_Kind,
 	value: f32,
 	speed: f32,
 }
@@ -292,7 +292,7 @@ Clip_Kind :: enum {
 
 Widget :: struct {
 	style:                  Style,
-	type:                   Widget_Kind,
+	kind:                   Widget_Kind,
 	node:                   Node,
 	expand:                 [2]Expand,
 	offset:                 [2]Offset,
@@ -310,14 +310,14 @@ Widget :: struct {
 	events:                 Widget_Events,
 }
 
-init_core_context :: proc(widget_arr_backing_length: int) -> Core_Context {
+init_core_context :: proc(total_widgets: int) -> Core_Context {
 	ctx := Core_Context{}
 	ctx.text_lines = make([dynamic]string)
-	ctx.widgets = make([dynamic]Widget, 0, widget_arr_backing_length)
+	ctx.widgets = make([dynamic]Widget, 0, total_widgets)
 	ctx.render_commands = make([dynamic]Render_Command)
-	ctx.stacks.temp = make([dynamic]^Widget, 0, widget_arr_backing_length)
-	ctx.stacks.pre = make([dynamic]^Widget, 0, widget_arr_backing_length)
-	ctx.stacks.post_r = make([dynamic]^Widget, 0, widget_arr_backing_length)
+	ctx.stacks.temp = make([dynamic]^Widget, 0, total_widgets)
+	ctx.stacks.pre = make([dynamic]^Widget, 0, total_widgets)
+	ctx.stacks.post_r = make([dynamic]^Widget, 0, total_widgets)
 	ctx.primitives = make([dynamic]Command_Primitive)
 	ctx.persistant_data = make(map[Id]Persistant_Data)
 	return ctx
@@ -334,9 +334,9 @@ deinit_core_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.primitives)
 }
 
-// Returns false if widget has config type of text. Text widget cannot have children.
+// Returns false if widget has config kind of text. Text widget cannot have children.
 push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
-	_, ok := widget.type.(Text)
+	_, ok := widget.kind.(Text)
 	(!ok) or_return
 	ctx.active_parent = widget
 	return true
@@ -394,7 +394,7 @@ end_ui :: proc(ctx: ^Core_Context) {
 
 create_widget :: proc(
 	ctx: ^Core_Context,
-	widget_type: Widget_Kind = nil,
+	widget_kind: Widget_Kind = nil,
 	string_id: string = "",
 	aspect_ratio: Maybe(f32) = nil,
 	image: Maybe(Image) = nil,
@@ -410,7 +410,7 @@ create_widget :: proc(
 	w^ = {}
 	w.string_id = string_id
 	w.clip = clip
-	w.type = widget_type
+	w.kind = widget_kind
 	w.image = image
 	w.aspect_ratio = aspect_ratio
 	w.offset = offset
@@ -428,7 +428,7 @@ create_widget :: proc(
 	_add_widget(ctx, w)
 	_generate_widget_id(w)
 
-	if _, ok := w.type.(Floating); ok {
+	if _, ok := w.kind.(Floating); ok {
 		w.z_index += max(int) / 2
 		w.is_floating_descendant = true
 	}
@@ -508,17 +508,17 @@ _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widge
 	if clip, widget_clip_ok := &widget.clip.([2]Clip); widget_clip_ok {
 		val_clip, val_clip_ok := val.clip.([2]Clip)
 
-		if clip.x.type == .Auto && val_clip_ok {
+		if clip.x.kind == .Auto && val_clip_ok {
 			clip.x.value = val_clip.x.value
 		}
 
-		if clip.y.type == .Auto && val_clip_ok {
+		if clip.y.kind == .Auto && val_clip_ok {
 			clip.y.value = val_clip.y.value
 		}
 
 	}
 
-	if _, ok := widget.type.(Text); ok {
+	if _, ok := widget.kind.(Text); ok {
 		widget.accumulated_min = val.accumulated_min
 	}
 
