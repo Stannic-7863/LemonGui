@@ -335,7 +335,7 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: rawptr, tooltip: Mayb
 		ctx,
 		cu.layout(cu.sizing(cu.grow(max = 128), cu.fit(16)), 8, .X, {.Center, .Center}),
 		string_id = "buttons",
-		style = cu.Style{color = SURFACE_COLOR, padding = 4, border = cu.border_style(BORDER_COLOR, cu.Border_Type.Single)},
+		style = cu.Style{color = SURFACE_COLOR, padding = 4, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
 	)
 
 	if cu.push_parent(ctx, body) {
@@ -380,7 +380,7 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: rawptr, tooltip: Mayb
 					ctx,
 					cu.text(text = tooltip, style = {color = TEXT_SECONDARY_COLOR, letter_spacing = 1, font_size = 16}),
 					offset = [2]cu.Offset{cu.offset_absolute(offset_value.x), cu.offset_absolute(offset_value.y)},
-					style = {color = ELEVATED_SURFACE_COLOR, padding = 16, border = cu.border_style(BORDER_COLOR, cu.Border_Type.Single)},
+					style = {color = ELEVATED_SURFACE_COLOR, padding = 16, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
 					event_passthrough = true,
 				)
 			}
@@ -392,10 +392,10 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: rawptr, tooltip: Mayb
 
 toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool, icon: rawptr, tooltip: Maybe(string)) -> cu.Widget_Events {
 
-	border_style := cu.border_style({BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, ERROR_COLOR}, cu.Border_Type.Single, 0, 1)
+	border_style := cu.border_style({BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, ERROR_COLOR}, cu.Border_Kind.Single, 0, 1)
 	text_color := TEXT_DISABLED_COLOR
 	if toggle^ {
-		border_style = cu.border_style({BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, SUCCESS_COLOR}, cu.Border_Type.Single, 0, {1, 1, 1, 1})
+		border_style = cu.border_style({BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, SUCCESS_COLOR}, cu.Border_Kind.Single, 0, {1, 1, 1, 1})
 		text_color = TEXT_PRIMARY_COLOR
 	}
 
@@ -452,7 +452,7 @@ toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool, icon:
 					ctx,
 					cu.text(text = tooltip, style = {color = TEXT_SECONDARY_COLOR, letter_spacing = 1, font_size = 16}),
 					offset = [2]cu.Offset{cu.offset_absolute(offset_value.x), cu.offset_absolute(offset_value.y)},
-					style = {color = ELEVATED_SURFACE_COLOR, padding = 16, border = cu.border_style(BORDER_COLOR, cu.Border_Type.Single)},
+					style = {color = ELEVATED_SURFACE_COLOR, padding = 16, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
 					event_passthrough = true,
 				)
 			}

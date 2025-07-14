@@ -99,7 +99,7 @@ Persistant_Data :: struct {
 	clip:                            Maybe([2]Clip),
 }
 
-Border_Type :: enum u8 {
+Border_Kind :: enum u8 {
 	None,
 	Single,
 	Double,
@@ -111,13 +111,13 @@ Border_Type :: enum u8 {
 }
 
 Render_Command :: struct {
-	type:              Render_Command_Type,
+	type:              Render_Command_Kind,
 	z_index:           int,
 	emitter_id:        Id,
 	emitter_string_id: string,
 }
 
-Render_Command_Type :: union {
+Render_Command_Kind :: union {
 	Command_Rect,
 	Command_Text,
 	Command_Border,
@@ -225,7 +225,7 @@ Border_Style :: struct {
 	radius:    Vec4f32,
 	thickness: Vec4f32,
 	color:     [4]Color,
-	type:      [4]Border_Type,
+	type:      [4]Border_Kind,
 }
 
 Text_Style :: struct {
@@ -273,26 +273,26 @@ Image :: struct {
 	tint:       Color,
 }
 
-Widget_Type :: union {
+Widget_Kind :: union {
 	Layout,
 	Floating,
 	Text,
 }
 
 Clip :: struct {
-	type:  Clip_Type,
+	type:  Clip_Kind,
 	value: f32,
 	speed: f32,
 }
 
-Clip_Type :: enum {
+Clip_Kind :: enum {
 	Custom,
 	Auto,
 }
 
 Widget :: struct {
 	style:                  Style,
-	type:                   Widget_Type,
+	type:                   Widget_Kind,
 	node:                   Node,
 	expand:                 [2]Expand,
 	offset:                 [2]Offset,
@@ -302,8 +302,8 @@ Widget :: struct {
 	clip:                   Maybe([2]Clip),
 	accumulated_min:        Vec2f32,
 	size, position:         Vec2f32,
-	custom_data:            Maybe(rawptr),
 	z_index:                int,
+	custom_data:            Maybe(rawptr),
 	aspect_ratio:           Maybe(f32),
 	is_floating_descendant: bool,
 	event_passthrough:      bool,
@@ -394,7 +394,7 @@ end_ui :: proc(ctx: ^Core_Context) {
 
 create_widget :: proc(
 	ctx: ^Core_Context,
-	widget_type: Widget_Type = nil,
+	widget_type: Widget_Kind = nil,
 	string_id: string = "",
 	aspect_ratio: Maybe(f32) = nil,
 	image: Maybe(Image) = nil,

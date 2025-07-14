@@ -190,14 +190,14 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
 }
 
-_fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
+_fit_into_parent :: proc(axis: Axis, child_widget: ^Widget) {
 	/* 
 		This function is called in reverse post order. Childs will be come first, then their parents
 		That is why accumalating size into parents and figuring out the min max padding adjustment in the same function works
 	*/
 
 	// Accumulate Into Parents size if parent is of .Fit type
-	parent := widget.node.parent
+	parent := child_widget.node.parent
 	if parent == nil {return}
 
 	parent_layout, parent_is_layout := _get_layout(parent)
@@ -205,97 +205,94 @@ _fit_into_parent :: proc(axis: Axis, widget: ^Widget) {
 	if !parent_is_layout {return}
 
 	if parent_layout.sizing[axis].kind == .Fit {
-		if parent.is_floating_descendant == widget.is_floating_descendant { 	// we don't want floating elements contributing into non floating widgets
+		if parent.is_floating_descendant == child_widget.is_floating_descendant { 	// we don't want floating elements contributing into non floating widgets
 			if parent_layout.direction == axis {
-				parent.size[axis] += widget.size[axis]
+				parent.size[axis] += child_widget.size[axis]
 			} else {
-				parent.size[axis] = max(parent.size[axis], widget.size[axis])
+				parent.size[axis] = max(parent.size[axis], child_widget.size[axis])
 			}
 		}
 	}
 
 	defer {
-		if parent.is_floating_descendant == widget.is_floating_descendant {
+		if parent.is_floating_descendant == child_widget.is_floating_descendant {
 			if parent_layout.direction == axis {
-				parent.accumulated_min[axis] += max(widget.accumulated_min[axis], widget.size[axis])
+				parent.accumulated_min[axis] += max(child_widget.accumulated_min[axis], child_widget.size[axis])
 			} else {
-				parent.accumulated_min[axis] = max(parent.accumulated_min[axis], max(widget.accumulated_min[axis], widget.size[axis]))
+				parent.accumulated_min[axis] = max(parent.accumulated_min[axis], max(child_widget.accumulated_min[axis], child_widget.size[axis]))
 			}
 		}
 	}
 
-	widget_layout, widget_is_layout := _get_layout(widget)
-	widget_axis_padding: f32 = _get_axis_padding(axis, widget.style.padding)
+	widget_layout, widget_is_layout := _get_layout(child_widget)
+	widget_axis_padding: f32 = _get_axis_padding(axis, child_widget.style.padding)
 
-	widget.size[axis] += widget_axis_padding // resolve padding 
+	child_widget.size[axis] += widget_axis_padding // resolve padding 
 
 	if !widget_is_layout {return}
 
-	widget.accumulated_min[axis] += widget_axis_padding
+	child_widget.accumulated_min[axis] += widget_axis_padding
 
 	if widget_layout.direction == axis {
-		child_gaps := max(0, f32(widget.node.total_children - 1) * widget_layout.child_gap)
-		widget.accumulated_min[axis] += child_gaps
-		widget.size[axis] += child_gaps
+		child_gaps := max(0, f32(child_widget.node.total_children - 1) * widget_layout.child_gap)
+		child_widget.accumulated_min[axis] += child_gaps
+		child_widget.size[axis] += child_gaps
 	}
 
 	if widget_layout.sizing[axis].kind == .Fit {
-		widget.accumulated_min[axis] = max(widget.accumulated_min[axis], widget_layout.sizing[axis].min)
-		widget.accumulated_min[axis] = min(widget.accumulated_min[axis], widget_layout.sizing[axis].max)
-		widget.size[axis] = widget.accumulated_min[axis]
+		child_widget.accumulated_min[axis] = max(child_widget.accumulated_min[axis], widget_layout.sizing[axis].min)
+		child_widget.accumulated_min[axis] = min(child_widget.accumulated_min[axis], widget_layout.sizing[axis].max)
+		child_widget.size[axis] = child_widget.accumulated_min[axis]
 	}
 }
 
-_grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, parent: ^Widget, growables: ^[dynamic]Growable) {
-	if parent.node.first_child == nil {return}
+_grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, parent_widget: ^Widget, growables: ^[dynamic]Growable) {
+	if parent_widget.node.first_child == nil {return}
 
-	parent_axis_padding := _get_axis_padding(axis, parent.style.padding)
-	remaining_space: f32 = parent.size[axis] - parent_axis_padding - parent_layout.child_gap * f32(parent.node.total_children - 1)
+	parent_padding := _get_axis_padding(axis, parent_widget.style.padding)
+	remaining_space: f32 = parent_widget.size[axis] - parent_padding - parent_layout.child_gap * f32(parent_widget.node.total_children - 1)
 
-	for child := parent.node.first_child; child != nil; child = child.node.next {
-		switch type in child.type {
+	for child_widget := parent_widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
+		switch type in child_widget.type {
 		case Floating:
 			if type.layout.sizing[axis].kind == .Grow {
-				child.size[axis] = parent.size[axis] - parent_axis_padding
+				child_widget.size[axis] = parent_widget.size[axis] - parent_padding
 			}
 			if type.layout.sizing[axis].kind == .Percent {
-				child.size[axis] = parent.size[axis] * type.layout.sizing[axis].min - parent_axis_padding
-				child.size[axis] = max(child.size[axis], child.accumulated_min[axis])
+				child_widget.size[axis] = parent_widget.size[axis] * type.layout.sizing[axis].min - parent_padding
+				child_widget.size[axis] = max(child_widget.size[axis], child_widget.accumulated_min[axis])
 			}
 			continue
 		case Layout:
 			switch type.sizing[axis].kind {
 			case .Grow:
-				child.size[axis] = max(child.accumulated_min[axis], type.sizing[axis].min)
-				append(growables, Growable{&child.size, child.size[axis], type.sizing[axis].max, false})
+				child_widget.size[axis] = max(child_widget.accumulated_min[axis], type.sizing[axis].min)
+				append(growables, Growable{&child_widget.size, child_widget.size[axis], type.sizing[axis].max, false})
 			case .Percent:
-				child.size[axis] =
-					(parent.size[axis] -
-						_get_axis_padding(axis, parent.style.padding) -
-						f32(parent.node.total_children - 1) * parent_layout.child_gap) *
+				child_widget.size[axis] =
+					(parent_widget.size[axis] -
+						_get_axis_padding(axis, parent_widget.style.padding) -
+						f32(parent_widget.node.total_children - 1) * parent_layout.child_gap) *
 					type.sizing[axis].min
-				child.size[axis] = max(child.accumulated_min[axis], child.size[axis])
+				child_widget.size[axis] = max(child_widget.accumulated_min[axis], child_widget.size[axis])
 			case .Fixed:
 			case .Fit:
 			}
 		case Text:
 			if axis != .Y {
-				append(growables, Growable{&child.size, child.accumulated_min.x, max(f32), true})
+				append(growables, Growable{&child_widget.size, child_widget.accumulated_min.x, max(f32), true})
 			}
 		}
-		remaining_space -= child.size[axis]
+		remaining_space -= child_widget.size[axis]
 	}
 
 	if len(growables) == 0 {return}
 
 	if remaining_space >= 0 {
-		// as long as there is space, distribute it, 1e-9 for floating point err   
 		for remaining_space >= 1e-9 && len(growables) > 0 {
 			smallest: f32 = growables[0].size[axis]
 			second_smallest: f32 = max(f32)
 			to_add: f32 = remaining_space
-			// We find the smallest and second smallest along the axis we to expand to. 
-			// Once we find the smallest, we grow it until its the size of second smallest and repeat this process until all space is distributed 
 			for child, i in growables {
 				if child.is_text {
 					ordered_remove(growables, i)
@@ -311,7 +308,6 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, pare
 				}
 			}
 
-			// If all growables are smallest then we distribute remaining space equally, other wise we add space to smallest one only 
 			to_add = min(to_add, remaining_space / cast(f32)len(growables))
 			#reverse for child, i in growables {
 				if child.size[axis] == smallest {
@@ -333,7 +329,6 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, pare
 			}
 		}
 	} else {
-		// if remaining width is negative we need to shrink largest containers to make space 
 		remaining_space = abs(remaining_space)
 
 		for remaining_space >= 1e-9 && len(growables) > 0 {
@@ -376,29 +371,33 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, pare
 	}
 }
 
-_grow_children_across_axis :: proc(axis: Axis, layout: Layout, widget: ^Widget) {
-	if widget.node.first_child == nil {return}
+_grow_children_across_axis :: proc(axis: Axis, parent_layout: Layout, parent_widget: ^Widget) {
+	if parent_widget.node.first_child == nil {return}
 
-	axis_padding: f32 = _get_axis_padding(axis, widget.style.padding)
+	parent_padding: f32 = _get_axis_padding(axis, parent_widget.style.padding)
 
-	for child_widget := widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
+	for child_widget := parent_widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
 		child_layout, is_layout := _get_layout(child_widget)
 		if !is_layout {
-			if layout.direction == .Y && axis == .X && child_widget.size.x > widget.size.x - _get_axis_padding(.X, widget.style.padding) {
-				child_widget.size.x = widget.size.x - _get_axis_padding(.X, widget.style.padding)
+			if parent_layout.direction == .Y &&
+			   axis == .X &&
+			   child_widget.size.x > parent_widget.size.x - _get_axis_padding(.X, parent_widget.style.padding) {
+				child_widget.size.x = parent_widget.size.x - _get_axis_padding(.X, parent_widget.style.padding)
 			}
 			continue
 		}
 
 		if child_layout.sizing[axis].kind == .Percent {
 			child_widget.size[axis] =
-				(widget.size[axis] - _get_axis_padding(axis, widget.style.padding) - f32(widget.node.total_children - 1) * layout.child_gap) *
+				(parent_widget.size[axis] -
+					_get_axis_padding(axis, parent_widget.style.padding) -
+					f32(parent_widget.node.total_children - 1) * parent_layout.child_gap) *
 				child_layout.sizing[axis].min
 			child_widget.size[axis] = max(child_widget.accumulated_min[axis], child_widget.size[axis])
 		}
 		if child_layout.sizing[axis].kind == .Grow {
 			child_min := max(child_widget.accumulated_min[axis], child_layout.sizing[axis].min)
-			child_widget.size[axis] = max(widget.size[axis] - axis_padding, child_min)
+			child_widget.size[axis] = max(parent_widget.size[axis] - parent_padding, child_min)
 			child_widget.size[axis] = min(child_widget.size[axis], child_layout.sizing[axis].max)
 		}
 	}
@@ -702,111 +701,111 @@ _position_layout_floating :: proc(ctx: ^Core_Context, widget: ^Widget, floating:
 	widget.position = offset
 }
 
-_position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
+_position_layout_childs :: proc(parent_widget: ^Widget, parent_layout: Layout) {
 	total_size: Vec2f32
-	for child := widget.node.first_child; child != nil; child = child.node.next {
+	for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 		if _, ok := child.type.(Floating); ok {continue}
-		total_size += child.size + layout.child_gap
+		total_size += child.size + parent_layout.child_gap
 	}
 
-	padding := widget.style.padding
+	padding := parent_widget.style.padding
 	increment: Vec2f32
 
-	switch layout.direction {
+	switch parent_layout.direction {
 	case .X:
-		switch layout.child_alignment.x {
+		switch parent_layout.child_alignment.x {
 		case .Left:
-			increment.x = widget.position.x + padding[3]
-			for child := widget.node.first_child; child != nil; child = child.node.next {
+			increment.x = parent_widget.position.x + padding[3]
+			for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = increment.x
-				increment.x += child.size.x + layout.child_gap
+				increment.x += child.size.x + parent_layout.child_gap
 			}
 		case .Right:
-			increment.x = widget.position.x + widget.size.x + layout.child_gap - padding[1]
-			for child := widget.node.last_child; child != nil; child = child.node.prev {
+			increment.x = parent_widget.position.x + parent_widget.size.x + parent_layout.child_gap - padding[1]
+			for child := parent_widget.node.last_child; child != nil; child = child.node.prev {
 				if _, ok := child.type.(Floating); ok {continue}
-				increment.x -= child.size.x + layout.child_gap
+				increment.x -= child.size.x + parent_layout.child_gap
 				child.position.x = increment.x
 			}
 		case .Center:
-			increment.x = widget.position.x + widget.size.x / 2 - total_size.x / 2 + layout.child_gap / 2
-			for child := widget.node.first_child; child != nil; child = child.node.next {
+			increment.x = parent_widget.position.x + parent_widget.size.x / 2 - total_size.x / 2 + parent_layout.child_gap / 2
+			for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = increment.x
-				increment.x += child.size.x + layout.child_gap
+				increment.x += child.size.x + parent_layout.child_gap
 			}
 		}
-		switch layout.child_alignment.y {
+		switch parent_layout.child_alignment.y {
 		case .Top:
-			increment.y = widget.position.y + padding[0]
-			for child := widget.node.first_child; child != nil; child = child.node.next {
+			increment.y = parent_widget.position.y + padding[0]
+			for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = increment.y
 			}
 		case .Bottom:
-			increment.y = widget.position.y + widget.size.y - padding[2]
-			for child := widget.node.first_child; child != nil; child = child.node.next {
+			increment.y = parent_widget.position.y + parent_widget.size.y - padding[2]
+			for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = increment.y - child.size.y
 			}
 		case .Center:
-			center := widget.position.y + widget.size.y / 2
-			for child := widget.node.first_child; child != nil; child = child.node.next {
+			center := parent_widget.position.y + parent_widget.size.y / 2
+			for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = center - child.size.y / 2
 			}
 		}
 	case .Y:
-		switch layout.child_alignment.x {
+		switch parent_layout.child_alignment.x {
 		case .Left:
-			increment.x = widget.position.x + padding[3]
-			for child := widget.node.first_child; child != nil; child = child.node.next {
+			increment.x = parent_widget.position.x + padding[3]
+			for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = increment.x
 			}
 		case .Right:
-			increment.x = widget.position.x + widget.size.x - padding[1]
-			for child := widget.node.first_child; child != nil; child = child.node.next {
+			increment.x = parent_widget.position.x + parent_widget.size.x - padding[1]
+			for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = increment.x - child.size.x
 			}
 		case .Center:
-			center := widget.position.x + widget.size.x / 2
-			for child := widget.node.first_child; child != nil; child = child.node.next {
+			center := parent_widget.position.x + parent_widget.size.x / 2
+			for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.x = center - child.size.x / 2
 			}
 		}
-		switch layout.child_alignment.y {
+		switch parent_layout.child_alignment.y {
 		case .Center:
-			increment.y = widget.position.y + widget.size.y / 2 - total_size.y / 2 + layout.child_gap / 2
-			for child := widget.node.first_child; child != nil; child = child.node.next {
+			increment.y = parent_widget.position.y + parent_widget.size.y / 2 - total_size.y / 2 + parent_layout.child_gap / 2
+			for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = increment.y
-				increment.y += child.size.y + layout.child_gap
+				increment.y += child.size.y + parent_layout.child_gap
 			}
 		case .Top:
-			increment.y = widget.position.y + padding[0]
-			for child := widget.node.first_child; child != nil; child = child.node.next {
+			increment.y = parent_widget.position.y + padding[0]
+			for child := parent_widget.node.first_child; child != nil; child = child.node.next {
 				if _, ok := child.type.(Floating); ok {continue}
 				child.position.y = increment.y
-				increment.y += child.size.y + layout.child_gap
+				increment.y += child.size.y + parent_layout.child_gap
 			}
 		case .Bottom:
-			increment.y = widget.position.y + widget.size.y + layout.child_gap - padding[2]
-			for child := widget.node.last_child; child != nil; child = child.node.prev {
+			increment.y = parent_widget.position.y + parent_widget.size.y + parent_layout.child_gap - padding[2]
+			for child := parent_widget.node.last_child; child != nil; child = child.node.prev {
 				if _, ok := child.type.(Floating); ok {continue}
-				increment.y -= child.size.y + layout.child_gap
+				increment.y -= child.size.y + parent_layout.child_gap
 				child.position.y = increment.y
 			}
 		}
 	}
 }
 
-_position_clip_childs :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	if clip, ok := &widget.clip.([2]Clip); ok {
-		if widget.node.id == ctx.last_hot_widget_id {
+_position_clip_childs :: proc(ctx: ^Core_Context, parent_widget: ^Widget) {
+	if clip, ok := &parent_widget.clip.([2]Clip); ok {
+		if parent_widget.node.id == ctx.last_hot_widget_id {
 			if clip.x.type == .Auto {
 				clip.x.value += ctx.mouse.scroll * ctx.delta_time * clip.x.speed
 			}
@@ -815,10 +814,10 @@ _position_clip_childs :: proc(ctx: ^Core_Context, widget: ^Widget) {
 			}
 		}
 
-		for child := widget.node.first_child; child != nil; child = child.node.next {
-			if _, ok := child.type.(Floating); ok {continue}
-			child.position.x += clip.x.value
-			child.position.y += clip.y.value
+		for child_widget := parent_widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
+			if _, ok := child_widget.type.(Floating); ok {continue}
+			child_widget.position.x += clip.x.value
+			child_widget.position.y += clip.y.value
 		}
 	}
 }
@@ -869,7 +868,6 @@ _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
 		}
 	}
 }
-
 
 _emit_clip_end_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
 	append(&ctx.render_commands, Render_Command{type = Command_Clip_End{}, z_index = z_index})

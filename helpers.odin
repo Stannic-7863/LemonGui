@@ -131,7 +131,7 @@ fixed :: proc "contextless" (size: f32) -> Sizing {
 }
 
 // Configure border style 
-border_style :: proc(color: [4]Color, type: [4]Border_Type = Border_Type.Single, radius: Vec4f32 = 0, thickness: Vec4f32 = 1) -> Border_Style {
+border_style :: proc(color: [4]Color, type: [4]Border_Kind = Border_Kind.Single, radius: Vec4f32 = 0, thickness: Vec4f32 = 1) -> Border_Style {
 	return Border_Style{color = color, type = type, radius = radius, thickness = thickness}
 }
 
