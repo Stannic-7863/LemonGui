@@ -16,7 +16,7 @@
 
 ## The general setup is as follows:
 
-- Initialize Core_Context by calling `init_core_context` and setup some values in it before entering main loop. Initialised `Core_Context` will now be referred to as ``ctx`
+- Initialize Core_Context by calling `init_core_context` and setup some values in it before entering main loop. Initialised `Core_Context` will now be referred to as `ctx`
 
 - In the main loop:
     - Set events in `ctx` 
@@ -121,7 +121,7 @@ Floating :: struct {
 
 `id` is used if `attachment_to` is set to `Id`. It uses position and size data from previous frame. 
 
-`parent` `element` *anchor* defines where the floating is attached to parent. `parent` defines the point where the floating is attached to the parent. `element` defines the point where floating is attached to the parent.
+`parent` `element` *anchor* defines how floating and parent are attached together. `parent` defines the point where the floating is attached to the parent. `element` defines the point where parent is attached to the floating.
 
 #### Text 
 
