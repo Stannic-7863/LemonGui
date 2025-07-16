@@ -10,50 +10,25 @@ import "core:time"
 import "core:unicode/utf8"
 import rl "vendor:raylib"
 
+import backend "backend/raylib"
 
-PRIMARY_COLOR :: cu.Color{120, 113, 108, 255} // warm gray-500 (#78716C)
-ON_PRIMARY_COLOR :: cu.Color{255, 255, 255, 255} // white
-
-BACKGROUND_COLOR :: cu.Color{20, 20, 22, 255} // neutral dark gray (#141416)
-SURFACE_COLOR :: cu.Color{34, 34, 36, 255} // slightly lighter (#222224)
-ELEVATED_SURFACE_COLOR :: cu.Color{58, 58, 60, 255} // soft charcoal (#3A3A3C)
-
-TEXT_PRIMARY_COLOR :: cu.Color{245, 245, 244, 255} // warm gray-100 (#F5F5F4)
-TEXT_SECONDARY_COLOR :: cu.Color{168, 162, 158, 255} // warm gray-400 (#A8A29E)
-TEXT_DISABLED_COLOR :: cu.Color{120, 113, 108, 255} // warm gray-500 (#78716C)
-
-SUCCESS_COLOR :: cu.Color{77, 124, 15, 255} // olive green (#4D7C0F)
-WARNING_COLOR :: cu.Color{202, 138, 4, 255} // golden amber (#CA8A04)
-ERROR_COLOR :: cu.Color{153, 27, 27, 255} // dark red (#991B1B)
-INFO_COLOR :: cu.Color{115, 115, 115, 255} // neutral gray (#737373)
-
-BORDER_COLOR :: cu.Color{87, 83, 78, 255} // warm gray-700 (#57534E)
-DIVIDER_COLOR :: cu.Color{113, 109, 104, 255} // warm gray-600 (#716D68)
-
-jet_brains_mono: rl.Font
+font: rl.Font
 
 demo :: proc() {
-	rl.SetConfigFlags({.WINDOW_RESIZABLE, .MSAA_4X_HINT})
-	rl.InitWindow(700, 700, "Balls?")
-	defer rl.CloseWindow()
+	init_window_raylib()
+	defer close_window_raylib()
 
 	ctx := cu.init_core_context(256)
 	defer cu.deinit_core_context(&ctx)
 
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
-	ctx.text_measure_proc = measure_text
+	ctx.text_measure_proc = backend.measure_text
 
-	sdf_shader := rl.LoadShader("", "./assets/rounded_rect_shader.frag")
-	img := rl.GenImageColor(1, 1, rl.WHITE)
-	render_texture := rl.LoadTextureFromImage(img)
-	rl.UnloadImage(img)
-	defer rl.UnloadTexture(render_texture)
 	tick := rl.LoadTexture("./assets/tick.png")
 	defer rl.UnloadTexture(tick)
 
-
-	jet_brains_mono = rl.LoadFontEx("./assets/JetBrainsMono-Regular.ttf", 64, nil, 0)
+	font = rl.LoadFontEx("./assets/JetBrainsMono-Regular.ttf", 64, nil, 0)
 
 	rl.SetTargetFPS(60)
 
@@ -66,6 +41,16 @@ demo :: proc() {
 	edit.setup_once(&state, &buffer)
 
 	buttons_event_log: [dynamic]string
+
+	text_style_20 := cu.Text_Style {
+		font           = &font,
+		color          = PRIMARY_COLOR,
+		font_size      = 20,
+		letter_spacing = 1,
+	}
+
+	text_style_16 := text_style_20
+	text_style_16.font_size = 16
 
 	for !rl.WindowShouldClose() {
 		defer clear(&buttons_event_log)
@@ -86,83 +71,7 @@ demo :: proc() {
 		if rl.IsMouseButtonReleased(.RIGHT) {ctx.mouse.events += {.Right_Released}}
 		if rl.IsMouseButtonReleased(.MIDDLE) {ctx.mouse.events += {.Middle_Released}}
 
-		char := rl.GetCharPressed()
-
-		if cast(bool)char {
-			edit.input_rune(&state, char)
-		}
-
-		if rl.IsKeyPressed(.ENTER) {
-			edit.perform_command(&state, .New_Line)
-		}
-
-		if rl.IsKeyPressed(.BACKSPACE) {
-			edit.perform_command(&state, .Backspace)
-		}
-
-		if rl.IsKeyPressed(.DELETE) {
-			edit.perform_command(&state, .Delete)
-		}
-
-		if rl.IsKeyPressed(.A) && rl.IsKeyDown(.LEFT_CONTROL) {
-			edit.perform_command(&state, .Select_All)
-		}
-
-		if rl.IsKeyPressed(.LEFT) {
-			if rl.IsKeyDown(.LEFT_CONTROL) && rl.IsKeyDown(.LEFT_SHIFT) {
-				edit.perform_command(&state, .Select_Word_Left)
-			} else if rl.IsKeyDown(.LEFT_SHIFT) {
-				edit.perform_command(&state, .Select_Left)
-			} else if rl.IsKeyDown(.LEFT_CONTROL) {
-				edit.perform_command(&state, .Word_Left)
-			} else {
-				edit.perform_command(&state, .Left)
-			}
-		}
-
-		if rl.IsKeyPressed(.RIGHT) {
-			if rl.IsKeyDown(.LEFT_CONTROL) && rl.IsKeyDown(.LEFT_SHIFT) {
-				edit.perform_command(&state, .Select_Word_Right)
-			} else if rl.IsKeyDown(.LEFT_SHIFT) {
-				edit.perform_command(&state, .Select_Right)
-			} else if rl.IsKeyDown(.LEFT_CONTROL) {
-				edit.perform_command(&state, .Word_Right)
-			} else {
-				edit.perform_command(&state, .Right)
-			}
-		}
-
-		if rl.IsKeyPressed(.UP) {
-			if rl.IsKeyDown(.LEFT_SHIFT) {
-				edit.perform_command(&state, .Select_Up)
-			} else {
-				edit.perform_command(&state, .Up)
-			}
-		}
-
-		if rl.IsKeyPressed(.DOWN) {
-			if rl.IsKeyDown(.LEFT_SHIFT) {
-				edit.perform_command(&state, .Select_Down)
-			} else {
-				edit.perform_command(&state, .Down)
-			}
-		}
-
-		if rl.IsKeyPressed(.HOME) {
-			if rl.IsKeyDown(.LEFT_CONTROL) {
-				edit.perform_command(&state, .Start)
-			} else {
-				edit.perform_command(&state, .Line_Start)
-			}
-		}
-
-		if rl.IsKeyPressed(.END) {
-			if rl.IsKeyDown(.LEFT_CONTROL) {
-				edit.perform_command(&state, .End)
-			} else {
-				edit.perform_command(&state, .Line_End)
-			}
-		}
+		update_edit_state(&state)
 
 		cu.begin_ui(&ctx)
 
@@ -173,10 +82,8 @@ demo :: proc() {
 		)
 
 		cu.push_parent(&ctx, root)
-		@(static) sidebar_clip_val: f32
-		sidebar_clip_val += rl.GetMouseWheelMove() * 15
 
-		if frame(&ctx, "Buttons", {24, 12, 12, 12}, 16, clip_value = sidebar_clip_val) {
+		if frame(&ctx, "Buttons", {24, 12, 12, 12}, 16) {
 			e_1 := button(&ctx, "Test 1", &tick, "Flickering is due to Id's not being created with constant data.")
 			e_2 := button(&ctx, "Test 2", &tick, "Reading tool tips?")
 			e_3 := button(&ctx, "Test 3", &tick, "Well well well")
@@ -210,56 +117,29 @@ demo :: proc() {
 			}
 
 			if frame(&ctx, "Button_logs") {
-
 				for log in buttons_event_log {
 					cu.create_widget(&ctx, cu.text(log, .None, {color = TEXT_PRIMARY_COLOR, font_size = 20, letter_spacing = 1}))
 				}
-
 				cu.pop_parent(&ctx)
 			}
-
 			cu.pop_parent(&ctx)
 		}
 
 		if frame(&ctx, "Text_Wrap", {34, 12, 12, 12}, child_gap = 24) {
 			if frame(&ctx, "Wrap_Words") {
-				cu.create_widget(
-					&ctx,
-					cu.text("A quick brown fox jumps over the lazy dog", style = {font_size = 20, letter_spacing = 2, color = TEXT_PRIMARY_COLOR}),
-				)
+				cu.create_widget(&ctx, cu.text("A quick brown fox jumps over the lazy dog", .Words, text_style_20))
 				cu.pop_parent(&ctx)
 			}
 			if frame(&ctx, "Wrap_New_Lines") {
-				cu.create_widget(
-					&ctx,
-					cu.text(
-						"A quick \nbrown \nfox \njumps over \nthe lazy \ndog",
-						.New_Lines,
-						style = {font_size = 20, letter_spacing = 2, color = TEXT_PRIMARY_COLOR},
-					),
-				)
+				cu.create_widget(&ctx, cu.text("A quick \nbrown \nfox \njumps over \nthe lazy \ndog", .New_Lines, text_style_20))
 				cu.pop_parent(&ctx)
 			}
 			if frame(&ctx, "Wrap_None") {
-				cu.create_widget(
-					&ctx,
-					cu.text(
-						"A quick brown fox jumps over the lazy dog",
-						.None,
-						style = {font_size = 20, letter_spacing = 2, color = TEXT_PRIMARY_COLOR},
-					),
-				)
+				cu.create_widget(&ctx, cu.text("A quick brown fox jumps over the lazy dog", .None, text_style_20))
 				cu.pop_parent(&ctx)
 			}
 			if frame(&ctx, "Wrap_Letters") {
-				cu.create_widget(
-					&ctx,
-					cu.text(
-						"A quick brown fox jumps over the lazy dog",
-						.Letters,
-						style = {font_size = 20, letter_spacing = 2, color = TEXT_PRIMARY_COLOR},
-					),
-				)
+				cu.create_widget(&ctx, cu.text("A quick brown fox jumps over the lazy dog", .Letters, text_style_20))
 				cu.pop_parent(&ctx)
 			}
 			cu.pop_parent(&ctx)
@@ -272,14 +152,14 @@ demo :: proc() {
 				cu.text(
 					transmute(string)buffer.buf[:],
 					.Letters,
-					{color = TEXT_PRIMARY_COLOR, font_size = 16, letter_spacing = 1},
+					{font = &font, color = TEXT_PRIMARY_COLOR, font_size = 16, letter_spacing = 1},
 					cursor = state.selection,
 				),
 				string_id = "Text_Input",
 			)
-			type := t.type.(cu.Text)
+			type := t.kind.(cu.Text)
+			cu.pop_parent(&ctx)
 		}
-		cu.pop_parent(&ctx)
 
 		if frame(&ctx, "Aaloo_Voodoo", {32, 12, 12, 12}, 8) {
 			if frame(&ctx, "Aaloos") {
@@ -301,30 +181,15 @@ demo :: proc() {
 				}
 				cu.pop_parent(&ctx)
 			}
-
-			button(&ctx, "Hm", nil, "hm")
-
 			cu.pop_parent(&ctx)
 		}
 		cu.pop_parent(&ctx)
 
-
 		cu.end_ui(&ctx)
-
-		// for command in ctx.render_commands {
-		// 	if start, ok := command.type.(cu.Command_Clip_Start); ok {
-		// 		fmt.println(command.z_index, start)
-		// 	}
-		// 	if end, ok := command.type.(cu.Command_Clip_End); ok {
-		// 		fmt.println(command.z_index, end)
-		// 	}
-		// }
-		//
-		// fmt.println("\n\n\n")
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.BLANK)
-		render(ctx, render_texture, sdf_shader)
+		backend.render(ctx)
 		rl.EndDrawing()
 		free_all(context.temp_allocator)
 	}
@@ -343,7 +208,7 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: rawptr, tooltip: Mayb
 
 		label_widget := cu.create_widget(
 			ctx,
-			cu.text(label, style = cu.Text_Style{color = TEXT_PRIMARY_COLOR, font_size = 16, letter_spacing = 1}),
+			cu.text(label, style = cu.Text_Style{font = &font, color = TEXT_PRIMARY_COLOR, font_size = 16, letter_spacing = 1}),
 			event_passthrough = true,
 		)
 
@@ -378,7 +243,7 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: rawptr, tooltip: Mayb
 				defer cu.pop_parent(ctx)
 				cu.create_widget(
 					ctx,
-					cu.text(text = tooltip, style = {color = TEXT_SECONDARY_COLOR, letter_spacing = 1, font_size = 16}),
+					cu.text(text = tooltip, style = {font = &font, color = TEXT_SECONDARY_COLOR, letter_spacing = 1, font_size = 16}),
 					offset = [2]cu.Offset{cu.offset_absolute(offset_value.x), cu.offset_absolute(offset_value.y)},
 					style = {color = ELEVATED_SURFACE_COLOR, padding = 16, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
 					event_passthrough = true,
@@ -415,7 +280,7 @@ toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool, icon:
 
 		label_widget := cu.create_widget(
 			ctx,
-			cu.text(label, style = cu.Text_Style{color = text_color, font_size = 16, letter_spacing = 1}),
+			cu.text(label, style = cu.Text_Style{font = &font, color = text_color, font_size = 16, letter_spacing = 1}),
 			event_passthrough = true,
 		)
 
@@ -450,7 +315,7 @@ toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool, icon:
 				defer cu.pop_parent(ctx)
 				cu.create_widget(
 					ctx,
-					cu.text(text = tooltip, style = {color = TEXT_SECONDARY_COLOR, letter_spacing = 1, font_size = 16}),
+					cu.text(text = tooltip, style = {font = &font, color = TEXT_SECONDARY_COLOR, letter_spacing = 1, font_size = 16}),
 					offset = [2]cu.Offset{cu.offset_absolute(offset_value.x), cu.offset_absolute(offset_value.y)},
 					style = {color = ELEVATED_SURFACE_COLOR, padding = 16, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
 					event_passthrough = true,
@@ -473,13 +338,13 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32)
 	cu.push_parent(ctx, main_container)
 	cu.create_widget(
 		ctx,
-		cu.text(label, style = {color = TEXT_PRIMARY_COLOR, font_size = 20}),
+		cu.text(label, style = {font = &font, color = TEXT_PRIMARY_COLOR, font_size = 20}),
 		style = {border = cu.border_style(BORDER_COLOR), padding = 8},
 	)
 
 	cu.create_widget(
 		ctx,
-		cu.text(style = {letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_PRIMARY_COLOR}, text = fmt.tprint(min)),
+		cu.text(style = {font = &font, letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_PRIMARY_COLOR}, text = fmt.tprint(min)),
 	)
 
 	railing := cu.create_widget(
@@ -515,7 +380,10 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32)
 	cu.push_parent(ctx, label_holder)
 	cu.create_widget(
 		ctx,
-		cu.Text{text = fmt.tprint(value^), style = {letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_SECONDARY_COLOR}},
+		cu.Text {
+			text = fmt.tprint(value^),
+			style = {font = &font, letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_SECONDARY_COLOR},
+		},
 		{},
 		offset = {cu.offset_percent(knob_offset), cu.offset_absolute(12)},
 		event_passthrough = true,
@@ -524,7 +392,7 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32)
 	cu.pop_parent(ctx)
 	cu.create_widget(
 		ctx,
-		cu.Text{style = {letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_PRIMARY_COLOR}, text = fmt.tprint(max)},
+		cu.Text{style = {font = &font, letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_PRIMARY_COLOR}, text = fmt.tprint(max)},
 	)
 
 	cu.pop_parent(ctx)
@@ -542,7 +410,6 @@ frame :: proc(
 		ctx,
 		cu.layout(cu.sizing(cu.grow(128, 512), cu.fit()), direction = direction, child_gap = child_gap),
 		string_id = label,
-		clip = cu.clip({}, cu.clip_auto(100)),
 		style = {color = 0, padding = padding, border = cu.border_style(BORDER_COLOR)},
 	)
 	cu.push_parent(ctx, frame_w)
@@ -555,7 +422,87 @@ frame :: proc(
 	)
 
 	cu.push_parent(ctx, title_holder)
-	cu.create_widget(ctx, cu.text(label, style = {color = TEXT_PRIMARY_COLOR, font_size = 20}))
+	cu.create_widget(ctx, cu.text(label, style = {font = &font, color = TEXT_PRIMARY_COLOR, font_size = 20}))
 	cu.pop_parent(ctx)
 	return true
+}
+
+update_edit_state :: proc(state: ^edit.State) {
+	char := rl.GetCharPressed()
+
+	if cast(bool)char {
+		edit.input_rune(state, char)
+	}
+
+	if rl.IsKeyPressed(.ENTER) {
+		edit.perform_command(state, .New_Line)
+	}
+
+	if rl.IsKeyPressed(.BACKSPACE) {
+		edit.perform_command(state, .Backspace)
+	}
+
+	if rl.IsKeyPressed(.DELETE) {
+		edit.perform_command(state, .Delete)
+	}
+
+	if rl.IsKeyPressed(.A) && rl.IsKeyDown(.LEFT_CONTROL) {
+		edit.perform_command(state, .Select_All)
+	}
+
+	if rl.IsKeyPressed(.LEFT) {
+		if rl.IsKeyDown(.LEFT_CONTROL) && rl.IsKeyDown(.LEFT_SHIFT) {
+			edit.perform_command(state, .Select_Word_Left)
+		} else if rl.IsKeyDown(.LEFT_SHIFT) {
+			edit.perform_command(state, .Select_Left)
+		} else if rl.IsKeyDown(.LEFT_CONTROL) {
+			edit.perform_command(state, .Word_Left)
+		} else {
+			edit.perform_command(state, .Left)
+		}
+	}
+
+	if rl.IsKeyPressed(.RIGHT) {
+		if rl.IsKeyDown(.LEFT_CONTROL) && rl.IsKeyDown(.LEFT_SHIFT) {
+			edit.perform_command(state, .Select_Word_Right)
+		} else if rl.IsKeyDown(.LEFT_SHIFT) {
+			edit.perform_command(state, .Select_Right)
+		} else if rl.IsKeyDown(.LEFT_CONTROL) {
+			edit.perform_command(state, .Word_Right)
+		} else {
+			edit.perform_command(state, .Right)
+		}
+	}
+
+	if rl.IsKeyPressed(.UP) {
+		if rl.IsKeyDown(.LEFT_SHIFT) {
+			edit.perform_command(state, .Select_Up)
+		} else {
+			edit.perform_command(state, .Up)
+		}
+	}
+
+	if rl.IsKeyPressed(.DOWN) {
+		if rl.IsKeyDown(.LEFT_SHIFT) {
+			edit.perform_command(state, .Select_Down)
+		} else {
+			edit.perform_command(state, .Down)
+		}
+	}
+
+	if rl.IsKeyPressed(.HOME) {
+		if rl.IsKeyDown(.LEFT_CONTROL) {
+			edit.perform_command(state, .Start)
+		} else {
+			edit.perform_command(state, .Line_Start)
+		}
+	}
+
+	if rl.IsKeyPressed(.END) {
+		if rl.IsKeyDown(.LEFT_CONTROL) {
+			edit.perform_command(state, .End)
+		} else {
+			edit.perform_command(state, .Line_End)
+		}
+	}
 }
