@@ -229,8 +229,10 @@ Border_Style :: struct {
 }
 
 Text_Style :: struct {
+	font_name:      string,
 	color:          Color,
 	font:           rawptr,
+	font_id:        int,
 	font_size:      f32,
 	letter_spacing: f32,
 	line_spacing:   f32,
@@ -248,7 +250,7 @@ Node :: struct {
 
 Floating :: struct {
 	layout:          Layout,
-	id:              Id, // Used if Attachment_To == .Id 
+	id:              Id,
 	parent, element: Anchor,
 	attachment_to:   Attachment_To,
 }
@@ -263,9 +265,9 @@ Layout :: struct {
 Text :: struct {
 	style:        Text_Style,
 	text:         string,
-	_start, _end: int, // index into ctx.text_lines
+	_start, _end: int,
 	wrap:         Wrap_Kind,
-	cursor:       Maybe([2]int), // .x = head, .y = tail
+	cursor:       Maybe([2]int),
 }
 
 Image :: struct {

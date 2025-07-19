@@ -21,7 +21,6 @@ INFO_COLOR :: cu.Color{115, 115, 115, 255} // neutral gray (#737373)
 BORDER_COLOR :: cu.Color{87, 83, 78, 255} // warm gray-700 (#57534E)
 DIVIDER_COLOR :: cu.Color{113, 109, 104, 255} // warm gray-600 (#716D68)
 
-
 main :: proc() {
-	demo()
+	demo_nanovg()
 }

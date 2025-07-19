@@ -5,7 +5,7 @@ import glfw "vendor:glfw"
 import rl "vendor:raylib"
 
 init_window_raylib :: proc(width: i32 = 800, height: i32 = 600, name: cstring = "Window", config: rl.ConfigFlags = {}) {
-	rl.SetConfigFlags({})
+	rl.SetConfigFlags(config)
 	rl.InitWindow(width, height, name)
 }
 
