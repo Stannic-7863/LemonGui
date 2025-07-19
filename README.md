@@ -11,9 +11,11 @@
 - [ ] Animation system
 - [ ] Caching (text wrapping especially) for better performance
 - [ ] Well defined/documented behaviour for all combinations of layouts and text wrapping
-- [ ] Layout type to support **wrapping** for Widgets + More freedom with floating widgets in terms of anchor position 
+- [ ] Layout type to support **wrapping** for Widgets and more freedom with floating widgets in terms of anchor position
+	- Anchor position should be defined in terms of a grid perhaps? Parent can specify the grid in terms of rows and columns. Floating would attach to the rows and cols specified. 
 - [ ] Errors and Error handler support
-
+- [ ] Better Id/Keying system for widget
+	- Current generates id's from some pointers. Very volatile. Perhaps force a string id to for each widget and combine the child + parent id. Childs of different parents then can have same id's.
 # How to Use?
 
 ## The general setup is as follows:
@@ -226,11 +228,12 @@ Widget will this set to true will not detect event and will not ocllude the pare
 
 ## Using the API 
 
-You don't need to specify all the types manually. `helper.odin` has some helper procs to make it a bit easier.
+Procs in `helper.odin` make life a bit easier when making widgets. Each proc has default arguments which default to Zero for everything. 
 
-Things that have to be specified for both axis (`[Axis]Thing` or `[2]Thing`) the general pattern is `Thing(Thing_Kind(), Thing_Kind())` where first argument is for `X` axis and second is for `Y` axis.
-
-Example : `sizing(grow(), fit())`, `offset(offset_absolute(param)) // Only need to specified X, Y will fallback to default`, `expand(y=expand_percent_self()))` 
+Some examples of helper procs 
+- `sizing(grow(max=300), fit(min=200)))` 
+- `offset(offset_absolute(...)) // Specified the x param, y is default`
+- `expand(y=expand_percent_self(...))) // x is default`
 
 Example Creation of different widgets: 
 
