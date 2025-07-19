@@ -1,15 +1,17 @@
 # A simple (POTENTIAL) Imgui written in Odin
 
-# Progress so far:
+# Progress so far
+## Features:
 - [x] Layout
 - [x] Word Wrapping
 - [x] Basic mouse event handling
 - [x] Basic styling options
+## Planned things:
 - [ ] Keyboard events
 - [ ] Animation system
 - [ ] Caching (text wrapping especially) for better performance
 - [ ] Well defined/documented behaviour for all combinations of layouts and text wrapping
-- [ ] Layout type to support **wrapping** for Widgets + More freedom with floating widgets in terms of anchor position
+- [ ] Layout type to support **wrapping** for Widgets + More freedom with floating widgets in terms of anchor position 
 - [ ] Errors and Error handler support
 
 # How to Use?

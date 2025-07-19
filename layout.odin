@@ -877,22 +877,21 @@ _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: i
 	clip_size := widget.size
 	clip_position := widget.position
 
-	if border, ok := widget.style.border.(Border_Style); ok {
-		clip_position.x -= border.thickness[3]
-		clip_position.y -= border.thickness[0]
-		clip_size.x += border.thickness[1] + border.thickness[3]
-		clip_size.y += border.thickness[2] + border.thickness[0]
-	}
+	border := widget.style.border
+	clip_position.x -= border.thickness[3]
+	clip_position.y -= border.thickness[0]
+	clip_size.x += border.thickness[1] + border.thickness[3]
+	clip_size.y += border.thickness[2] + border.thickness[0]
 
 	append(&ctx.render_commands, Render_Command{kind = Command_Clip_Start{clip_size = clip_size, clip_position = clip_position}, z_index = z_index})
 }
 
 _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
-	if border, ok := widget.style.border.(Border_Style); ok {
+	if widget.style.border != {} {
 		command_border: Command_Border
 		command_border.position = widget.position
 		command_border.size = widget.size
-		command_border.style = border
+		command_border.style = widget.style.border
 		append(&ctx.render_commands, Render_Command{kind = command_border, z_index = z_index^ + widget.z_index})
 		z_index^ += 1
 	}
@@ -901,10 +900,11 @@ _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index
 _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	if text, ok := widget.kind.(Text); ok {
 		command_text: Command_Text
-		widget.position.x += widget.style.padding[3]
-		widget.position.y += widget.style.padding[0]
+		position := widget.position
+		position.x += widget.style.padding[3]
+		position.y += widget.style.padding[0]
 		command_text.cursor = text.cursor
-		command_text.position = widget.position
+		command_text.position = position
 		command_text.style = text.style
 		command_text.end = text._end
 		command_text.start = text._start
@@ -919,9 +919,7 @@ _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	command_rect.position = widget.position
 	command_rect.color = widget.style.color
 	_clamp_border_radius(widget)
-	if style, ok := widget.style.border.(Border_Style); ok {
-		command_rect.border_radius = style.radius
-	}
+	command_rect.border_radius = widget.style.border.radius
 	append(&ctx.render_commands, Render_Command{kind = command_rect, z_index = z_index^ + widget.z_index})
 	z_index^ += 1
 }

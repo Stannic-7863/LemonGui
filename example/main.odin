@@ -1,6 +1,9 @@
 package main
 
 import cu "../"
+import "core:fmt"
+
+import "base:runtime"
 
 PRIMARY_COLOR :: cu.Color{120, 113, 108, 255} // warm gray-500 (#78716C)
 ON_PRIMARY_COLOR :: cu.Color{255, 255, 255, 255} // white
@@ -22,5 +25,23 @@ BORDER_COLOR :: cu.Color{87, 83, 78, 255} // warm gray-700 (#57534E)
 DIVIDER_COLOR :: cu.Color{113, 109, 104, 255} // warm gray-600 (#716D68)
 
 main :: proc() {
-	demo_nanovg()
+
+	if len(runtime.args__) == 1 {
+		demo_rl()
+	} else {
+		for arg in runtime.args__ {
+			if arg == "nvg" {
+				demo_nanovg()
+				break
+			}
+			if arg == "rl" {
+				demo_rl()
+				break
+			}
+			if arg == "h" || arg == "help" {
+				fmt.println("rl : Use raylib\nnvg : Use nanovg")
+			}
+		}
+	}
+
 }

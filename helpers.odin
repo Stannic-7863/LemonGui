@@ -158,10 +158,8 @@ _get_layout :: proc "contextless" (widget: ^Widget) -> (Layout, bool) {
 }
 
 _clamp_border_radius :: proc(widget: ^Widget) {
-	if border, ok := &widget.style.border.(Border_Style); ok {
-		for &r in border.radius {
-			r = clamp(0, min(widget.size.x, widget.size.y) / 2, r)
-		}
+	for &r in widget.style.border.radius {
+		r = clamp(0, min(widget.size.x, widget.size.y) / 2, r)
 	}
 }
 

@@ -216,7 +216,7 @@ Primitive_Line :: struct {
 
 // TODO: Make it consistant. Text style exists in Text while other styles here.
 Style :: struct {
-	border:  Maybe(Border_Style),
+	border:  Border_Style,
 	padding: Vec4f32,
 	color:   Color,
 }
