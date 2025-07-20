@@ -4,6 +4,7 @@ import "base:runtime"
 import "core:fmt"
 import "core:math"
 import "core:math/ease"
+import "core:math/linalg"
 import "core:reflect"
 
 // Return Color in rgba format
@@ -193,4 +194,28 @@ _build_stacks :: proc(ctx: ^Core_Context) {
 	}
 
 	clear(&ctx.stacks.temp)
+}
+
+_is_point_in_rect :: proc(rect_pos, rect_size, point: Vec2f32, border_style: Maybe(Border_Style)) -> bool {
+
+	border_radius: Vec4f32
+
+	if style, ok := border_style.(Border_Style); ok {
+		border_radius = style.radius.zywx
+	}
+
+	half_size := rect_size / 2
+	rel_pos := point - (rect_pos + half_size)
+
+	border_radius.xy = rel_pos.x > 0 ? border_radius.xy : border_radius.zw
+	border_radius.x = rel_pos.y > 0 ? border_radius.x : border_radius.y
+
+	p := [2]f32{abs(rel_pos.x), abs(rel_pos.y)} - half_size + border_radius.x
+
+	dist := linalg.length(linalg.max(p, 0.0)) + min(max(p.x, p.y), 0.0) - border_radius.x
+
+	if dist < 0 {
+		return true
+	}
+	return false
 }
