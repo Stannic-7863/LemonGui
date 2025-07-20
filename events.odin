@@ -3,146 +3,83 @@ package ui_core
 import "core:math/linalg"
 import "core:time"
 
+Mouse_Button :: enum u8 {
+	Left,
+	Middle,
+	Right,
+}
+
 Mouse_Event :: enum u8 {
-	Right_Down,
-	Right_Pressed,
-	Right_Released,
-	Left_Down,
-	Left_Released,
-	Left_Pressed,
-	Middle_Down,
-	Middle_Released,
-	Middle_Pressed,
-	Scroll_Up,
-	Scroll_Down,
+	Down,
+	Pressed,
+	Released,
 }
 
-Widget_Event :: enum u8 {
-	Left_Clicked,
-	Left_Pressed,
-	Left_Down,
-	Right_Clicked,
-	Right_Pressed,
-	Right_Down,
-	Middle_Clicked,
-	Middle_Pressed,
-	Middle_Down,
-	Long_Left_Down,
-	Long_Right_Down,
-	Long_Middle_Down,
-	Double_Left_Clicked,
-	Double_Right_Clicked,
-	Double_Middle_Clicked,
-	Hovered,
-	Dragged,
+Widget_Mouse_Event :: enum {
+	Clicked,
+	Double_Clicked,
+	Triple_Clicked,
+	Pressed,
+	Down,
+	Long_Down,
 }
 
-Widget_Events :: bit_set[Widget_Event]
+Widget_Event_Context :: struct {
+	mouse:      [Mouse_Button]bit_set[Widget_Mouse_Event],
+	is_hovered: bool,
+}
 
 Mouse_Context :: struct {
 	double_click_timeout: time.Duration,
 	long_down_timeout:    time.Duration,
-	last_left_click:      time.Time,
-	last_right_click:     time.Time,
-	left_down_start:      time.Time,
-	right_down_start:     time.Time,
+	last_click:           [Mouse_Button]time.Time,
+	down_start:           [Mouse_Button]time.Time,
 	old_position:         Vec2f32,
 	position:             Vec2f32,
 	delta:                Vec2f32,
 	scroll_v:             Vec2f32,
 	scroll:               f32,
-	events:               bit_set[Mouse_Event],
+	events:               [Mouse_Button]bit_set[Mouse_Event],
 }
 
-_resolve_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event: Widget_Events) {
+Keyboard_Context :: struct {}
 
-	for events in ctx.mouse.events {
-		switch events {
-		case .Left_Pressed:
-			event += {.Left_Pressed}
-			ctx.mouse.left_down_start = time.now()
-			ctx.active_widget_id = widget.node.id
-		case .Left_Down:
-			event += {.Left_Down}
-			ctx.active_widget_id = widget.node.id
-
-			if time.since(ctx.mouse.left_down_start) > ctx.mouse.long_down_timeout {
-				event += {.Long_Left_Down}
+_resolve_events :: proc(ctx: ^Core_Context, widget: ^Widget) -> (event_context: Widget_Event_Context) {
+	for mouse_events, mouse_button in ctx.mouse.events {
+		for mouse_event in mouse_events {
+			switch mouse_event {
+			case .Pressed:
+				_handle_mouse_pressed(ctx, &event_context, mouse_button, mouse_event)
+				ctx.active_widget_id = widget.node.id
+			case .Down:
+				_handle_mouse_down(ctx, &event_context, mouse_button, mouse_event)
+				ctx.active_widget_id = widget.node.id
+			case .Released:
+				_handle_mouse_released(ctx, &event_context, mouse_button, mouse_event)
 			}
-		case .Left_Released:
-			event += {.Left_Clicked}
-			ctx.active_widget_id = 0
-			if time.since(ctx.mouse.last_left_click) < ctx.mouse.double_click_timeout {
-				event += {.Double_Left_Clicked}
-			} else {
-				ctx.mouse.last_left_click = time.now()
-			}
-		case .Right_Pressed:
-			event += {.Right_Pressed}
-			ctx.mouse.right_down_start = time.now()
-			ctx.active_widget_id = widget.node.id
-		case .Right_Down:
-			event += {.Right_Down}
-			ctx.active_widget_id = widget.node.id
-
-			if time.since(ctx.mouse.right_down_start) > ctx.mouse.long_down_timeout {
-				event += {.Long_Right_Down}
-			}
-		case .Right_Released:
-			event += {.Right_Clicked}
-			ctx.active_widget_id = 0
-			if time.since(ctx.mouse.last_right_click) < ctx.mouse.double_click_timeout {
-				event += {.Double_Right_Clicked}
-			} else {
-				ctx.mouse.last_right_click = time.now()
-			}
-		case .Middle_Pressed:
-			event += {.Middle_Pressed}
-			ctx.mouse.right_down_start = time.now()
-			ctx.active_widget_id = widget.node.id
-		case .Middle_Down:
-			event += {.Middle_Down}
-			ctx.active_widget_id = widget.node.id
-
-			if time.since(ctx.mouse.right_down_start) > ctx.mouse.long_down_timeout {
-				event += {.Long_Middle_Down}
-			}
-		case .Middle_Released:
-			event += {.Middle_Clicked}
-			ctx.active_widget_id = 0
-			if time.since(ctx.mouse.last_right_click) < ctx.mouse.double_click_timeout {
-				event += {.Double_Middle_Clicked}
-			} else {
-				ctx.mouse.last_right_click = time.now()
-			}
-		case .Scroll_Up:
-		case .Scroll_Down:
 		}
 	}
-
 	return
 }
 
-_is_point_in_rect :: proc(rect_pos, rect_size, point: Vec2f32, border_style: Maybe(Border_Style)) -> bool {
+_handle_mouse_pressed :: proc(ctx: ^Core_Context, event_ctx: ^Widget_Event_Context, button: Mouse_Button, event: Mouse_Event) {
+	event_ctx.mouse[button] += {.Pressed}
+	ctx.mouse.down_start[button] = time.now()
+}
 
-	border_radius: Vec4f32
-
-	if style, ok := border_style.(Border_Style); ok {
-		border_radius = style.radius.zywx
+_handle_mouse_down :: proc(ctx: ^Core_Context, event_ctx: ^Widget_Event_Context, button: Mouse_Button, event: Mouse_Event) {
+	event_ctx.mouse[button] += {.Down}
+	if time.since(ctx.mouse.down_start[button]) > ctx.mouse.long_down_timeout {
+		event_ctx.mouse[button] += {.Long_Down}
 	}
+}
 
-	half_size := rect_size / 2
-	rel_pos := point - (rect_pos + half_size)
-
-	border_radius.xy = rel_pos.x > 0 ? border_radius.xy : border_radius.zw
-	border_radius.x = rel_pos.y > 0 ? border_radius.x : border_radius.y
-
-	p := [2]f32{abs(rel_pos.x), abs(rel_pos.y)} - half_size + border_radius.x
-
-	dist := linalg.length(linalg.max(p, 0.0)) + min(max(p.x, p.y), 0.0) - border_radius.x
-
-	if dist < 0 {
-		return true
+_handle_mouse_released :: proc(ctx: ^Core_Context, event_ctx: ^Widget_Event_Context, button: Mouse_Button, event: Mouse_Event) {
+	event_ctx.mouse[button] += {.Clicked}
+	ctx.active_widget_id = 0
+	if time.since(ctx.mouse.last_click[button]) < ctx.mouse.double_click_timeout {
+		event_ctx.mouse[button] += {.Double_Clicked}
+	} else {
+		ctx.mouse.last_click[button] = time.now()
 	}
-	return false
 }

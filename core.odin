@@ -95,7 +95,7 @@ Core_Context :: struct {
 // Data that persists each frame 
 Persistant_Data :: struct {
 	size, position, accumulated_min: Vec2f32,
-	events:                          Widget_Events,
+	events:                          Widget_Event_Context,
 	clip:                            Maybe([2]Clip),
 }
 
@@ -309,7 +309,7 @@ Widget :: struct {
 	aspect_ratio:           Maybe(f32),
 	is_floating_descendant: bool,
 	event_passthrough:      bool,
-	events:                 Widget_Events,
+	events:                 Widget_Event_Context,
 }
 
 init_core_context :: proc(total_widgets: int) -> Core_Context {
@@ -355,7 +355,6 @@ begin_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.widgets)
 	clear(&ctx.text_lines)
 	clear(&ctx.render_commands)
-	ctx.active_parent = nil
 }
 
 // Layout Pass + Positioning + Render commands
@@ -367,17 +366,18 @@ end_ui :: proc(ctx: ^Core_Context) {
 	clear_map(&ctx.persistant_data)
 
 	for &w in ctx.widgets {
-		events: Widget_Events
-		if w.node.id == ctx.hot_widget_id {
-			events += {.Hovered}
-		}
+		event_context: Widget_Event_Context
 
 		if w.node.id == ctx.hot_widget_id && (w.node.id == ctx.active_widget_id || ctx.active_widget_id == 0) {
-			events += _resolve_events(ctx, &w)
+			event_context = _resolve_events(ctx, &w)
+		}
+
+		if w.node.id == ctx.hot_widget_id {
+			event_context.is_hovered = true
 		}
 
 		ctx.persistant_data[w.node.id] = Persistant_Data {
-			events          = events,
+			events          = event_context,
 			size            = w.size,
 			position        = w.position,
 			accumulated_min = w.accumulated_min,
@@ -388,6 +388,7 @@ end_ui :: proc(ctx: ^Core_Context) {
 	ctx.mouse.events = {}
 	ctx.mouse.old_position = ctx.mouse.position
 	ctx.last_hot_widget_id = ctx.hot_widget_id
+	ctx.active_parent = nil
 	clear(&ctx.primitives)
 	clear(&ctx.stacks.post_r)
 	clear(&ctx.stacks.pre)
