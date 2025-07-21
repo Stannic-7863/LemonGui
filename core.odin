@@ -75,6 +75,7 @@ Core_Context :: struct {
 		temp:   [dynamic]^Widget,
 	},
 	mouse:                       Mouse_Context,
+	keyboard:                    Keyboard_Context,
 	widgets:                     [dynamic]Widget,
 	text_lines:                  [dynamic]string,
 	render_commands:             [dynamic]Render_Command,
@@ -385,7 +386,7 @@ end_ui :: proc(ctx: ^Core_Context) {
 		}
 	}
 
-	ctx.mouse.events = {}
+	ctx.mouse.mapped_events = {}
 	ctx.mouse.old_position = ctx.mouse.position
 	ctx.last_hot_widget_id = ctx.hot_widget_id
 	ctx.active_parent = nil

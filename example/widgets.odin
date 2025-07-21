@@ -117,7 +117,7 @@ build_ui :: proc(
 	cu.pop_parent(ctx)
 }
 
-button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe(string), font: rawptr) -> cu.Widget_Events {
+button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe(string), font: rawptr) -> cu.Widget_Event_Context {
 	body := cu.create_widget(
 		ctx,
 		cu.layout(cu.sizing(cu.grow(max = 128), cu.fit(16)), 8, .X, {.Center, .Center}),
@@ -145,7 +145,7 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe
 			)
 		}
 
-		if tooltip, ok := tooltip.(string); ok && .Hovered in body.events {
+		if tooltip, ok := tooltip.(string); ok && body.events.is_hovered {
 			offset_value := ctx.mouse.position - body.position
 			fixed_size: [2]f32 = {ctx.window_width - body.position.x, ctx.window_height - body.position.y} - offset_value - 32
 			floating_holder := cu.create_widget(
@@ -176,7 +176,14 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe
 	return body.events
 }
 
-toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool, icon: rawptr, tooltip: Maybe(string), font: rawptr) -> cu.Widget_Events {
+toggle_button :: proc(
+	ctx: ^cu.Core_Context,
+	label: string,
+	toggle: ^bool,
+	icon: rawptr,
+	tooltip: Maybe(string),
+	font: rawptr,
+) -> cu.Widget_Event_Context {
 
 	border_style := cu.border_style({BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, ERROR_COLOR}, cu.Border_Kind.Single, 0, 1)
 	text_color := TEXT_DISABLED_COLOR
@@ -192,7 +199,7 @@ toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool, icon:
 		style = cu.Style{color = SURFACE_COLOR, padding = 4, border = border_style},
 	)
 
-	if .Left_Clicked in body.events {
+	if .Clicked in body.events.mouse[.Left] {
 		toggle^ = !toggle^
 	}
 
@@ -217,7 +224,7 @@ toggle_button :: proc(ctx: ^cu.Core_Context, label: string, toggle: ^bool, icon:
 			)
 		}
 
-		if tooltip, ok := tooltip.(string); ok && .Hovered in body.events {
+		if tooltip, ok := tooltip.(string); ok && body.events.is_hovered {
 			offset_value := ctx.mouse.position - body.position
 			fixed_size: [2]f32 = {ctx.window_width - body.position.x, ctx.window_height - body.position.y} - offset_value - 32
 			floating_holder := cu.create_widget(
@@ -285,7 +292,7 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32,
 		style = cu.Style{color = ELEVATED_SURFACE_COLOR, border = cu.border_style(color = 0, radius = 50)},
 	)
 
-	if .Left_Down in knob.events {
+	if .Down in knob.events.mouse[.Left] {
 		rel := ctx.mouse.position.x - railing.position.x
 		normalized := clamp(rel / railing.size.x, 0, 1)
 		value^ = min + (max - min) * normalized

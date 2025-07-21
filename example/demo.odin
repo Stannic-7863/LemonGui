@@ -70,15 +70,15 @@ demo_rl :: proc() {
 		ctx.mouse.scroll = rl.GetMouseWheelMove()
 		ctx.mouse.scroll_v = rl.GetMouseWheelMoveV()
 
-		if rl.IsMouseButtonDown(.LEFT) {ctx.mouse.events += {.Left_Down}}
-		if rl.IsMouseButtonDown(.RIGHT) {ctx.mouse.events += {.Right_Down}}
-		if rl.IsMouseButtonDown(.MIDDLE) {ctx.mouse.events += {.Middle_Down}}
-		if rl.IsMouseButtonPressed(.LEFT) {ctx.mouse.events += {.Left_Pressed}}
-		if rl.IsMouseButtonPressed(.RIGHT) {ctx.mouse.events += {.Right_Pressed}}
-		if rl.IsMouseButtonPressed(.MIDDLE) {ctx.mouse.events += {.Middle_Pressed}}
-		if rl.IsMouseButtonReleased(.LEFT) {ctx.mouse.events += {.Left_Released}}
-		if rl.IsMouseButtonReleased(.RIGHT) {ctx.mouse.events += {.Right_Released}}
-		if rl.IsMouseButtonReleased(.MIDDLE) {ctx.mouse.events += {.Middle_Released}}
+		if rl.IsMouseButtonDown(.LEFT) {ctx.mouse.mapped_events[.Left] += {.Down}}
+		if rl.IsMouseButtonDown(.RIGHT) {ctx.mouse.mapped_events[.Right] += {.Down}}
+		if rl.IsMouseButtonDown(.MIDDLE) {ctx.mouse.mapped_events[.Middle] += {.Down}}
+		if rl.IsMouseButtonPressed(.LEFT) {ctx.mouse.mapped_events[.Left] += {.Pressed}}
+		if rl.IsMouseButtonPressed(.RIGHT) {ctx.mouse.mapped_events[.Right] += {.Pressed}}
+		if rl.IsMouseButtonPressed(.MIDDLE) {ctx.mouse.mapped_events[.Middle] += {.Pressed}}
+		if rl.IsMouseButtonReleased(.LEFT) {ctx.mouse.mapped_events[.Left] += {.Released}}
+		if rl.IsMouseButtonReleased(.RIGHT) {ctx.mouse.mapped_events[.Right] += {.Released}}
+		if rl.IsMouseButtonReleased(.MIDDLE) {ctx.mouse.mapped_events[.Middle] += {.Released}}
 
 		update_edit_state(&state)
 
