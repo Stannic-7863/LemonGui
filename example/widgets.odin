@@ -26,6 +26,7 @@ build_ui :: proc(
 ) {
 	root := cu.create_widget(
 		ctx,
+		"Root",
 		cu.Layout{sizing = cu.sizing(cu.fixed(ctx.window_width), cu.fixed(ctx.window_height)), direction = .X, child_gap = 16},
 		style = {padding = 32, color = BACKGROUND_COLOR},
 	)
@@ -57,19 +58,19 @@ build_ui :: proc(
 
 	if frame(ctx, "Text_Wrap", font, {34, 12, 12, 12}, child_gap = 24) {
 		if frame(ctx, "Wrap_Words", font = font) {
-			cu.create_widget(ctx, cu.text("A quick brown fox jumps over the lazy dog", .Words, generic_text_style))
+			cu.create_widget(ctx, "Text_1", cu.text("A quick brown fox jumps over the lazy dog", .Words, generic_text_style))
 			cu.pop_parent(ctx)
 		}
 		if frame(ctx, "Wrap_New_Lines", font) {
-			cu.create_widget(ctx, cu.text("A quick \nbrown \nfox \njumps over \nthe lazy \ndog", .New_Lines, generic_text_style))
+			cu.create_widget(ctx, "Text_2", cu.text("A quick \nbrown \nfox \njumps over \nthe lazy \ndog", .New_Lines, generic_text_style))
 			cu.pop_parent(ctx)
 		}
 		if frame(ctx, "Wrap_None", font) {
-			cu.create_widget(ctx, cu.text("A quick brown fox jumps over the lazy dog", .None, generic_text_style))
+			cu.create_widget(ctx, "Text_3", cu.text("A quick brown fox jumps over the lazy dog", .None, generic_text_style))
 			cu.pop_parent(ctx)
 		}
 		if frame(ctx, "Wrap_Letters", font) {
-			cu.create_widget(ctx, cu.text("A quick brown fox jumps over the lazy dog", .Letters, generic_text_style))
+			cu.create_widget(ctx, "Text_4", cu.text("A quick brown fox jumps over the lazy dog", .Letters, generic_text_style))
 			cu.pop_parent(ctx)
 		}
 		cu.pop_parent(ctx)
@@ -79,13 +80,13 @@ build_ui :: proc(
 	if frame(ctx, "Text_Input", font) {
 		t := cu.create_widget(
 			ctx,
+			"Input text",
 			cu.text(
 				transmute(string)buffer.buf[:],
 				.Letters,
 				{font = font, color = TEXT_PRIMARY_COLOR, font_size = 16, letter_spacing = 1},
 				cursor = state.selection,
 			),
-			string_id = "Text_Input",
 		)
 		type := t.kind.(cu.Text)
 		cu.pop_parent(ctx)
@@ -96,6 +97,7 @@ build_ui :: proc(
 		if frame(ctx, "Aaloos", font) {
 			cu.create_widget(
 				ctx,
+				"Aaloos config",
 				cu.layout(cu.sizing(cu.grow())),
 				image = cu.Image{image_data = aaloo_image.data, tint = aaloo_tint},
 				aspect_ratio = aaloo_image.w / aaloo_image.h,
@@ -117,11 +119,17 @@ build_ui :: proc(
 	cu.pop_parent(ctx)
 }
 
-button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe(string), font: rawptr) -> cu.Widget_Event_Context {
+button :: proc(
+	ctx: ^cu.Core_Context,
+	label: string,
+	icon: Image,
+	tooltip: Maybe(string),
+	font: rawptr,
+) -> [cu.Mouse_Button]bit_set[cu.Widget_Key_Event] {
 	body := cu.create_widget(
 		ctx,
+		label,
 		cu.layout(cu.sizing(cu.grow(max = 128), cu.fit(16)), 8, .X, {.Center, .Center}),
-		string_id = "buttons",
 		style = cu.Style{color = SURFACE_COLOR, padding = 4, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
 	)
 
@@ -130,6 +138,7 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe
 
 		label_widget := cu.create_widget(
 			ctx,
+			"body_label_text",
 			cu.text(label, style = cu.Text_Style{font = font, color = TEXT_PRIMARY_COLOR, font_size = 16, letter_spacing = 1}),
 			event_passthrough = true,
 		)
@@ -137,6 +146,7 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe
 		if icon.data != nil {
 			cu.create_widget(
 				ctx,
+				"button_icon",
 				cu.layout(cu.sizing(cu.fixed(icon.w), cu.fixed(icon.h))),
 				aspect_ratio = 1.0,
 				image = cu.Image{icon.data, 255},
@@ -145,11 +155,12 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe
 			)
 		}
 
-		if tooltip, ok := tooltip.(string); ok && body.events.is_hovered {
+		if tooltip, ok := tooltip.(string); ok && body.node.id == ctx.hot_widget_id {
 			offset_value := ctx.mouse.position - body.position
 			fixed_size: [2]f32 = {ctx.window_width - body.position.x, ctx.window_height - body.position.y} - offset_value - 32
 			floating_holder := cu.create_widget(
 				ctx,
+				"button_floating_tooltip_holder",
 				cu.Floating {
 					layout = cu.layout(cu.sizing(cu.fixed(fixed_size.x), cu.fixed(fixed_size.y))),
 					parent = .Left_Top,
@@ -164,6 +175,7 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe
 				defer cu.pop_parent(ctx)
 				cu.create_widget(
 					ctx,
+					"button_floating_tooltip",
 					cu.text(text = tooltip, style = {font = font, color = TEXT_SECONDARY_COLOR, letter_spacing = 1, font_size = 16}),
 					offset = [2]cu.Offset{cu.offset_absolute(offset_value.x), cu.offset_absolute(offset_value.y)},
 					style = {color = ELEVATED_SURFACE_COLOR, padding = 16, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
@@ -173,7 +185,12 @@ button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe
 		}
 	}
 
-	return body.events
+
+	if body.node.id == ctx.hot_widget_id {
+		return ctx.mouse.events
+	} else {
+		return {}
+	}
 }
 
 toggle_button :: proc(
@@ -183,7 +200,7 @@ toggle_button :: proc(
 	icon: rawptr,
 	tooltip: Maybe(string),
 	font: rawptr,
-) -> cu.Widget_Event_Context {
+) -> [cu.Mouse_Button]bit_set[cu.Widget_Key_Event] {
 
 	border_style := cu.border_style({BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, ERROR_COLOR}, cu.Border_Kind.Single, 0, 1)
 	text_color := TEXT_DISABLED_COLOR
@@ -194,13 +211,15 @@ toggle_button :: proc(
 
 	body := cu.create_widget(
 		ctx,
+		label,
 		cu.layout(cu.sizing(cu.grow(max = 128), cu.fit(16)), 8, .X, {.Center, .Center}),
-		string_id = "buttons",
 		style = cu.Style{color = SURFACE_COLOR, padding = 4, border = border_style},
 	)
 
-	if .Clicked in body.events.mouse[.Left] {
-		toggle^ = !toggle^
+	if body.node.id == ctx.hot_widget_id {
+		if .Clicked in ctx.mouse.events[.Left] {
+			toggle^ = !toggle^
+		}
 	}
 
 	if cu.push_parent(ctx, body) {
@@ -208,6 +227,7 @@ toggle_button :: proc(
 
 		label_widget := cu.create_widget(
 			ctx,
+			"toggle_button_label_text",
 			cu.text(label, style = cu.Text_Style{font = font, color = text_color, font_size = 16, letter_spacing = 1}),
 			event_passthrough = true,
 		)
@@ -216,6 +236,7 @@ toggle_button :: proc(
 			icon := cast(^rl.Texture)icon
 			cu.create_widget(
 				ctx,
+				"toggle_button_icon",
 				cu.layout(cu.sizing(cu.fixed(cast(f32)icon.width), cu.fixed(cast(f32)icon.height))),
 				aspect_ratio = 1.0,
 				image = cu.Image{icon, 255},
@@ -224,11 +245,12 @@ toggle_button :: proc(
 			)
 		}
 
-		if tooltip, ok := tooltip.(string); ok && body.events.is_hovered {
+		if tooltip, ok := tooltip.(string); ok && body.node.id == ctx.hot_widget_id {
 			offset_value := ctx.mouse.position - body.position
 			fixed_size: [2]f32 = {ctx.window_width - body.position.x, ctx.window_height - body.position.y} - offset_value - 32
 			floating_holder := cu.create_widget(
 				ctx,
+				"toggle_button_tooltip_floating",
 				cu.Floating {
 					layout = cu.layout(cu.sizing(cu.fixed(fixed_size.x), cu.fixed(fixed_size.y))),
 					parent = .Left_Top,
@@ -243,6 +265,7 @@ toggle_button :: proc(
 				defer cu.pop_parent(ctx)
 				cu.create_widget(
 					ctx,
+					"toggle_button_tooltip_text",
 					cu.text(text = tooltip, style = {font = font, color = TEXT_SECONDARY_COLOR, letter_spacing = 1, font_size = 16}),
 					offset = [2]cu.Offset{cu.offset_absolute(offset_value.x), cu.offset_absolute(offset_value.y)},
 					style = {color = ELEVATED_SURFACE_COLOR, padding = 16, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
@@ -252,31 +275,38 @@ toggle_button :: proc(
 		}
 	}
 
-	return body.events
+	if body.node.id == ctx.hot_widget_id {
+		return ctx.mouse.events
+	} else {
+		return {}
+	}
 }
 
 slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32, font: rawptr) {
 	main_container := cu.create_widget(
 		ctx,
+		label,
 		cu.Layout{sizing = cu.sizing(cu.grow(50), cu.fit(min = 16, max = 32)), child_gap = 16, direction = .X, child_alignment = {.Center, .Center}},
-		string_id = "slider",
 		style = cu.Style{padding = 4},
 		event_passthrough = true,
 	)
 	cu.push_parent(ctx, main_container)
 	cu.create_widget(
 		ctx,
+		"slider_text_label",
 		cu.text(label, style = {font = font, color = TEXT_PRIMARY_COLOR, font_size = 20}),
 		style = {border = cu.border_style(BORDER_COLOR), padding = 8},
 	)
 
 	cu.create_widget(
 		ctx,
+		"slider_text_min",
 		cu.text(style = {font = font, letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_PRIMARY_COLOR}, text = fmt.tprint(min)),
 	)
 
 	railing := cu.create_widget(
 		ctx,
+		"slider_text_min",
 		cu.layout(sizing = cu.sizing(cu.grow(), cu.fixed(4)), direction = .Y, child_alignment = {.Center, .Center}),
 		style = cu.Style{color = SURFACE_COLOR},
 	)
@@ -287,19 +317,23 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32,
 
 	knob := cu.create_widget(
 		ctx,
+		"slider_knob",
 		cu.Layout{sizing = cu.sizing(cu.fixed(20), cu.fixed(20))},
 		offset = cu.offset(cu.offset_percent(knob_offset)),
 		style = cu.Style{color = ELEVATED_SURFACE_COLOR, border = cu.border_style(color = 0, radius = 50)},
 	)
 
-	if .Down in knob.events.mouse[.Left] {
-		rel := ctx.mouse.position.x - railing.position.x
-		normalized := clamp(rel / railing.size.x, 0, 1)
-		value^ = min + (max - min) * normalized
+	if knob.node.id == ctx.hot_widget_id {
+		if .Down in ctx.mouse.events[.Left] {
+			rel := ctx.mouse.position.x - railing.position.x
+			normalized := clamp(rel / railing.size.x, 0, 1)
+			value^ = min + (max - min) * normalized
+		}
 	}
 
 	label_holder := cu.create_widget(
 		ctx,
+		"slider_knob_current_value_holder",
 		cu.floating(cu.layout(cu.sizing(cu.grow(), cu.fit()), child_alignment = cu.child_alignment(.Center, .Center)), .Left_Top, .Left_Top),
 		event_passthrough = true,
 	)
@@ -308,6 +342,7 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32,
 	cu.push_parent(ctx, label_holder)
 	cu.create_widget(
 		ctx,
+		"slider_knob_current_value_text",
 		cu.Text {
 			text = fmt.tprint(value^),
 			style = {font = font, letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_SECONDARY_COLOR},
@@ -320,6 +355,7 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32,
 	cu.pop_parent(ctx)
 	cu.create_widget(
 		ctx,
+		"slider_min_value",
 		cu.Text{style = {font = font, letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_PRIMARY_COLOR}, text = fmt.tprint(max)},
 	)
 
@@ -337,21 +373,22 @@ frame :: proc(
 ) -> bool {
 	frame_w := cu.create_widget(
 		ctx,
+		label,
 		cu.layout(cu.sizing(cu.grow(128, 512), cu.fit()), direction = direction, child_gap = child_gap),
-		string_id = label,
 		style = {color = 0, padding = padding, border = cu.border_style(BORDER_COLOR)},
 	)
 	cu.push_parent(ctx, frame_w)
 
 	title_holder := cu.create_widget(
 		ctx,
+		"Frame_floating",
 		cu.floating(cu.layout(cu.sizing(cu.fit(), cu.fit())), .Left_Top, .Left_Top),
 		offset = cu.offset(cu.offset_absolute(6), cu.offset_percent_self(-0.5)),
 		style = {padding = {4, 8, 4, 8}, color = BACKGROUND_COLOR, border = cu.border_style(BORDER_COLOR)},
 	)
 
 	cu.push_parent(ctx, title_holder)
-	cu.create_widget(ctx, cu.text(label, style = {font = font, color = TEXT_PRIMARY_COLOR, font_size = 20}))
+	cu.create_widget(ctx, "frame_floating_text", cu.text(label, style = {font = font, color = TEXT_PRIMARY_COLOR, font_size = 20}))
 	cu.pop_parent(ctx)
 	return true
 }

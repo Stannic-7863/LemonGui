@@ -96,7 +96,6 @@ Core_Context :: struct {
 // Data that persists each frame 
 Persistant_Data :: struct {
 	size, position, accumulated_min: Vec2f32,
-	events:                          Widget_Event_Context,
 	clip:                            Maybe([2]Clip),
 }
 
@@ -293,6 +292,11 @@ Clip_Kind :: enum {
 	Auto,
 }
 
+Key :: struct {
+	string_id: string,
+	parent_id: Id,
+}
+
 Widget :: struct {
 	style:                  Style,
 	kind:                   Widget_Kind,
@@ -301,7 +305,7 @@ Widget :: struct {
 	offset:                 [2]Offset,
 	image:                  Maybe(Image),
 	primitives:             []Command_Primitive,
-	string_id:              string,
+	key:                    Key,
 	clip:                   Maybe([2]Clip),
 	accumulated_min:        Vec2f32,
 	size, position:         Vec2f32,
@@ -310,7 +314,6 @@ Widget :: struct {
 	aspect_ratio:           Maybe(f32),
 	is_floating_descendant: bool,
 	event_passthrough:      bool,
-	events:                 Widget_Event_Context,
 }
 
 init_core_context :: proc(total_widgets: int) -> Core_Context {
@@ -365,20 +368,11 @@ end_ui :: proc(ctx: ^Core_Context) {
 	_layout_all_positioning_pass(ctx)
 
 	clear_map(&ctx.persistant_data)
+	ctx.mouse.events = {}
+	_resolve_events(ctx)
 
 	for &w in ctx.widgets {
-		event_context: Widget_Event_Context
-
-		if w.node.id == ctx.hot_widget_id && (w.node.id == ctx.active_widget_id || ctx.active_widget_id == 0) {
-			event_context = _resolve_events(ctx, &w)
-		}
-
-		if w.node.id == ctx.hot_widget_id {
-			event_context.is_hovered = true
-		}
-
 		ctx.persistant_data[w.node.id] = Persistant_Data {
-			events          = event_context,
 			size            = w.size,
 			position        = w.position,
 			accumulated_min = w.accumulated_min,
@@ -398,8 +392,8 @@ end_ui :: proc(ctx: ^Core_Context) {
 
 create_widget :: proc(
 	ctx: ^Core_Context,
+	string_id: string,
 	widget_kind: Widget_Kind = nil,
-	string_id: string = "",
 	aspect_ratio: Maybe(f32) = nil,
 	image: Maybe(Image) = nil,
 	clip: Maybe([2]Clip) = nil,
@@ -412,7 +406,6 @@ create_widget :: proc(
 	append(&ctx.widgets, Widget{})
 	w: ^Widget = &ctx.widgets[len(ctx.widgets) - 1]
 	w^ = {}
-	w.string_id = string_id
 	w.clip = clip
 	w.kind = widget_kind
 	w.image = image
@@ -430,6 +423,7 @@ create_widget :: proc(
 	}
 
 	_add_widget(ctx, w)
+	w.key.string_id = string_id
 	_generate_widget_id(w)
 
 	if _, ok := w.kind.(Floating); ok {
@@ -472,42 +466,19 @@ _add_widget :: proc(ctx: ^Core_Context, widget: ^Widget) {
 
 		widget.z_index = ctx.active_parent.z_index
 		widget.is_floating_descendant = ctx.active_parent.is_floating_descendant
+		widget.key.parent_id = ctx.active_parent.node.id
 	}
 }
 
 _generate_widget_id :: proc(widget: ^Widget) {
-	buffer: [size_of(int) * 4]byte
-	offset: int
-	temp: [size_of(int)]u8
-
-	if widget.node.prev != nil {
-		temp = transmute([size_of(int)]u8)widget.node.prev
-		copy(buffer[offset:offset + size_of(int)], temp[:])
-	}
-	offset += size_of(int)
-
-	if widget.node.parent != nil {
-		temp = transmute([size_of(int)]u8)widget.node.parent
-		copy(buffer[offset:offset + size_of(int)], temp[:])
-	}
-	offset += size_of(int)
-
-	temp = transmute([size_of(int)]u8)widget.node.total_children
-	copy(buffer[offset:offset + size_of(int)], temp[:])
-	offset += size_of(int)
-
-	temp = transmute([size_of(int)]u8)widget.node.index
-	copy(buffer[offset:offset + size_of(int)], temp[:])
-	offset += size_of(int)
-
-	widget.node.id = cast(Id)hash.fnv64a(buffer[:])
+	id := cast(Id)hash.fnv64(transmute([]u8)widget.key.string_id)
+	widget.node.id = widget.key.parent_id * 9 + id
 }
 
 _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widget: ^Widget) -> bool {
 	val := persistant_data[widget.node.id] or_return
 	widget.position = val.position
 	widget.size = val.size
-	widget.events = val.events
 
 	if clip, widget_clip_ok := &widget.clip.([2]Clip); widget_clip_ok {
 		val_clip, val_clip_ok := val.clip.([2]Clip)
