@@ -177,6 +177,7 @@ Keyboard_Context :: struct {
 	events:               [Keyboard_Key]bit_set[Widget_Key_Event],
 	double_click_timeout: time.Duration,
 	long_down_timeout:    time.Duration,
+	pressed_char:         []rune,
 }
 
 _resolve_events :: proc(ctx: ^Core_Context) {

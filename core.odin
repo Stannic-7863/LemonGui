@@ -60,14 +60,6 @@ Color :: [4]u8 // TODO: Turn this into a gradient type
 Id :: distinct i64
 
 
-// TODO: Error handling 
-when ODIN_DEBUG {
-	Core_Errors :: enum u8 {
-		No_Parent_To_Bind_Primitive,
-		Image_Provided_With_No_Aspect_Ratio,
-	}
-}
-
 Core_Context :: struct {
 	stacks:                      struct {
 		post_r: [dynamic]^Widget,
@@ -91,6 +83,16 @@ Core_Context :: struct {
 	text_measure_proc:           proc(text: string, style: Text_Style) -> f32,
 	window_height, window_width: f32,
 	delta_time:                  f32,
+}
+
+Core_Error :: enum u8 {
+	No_Parent_To_Bind_Primitive,
+	Image_Provided_With_No_Aspect_Ratio,
+}
+
+Error_Context :: struct {
+	error: Core_Error,
+	line:  int,
 }
 
 // Data that persists each frame 

@@ -379,9 +379,7 @@ _grow_children_across_axis :: proc(axis: Axis, parent_layout: Layout, parent_wid
 	for child_widget := parent_widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
 		child_layout, is_layout := _get_layout(child_widget)
 		if !is_layout {
-			if parent_layout.direction == .Y &&
-			   axis == .X &&
-			   child_widget.size.x > parent_widget.size.x - _get_axis_padding(.X, parent_widget.style.padding) {
+			if parent_layout.direction == .Y && axis == .X && child_widget.size.x > parent_widget.size.x - _get_axis_padding(.X, parent_widget.style.padding) {
 				child_widget.size.x = parent_widget.size.x - _get_axis_padding(.X, parent_widget.style.padding)
 			}
 			continue
@@ -892,8 +890,7 @@ _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index
 		command_border.position = widget.position
 		command_border.size = widget.size
 		command_border.style = widget.style.border
-		append(&ctx.render_commands, Render_Command{kind = command_border, z_index = z_index^ + widget.z_index})
-		z_index^ += 1
+		_add_render_command(ctx, widget, command_border, z_index)
 	}
 }
 
@@ -908,33 +905,19 @@ _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 		command_text.style = text.style
 		command_text.end = text._end
 		command_text.start = text._start
-		append(&ctx.render_commands, Render_Command{kind = command_text, z_index = z_index^ + widget.z_index})
-		z_index^ += 1
+		_add_render_command(ctx, widget, command_text, z_index)
 	}
 }
 
 _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
-	command_rect: Command_Rect
-	command_rect.size = widget.size
-	command_rect.position = widget.position
-	command_rect.color = widget.style.color
-	_clamp_border_radius(widget)
-	command_rect.border_radius = widget.style.border.radius
-	append(&ctx.render_commands, Render_Command{kind = command_rect, z_index = z_index^ + widget.z_index})
-	z_index^ += 1
+	command_rect: Command_Rect = {widget.style.border.radius, widget.position, widget.size, widget.style.color}
+	_add_render_command(ctx, widget, command_rect, z_index)
 }
 
 _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	image, ok := widget.image.(Image)
 	if ok {
-		append(
-			&ctx.render_commands,
-			Render_Command {
-				kind = Command_Image{position = widget.position, size = widget.size, image_data = image.image_data, color = image.tint},
-				z_index = z_index^ + widget.z_index,
-			},
-		)
-		z_index^ += 1
+		_add_render_command(ctx, widget, Command_Image{widget.position, widget.size, image.tint, image.image_data}, z_index)
 	}
 }
 
@@ -955,19 +938,21 @@ _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_i
 				}
 			case Primitive_Custom:
 			}
-
-			append(&ctx.render_commands, Render_Command{kind = p, z_index = z_index^ + i + widget.z_index})
+			_add_render_command(ctx, widget, p, z_index)
 		}
-		z_index^ += len(widget.primitives)
 	}
 }
 
 _emit_custom_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	if custom_data, ok := widget.custom_data.(rawptr); ok {
-		append(
-			&ctx.render_commands,
-			Render_Command{kind = Command_Custom{position = widget.position, data = custom_data}, z_index = z_index^ + widget.z_index},
-		)
-		z_index^ += 1
+		_add_render_command(ctx, widget, Command_Custom{widget.position, custom_data}, z_index)
 	}
+}
+
+_add_render_command :: proc(ctx: ^Core_Context, widget: ^Widget, kind: Render_Command_Kind, z_index: ^int) {
+	append(
+		&ctx.render_commands,
+		Render_Command{kind = kind, z_index = z_index^ + widget.z_index, emitter_id = widget.node.id, emitter_string_id = widget.key.string_id},
+	)
+	z_index^ += 1
 }
