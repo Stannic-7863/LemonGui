@@ -9,11 +9,7 @@ render :: proc(ctx: cu.Core_Context) {
 	for command in ctx.render_commands {
 		switch command_kind in command.kind {
 		case cu.Command_Rect:
-			rl.DrawRectangleV(
-				command_kind.position,
-				command_kind.size,
-				cast(rl.Color)command_kind.color,
-			)
+			rl.DrawRectangleV(command_kind.position, command_kind.size, cast(rl.Color)command_kind.color)
 		case cu.Command_Text:
 			if cursor, ok := command_kind.cursor.([2]int); ok {
 				{
@@ -24,11 +20,7 @@ render :: proc(ctx: cu.Core_Context) {
 						if cursor.x >= total_length && cursor.x < total_length + len(l) {
 							relative := cursor.x - total_length
 							rl.DrawRectangleV(
-								{
-									command_kind.position.x +
-									ctx.text_measure_proc(l[:relative], command_kind.style),
-									line_position_y,
-								},
+								{command_kind.position.x + ctx.text_measure_proc(l[:relative], command_kind.style), line_position_y},
 								{1, command_kind.style.font_size},
 								rl.GREEN,
 							)
@@ -36,29 +28,19 @@ render :: proc(ctx: cu.Core_Context) {
 						}
 						total_length += len(l)
 						last_line = l
-						line_position_y +=
-							command_kind.style.line_spacing + command_kind.style.font_size
+						line_position_y += command_kind.style.line_spacing + command_kind.style.font_size
 					}
 					if cursor.x == total_length {
 						if len(last_line) > 0 {
 							if last_line[len(last_line) - 1] != '\n' {
-								line_position_y -=
-									command_kind.style.line_spacing + command_kind.style.font_size
+								line_position_y -= command_kind.style.line_spacing + command_kind.style.font_size
 								rl.DrawRectangleV(
-									{
-										command_kind.position.x +
-										ctx.text_measure_proc(last_line, command_kind.style),
-										line_position_y,
-									},
+									{command_kind.position.x + ctx.text_measure_proc(last_line, command_kind.style), line_position_y},
 									{1, command_kind.style.font_size},
 									rl.GREEN,
 								)
 							} else {
-								rl.DrawRectangleV(
-									{command_kind.position.x, line_position_y},
-									{1, command_kind.style.font_size},
-									rl.GREEN,
-								)
+								rl.DrawRectangleV({command_kind.position.x, line_position_y}, {1, command_kind.style.font_size}, rl.GREEN)
 							}
 						}
 					}
@@ -90,8 +72,7 @@ render :: proc(ctx: cu.Core_Context) {
 
 					if cursor.x == total_length {
 						if len(ctx.text_lines[last_line]) > 0 {
-							if ctx.text_lines[last_line][max(len(ctx.text_lines[last_line]) - 1, 0)] !=
-							   '\n' {
+							if ctx.text_lines[last_line][max(len(ctx.text_lines[last_line]) - 1, 0)] != '\n' {
 								line_x = last_line
 								relative_x = len(ctx.text_lines[line_x])
 							}
@@ -99,8 +80,7 @@ render :: proc(ctx: cu.Core_Context) {
 					}
 					if cursor.y == total_length {
 						if len(ctx.text_lines[last_line]) > 0 {
-							if ctx.text_lines[last_line][max(len(ctx.text_lines[last_line]) - 1, 0)] !=
-							   '\n' {
+							if ctx.text_lines[last_line][max(len(ctx.text_lines[last_line]) - 1, 0)] != '\n' {
 								line_y = last_line
 								relative_y = len(ctx.text_lines[line_y])
 							}
@@ -110,45 +90,21 @@ render :: proc(ctx: cu.Core_Context) {
 					if line_x == line_y {
 						rl.DrawRectangleV(
 							{
-								command_kind.position.x +
-								ctx.text_measure_proc(
-									ctx.text_lines[line_x][:relative_x],
-									command_kind.style,
-								),
+								command_kind.position.x + ctx.text_measure_proc(ctx.text_lines[line_x][:relative_x], command_kind.style),
 								command_kind.position.y +
-								f32(line_x - command_kind.start) *
-									(command_kind.style.font_size +
-											command_kind.style.line_spacing),
+								f32(line_x - command_kind.start) * (command_kind.style.font_size + command_kind.style.line_spacing),
 							},
-							{
-								ctx.text_measure_proc(
-									ctx.text_lines[line_x][relative_x:relative_y],
-									command_kind.style,
-								),
-								command_kind.style.font_size,
-							},
+							{ctx.text_measure_proc(ctx.text_lines[line_x][relative_x:relative_y], command_kind.style), command_kind.style.font_size},
 							rl.BLUE,
 						)
 					} else {
 						rl.DrawRectangleV(
 							{
-								command_kind.position.x +
-								ctx.text_measure_proc(
-									ctx.text_lines[line_x][:relative_x],
-									command_kind.style,
-								),
+								command_kind.position.x + ctx.text_measure_proc(ctx.text_lines[line_x][:relative_x], command_kind.style),
 								command_kind.position.y +
-								f32(line_x - command_kind.start) *
-									(command_kind.style.font_size +
-											command_kind.style.line_spacing),
+								f32(line_x - command_kind.start) * (command_kind.style.font_size + command_kind.style.line_spacing),
 							},
-							{
-								ctx.text_measure_proc(
-									ctx.text_lines[line_x][relative_x:],
-									command_kind.style,
-								),
-								command_kind.style.font_size,
-							},
+							{ctx.text_measure_proc(ctx.text_lines[line_x][relative_x:], command_kind.style), command_kind.style.font_size},
 							rl.BLUE,
 						)
 
@@ -157,14 +113,9 @@ render :: proc(ctx: cu.Core_Context) {
 								{
 									command_kind.position.x,
 									command_kind.position.y +
-									f32(i - command_kind.start) *
-										(command_kind.style.font_size +
-												command_kind.style.line_spacing),
+									f32(i - command_kind.start) * (command_kind.style.font_size + command_kind.style.line_spacing),
 								},
-								{
-									ctx.text_measure_proc(ctx.text_lines[i], command_kind.style),
-									command_kind.style.font_size,
-								},
+								{ctx.text_measure_proc(ctx.text_lines[i], command_kind.style), command_kind.style.font_size},
 								rl.BLUE,
 							)
 						}
@@ -173,17 +124,9 @@ render :: proc(ctx: cu.Core_Context) {
 							{
 								command_kind.position.x,
 								command_kind.position.y +
-								f32(line_y - command_kind.start) *
-									(command_kind.style.font_size +
-											command_kind.style.line_spacing),
+								f32(line_y - command_kind.start) * (command_kind.style.font_size + command_kind.style.line_spacing),
 							},
-							{
-								ctx.text_measure_proc(
-									ctx.text_lines[line_y][:relative_y],
-									command_kind.style,
-								),
-								command_kind.style.font_size,
-							},
+							{ctx.text_measure_proc(ctx.text_lines[line_y][:relative_y], command_kind.style), command_kind.style.font_size},
 							rl.BLUE,
 						)
 					}
@@ -225,21 +168,12 @@ render :: proc(ctx: cu.Core_Context) {
 				switch primitive_kind.fill {
 				case .Line:
 					rl.DrawRectangleLinesEx(
-						{
-							primitive_kind.position.x,
-							primitive_kind.position.y,
-							primitive_kind.size.x,
-							primitive_kind.size.y,
-						},
+						{primitive_kind.position.x, primitive_kind.position.y, primitive_kind.size.x, primitive_kind.size.y},
 						primitive_kind.thickness,
 						cast(rl.Color)primitive_kind.color,
 					)
 				case .Solid:
-					rl.DrawRectangleV(
-						primitive_kind.position,
-						primitive_kind.size,
-						cast(rl.Color)primitive_kind.color,
-					)
+					rl.DrawRectangleV(primitive_kind.position, primitive_kind.size, cast(rl.Color)primitive_kind.color)
 				}
 			case cu.Primitive_Points:
 			case cu.Primitive_Ellipse:
@@ -261,42 +195,24 @@ render :: proc(ctx: cu.Core_Context) {
 				c := command_kind.style.color
 
 				if t[0] > 0 {
-					rl.DrawRectangleRec(
-						rl.Rectangle{pos.x, pos.y, size.x, t[0]},
-						cast(rl.Color)c[0],
-					)
+					rl.DrawRectangleRec(rl.Rectangle{pos.x, pos.y, size.x, t[0]}, cast(rl.Color)c[0])
 				}
 
 				if t[1] > 0 {
-					rl.DrawRectangleRec(
-						rl.Rectangle{pos.x + size.x - t[1], pos.y, t[1], size.y},
-						cast(rl.Color)c[1],
-					)
+					rl.DrawRectangleRec(rl.Rectangle{pos.x + size.x - t[1], pos.y, t[1], size.y}, cast(rl.Color)c[1])
 				}
 
 				if t[2] > 0 {
-					rl.DrawRectangleRec(
-						rl.Rectangle{pos.x, pos.y + size.y - t[2], size.x, t[2]},
-						cast(rl.Color)c[2],
-					)
+					rl.DrawRectangleRec(rl.Rectangle{pos.x, pos.y + size.y - t[2], size.x, t[2]}, cast(rl.Color)c[2])
 				}
 
 				if t[3] > 0 {
-					rl.DrawRectangleRec(
-						rl.Rectangle{pos.x, pos.y, t[3], size.y},
-						cast(rl.Color)c[3],
-					)
+					rl.DrawRectangleRec(rl.Rectangle{pos.x, pos.y, t[3], size.y}, cast(rl.Color)c[3])
 				}
 			}
 		case cu.Command_Image:
 			image := cast(^rl.Texture)command_kind.image_data
-			rl.DrawTextureEx(
-				image^,
-				command_kind.position,
-				0,
-				command_kind.size.x / cast(f32)image.width,
-				cast(rl.Color)command_kind.color,
-			)
+			rl.DrawTextureEx(image^, command_kind.position, 0, command_kind.size.x / cast(f32)image.width, cast(rl.Color)command_kind.color)
 		case cu.Command_Custom:
 		}
 	}
@@ -314,8 +230,7 @@ measure_text :: proc(text: string, config: cu.Text_Style) -> f32 {
 		if glyph.advanceX != 0 {
 			advance = f32(glyph.advanceX) * scale + config.letter_spacing
 		} else {
-			advance =
-				font.recs[glyph_index].width * scale + f32(glyph.offsetX) + config.letter_spacing
+			advance = font.recs[glyph_index].width * scale + f32(glyph.offsetX) + config.letter_spacing
 		}
 		width += advance
 	}

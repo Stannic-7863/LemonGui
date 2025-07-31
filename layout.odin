@@ -68,12 +68,24 @@ Expand_Kind :: enum u8 {
 	Percent_Self, // Expand size by percentage of own size
 }
 
+Clip_Kind :: enum {
+	None,
+	Custom,
+	Auto,
+}
+
 // I should offload some rendering quirks like putting dashes and dots at wrap site to command emittion stage 
 Wrap_Kind :: enum u8 {
 	None,
 	Words,
 	Letters,
 	New_Lines,
+}
+
+Clip :: struct {
+	kind:  Clip_Kind,
+	value: f32,
+	scale: f32,
 }
 
 Expand :: struct {
@@ -113,7 +125,6 @@ Growable :: struct {
 }
 
 _layout_all_sizing_pass :: proc(ctx: ^Core_Context) {
-
 	_sizing_fixed_pass(ctx)
 
 	#reverse for w in ctx.stacks.post_r {
@@ -162,7 +173,7 @@ _layout_all_positioning_pass :: proc(ctx: ^Core_Context) {
 	z_index_offset := 0
 	for widget in ctx.stacks.pre {
 		defer {
-			if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.style.border) &&
+			if _is_point_in_rect(widget.position, widget.size, ctx.mouse.position, widget.rect_style.border) &&
 			   ctx.active_widget_id == 0 &&
 			   !widget.event_passthrough {
 				ctx.hot_widget_id = widget.node.id
@@ -225,7 +236,7 @@ _fit_into_parent :: proc(axis: Axis, child_widget: ^Widget) {
 	}
 
 	widget_layout, widget_is_layout := _get_layout(child_widget)
-	widget_axis_padding: f32 = _get_axis_padding(axis, child_widget.style.padding)
+	widget_axis_padding: f32 = _get_axis_padding(axis, child_widget.rect_style.padding)
 
 	child_widget.size[axis] += widget_axis_padding // resolve padding 
 
@@ -249,7 +260,7 @@ _fit_into_parent :: proc(axis: Axis, child_widget: ^Widget) {
 _grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, parent_widget: ^Widget, growables: ^[dynamic]Growable) {
 	if parent_widget.node.first_child == nil {return}
 
-	parent_padding := _get_axis_padding(axis, parent_widget.style.padding)
+	parent_padding := _get_axis_padding(axis, parent_widget.rect_style.padding)
 	remaining_space: f32 = parent_widget.size[axis] - parent_padding - parent_layout.child_gap * f32(parent_widget.node.total_children - 1)
 
 	for child_widget := parent_widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
@@ -271,7 +282,7 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, pare
 			case .Percent:
 				child_widget.size[axis] =
 					(parent_widget.size[axis] -
-						_get_axis_padding(axis, parent_widget.style.padding) -
+						_get_axis_padding(axis, parent_widget.rect_style.padding) -
 						f32(parent_widget.node.total_children - 1) * parent_layout.child_gap) *
 					type.sizing[axis].min
 				child_widget.size[axis] = max(child_widget.accumulated_min[axis], child_widget.size[axis])
@@ -374,13 +385,15 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, pare
 _grow_children_across_axis :: proc(axis: Axis, parent_layout: Layout, parent_widget: ^Widget) {
 	if parent_widget.node.first_child == nil {return}
 
-	parent_padding: f32 = _get_axis_padding(axis, parent_widget.style.padding)
+	parent_padding: f32 = _get_axis_padding(axis, parent_widget.rect_style.padding)
 
 	for child_widget := parent_widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
 		child_layout, is_layout := _get_layout(child_widget)
 		if !is_layout {
-			if parent_layout.direction == .Y && axis == .X && child_widget.size.x > parent_widget.size.x - _get_axis_padding(.X, parent_widget.style.padding) {
-				child_widget.size.x = parent_widget.size.x - _get_axis_padding(.X, parent_widget.style.padding)
+			if parent_layout.direction == .Y &&
+			   axis == .X &&
+			   child_widget.size.x > parent_widget.size.x - _get_axis_padding(.X, parent_widget.rect_style.padding) {
+				child_widget.size.x = parent_widget.size.x - _get_axis_padding(.X, parent_widget.rect_style.padding)
 			}
 			continue
 		}
@@ -388,7 +401,7 @@ _grow_children_across_axis :: proc(axis: Axis, parent_layout: Layout, parent_wid
 		if child_layout.sizing[axis].kind == .Percent {
 			child_widget.size[axis] =
 				(parent_widget.size[axis] -
-					_get_axis_padding(axis, parent_widget.style.padding) -
+					_get_axis_padding(axis, parent_widget.rect_style.padding) -
 					f32(parent_widget.node.total_children - 1) * parent_layout.child_gap) *
 				child_layout.sizing[axis].min
 			child_widget.size[axis] = max(child_widget.accumulated_min[axis], child_widget.size[axis])
@@ -448,7 +461,7 @@ _sizing_word_wrap :: proc(ctx: ^Core_Context) {
 			space_width := ctx.text_measure_proc(" ", type.style)
 			line_start: int = 0
 			largest_width: f32
-			x_padding := _get_axis_padding(.X, widget.style.padding)
+			x_padding := _get_axis_padding(.X, widget.rect_style.padding)
 			widget_lines_start := len(ctx.text_lines)
 			additional_height: f32 = 0
 			accumulated_width: f32 = 0
@@ -706,7 +719,7 @@ _position_layout_childs :: proc(parent_widget: ^Widget, parent_layout: Layout) {
 		total_size += child.size + parent_layout.child_gap
 	}
 
-	padding := parent_widget.style.padding
+	padding := parent_widget.rect_style.padding
 	increment: Vec2f32
 
 	switch parent_layout.direction {
@@ -802,41 +815,35 @@ _position_layout_childs :: proc(parent_widget: ^Widget, parent_layout: Layout) {
 }
 
 _position_clip_childs :: proc(ctx: ^Core_Context, parent_widget: ^Widget) {
-	if clip, ok := &parent_widget.clip.([2]Clip); ok {
-		if parent_widget.node.id == ctx.last_hot_widget_id {
-			if clip.x.kind == .Auto {
-				clip.x.value += ctx.mouse.scroll * ctx.delta_time * clip.x.speed
-			}
-			if clip.y.kind == .Auto {
-				clip.y.value += ctx.mouse.scroll * ctx.delta_time * clip.y.speed
-			}
+	if parent_widget.node.id == ctx.last_hot_widget_id {
+		if parent_widget.clip.x.kind == .Auto {
+			parent_widget.clip.x.value += ctx.mouse.scroll * ctx.delta_time * parent_widget.clip.x.scale
 		}
+		if parent_widget.clip.y.kind == .Auto {
+			parent_widget.clip.y.value += ctx.mouse.scroll * ctx.delta_time * parent_widget.clip.y.scale
+		}
+	}
 
-		for child_widget := parent_widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
-			if _, ok := child_widget.kind.(Floating); ok {continue}
-			child_widget.position.x += clip.x.value
-			child_widget.position.y += clip.y.value
+	for child_widget := parent_widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
+		if _, ok := child_widget.kind.(Floating); ok {continue}
+		if parent_widget.clip.x.kind != .None {
+			child_widget.position.x += parent_widget.clip.x.value
+		}
+		if parent_widget.clip.y.kind != .None {
+			child_widget.position.y += parent_widget.clip.y.value
 		}
 	}
 }
 
 _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
-	if clip, ok := widget.clip.([2]Clip); ok {
+	if widget.clip.x.kind != .None || widget.clip.y.kind != .None {
+
 		if ctx.active_clipper != nil {
-			if ctx.active_clipper == widget.node.prev {
-				_emit_clip_end_command(ctx, ctx.active_clipper, ctx.active_clipper.z_index + z_index_offset^)
-				z_index_offset^ += 1
-				ctx.active_clipper = nil
-			} else if ctx.active_clipper != widget {
-				_emit_clip_end_command(ctx, ctx.active_clipper, ctx.active_clipper.z_index + z_index_offset^)
-				z_index_offset^ += 1
-				append(&ctx.clips, ctx.active_clipper)
-			}
+			append(&ctx.clips, ctx.active_clipper)
 		}
 
 		ctx.active_clipper = widget
-		_emit_clip_start_command(ctx, widget, widget.z_index + z_index_offset^)
-		z_index_offset^ += 1
+		_emit_clip_start_command(ctx, widget, z_index_offset^ + widget.z_index)
 	}
 
 	_emit_rect_command(ctx, widget, z_index_offset)
@@ -852,12 +859,7 @@ _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
 				_emit_clip_end_command(ctx, ctx.active_clipper, ctx.active_clipper.z_index + z_index_offset^)
 				z_index_offset^ += 1
 				ctx.active_clipper = nil
-
-				if len(ctx.clips) > 0 {
-					ctx.active_clipper = pop(&ctx.clips)
-					_emit_clip_start_command(ctx, ctx.active_clipper, ctx.active_clipper.z_index + z_index_offset^)
-					z_index_offset^ += 1
-				}
+				ctx.active_clipper, _ = pop_safe(&ctx.clips)
 				break
 			}
 			if parent.node.next != nil {
@@ -875,9 +877,7 @@ _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: i
 	clip_size := widget.size
 	clip_position := widget.position
 
-	border := widget.style.border
-	clip_position.x -= border.thickness[3]
-	clip_position.y -= border.thickness[0]
+	border := widget.rect_style.border
 	clip_size.x += border.thickness[1] + border.thickness[3]
 	clip_size.y += border.thickness[2] + border.thickness[0]
 
@@ -885,11 +885,11 @@ _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: i
 }
 
 _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
-	if widget.style.border != {} {
+	if widget.rect_style.border != {} {
 		command_border: Command_Border
 		command_border.position = widget.position
 		command_border.size = widget.size
-		command_border.style = widget.style.border
+		command_border.style = widget.rect_style.border
 		_add_render_command(ctx, widget, command_border, z_index)
 	}
 }
@@ -898,8 +898,8 @@ _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	if text, ok := widget.kind.(Text); ok {
 		command_text: Command_Text
 		position := widget.position
-		position.x += widget.style.padding[3]
-		position.y += widget.style.padding[0]
+		position.x += widget.rect_style.padding[3]
+		position.y += widget.rect_style.padding[0]
 		command_text.cursor = text.cursor
 		command_text.position = position
 		command_text.style = text.style
@@ -910,7 +910,8 @@ _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 }
 
 _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
-	command_rect: Command_Rect = {widget.style.border.radius, widget.position, widget.size, widget.style.color}
+	_clamp_border_radius(widget)
+	command_rect: Command_Rect = {widget.rect_style.border.radius, widget.size, widget.position, widget.rect_style.color}
 	_add_render_command(ctx, widget, command_rect, z_index)
 }
 

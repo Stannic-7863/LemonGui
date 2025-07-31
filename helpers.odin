@@ -23,13 +23,13 @@ child_alignment :: proc "contextless" (x: Child_Alignment_X = .Left, y: Child_Al
 }
 
 // Set clip to custom amount provided. Negative values to move children up. Positive values to move children down. Value is multiplied by speed before being added to children position.
-clip_custom :: proc "contextless" (value: f32, speed: f32 = 1) -> Clip {
-	return Clip{kind = .Custom, value = value, speed = speed}
+clip_custom :: proc "contextless" (value: f32, scale: f32 = 1) -> Clip {
+	return Clip{kind = .Custom, value = value, scale = scale}
 }
 
 // Set clip to auto. Only handles scroll events.
-clip_auto :: proc "contextless" (speed: f32 = 1) -> Clip {
-	return Clip{kind = .Auto, speed = speed}
+clip_auto :: proc "contextless" (scale: f32 = 1) -> Clip {
+	return Clip{kind = .Auto, scale = scale}
 }
 
 // Return clipping structure. Defaults to custom
@@ -136,6 +136,10 @@ border_style :: proc(color: [4]Color, type: [4]Border_Kind = Border_Kind.Single,
 	return Border_Style{color = color, type = type, radius = radius, thickness = thickness}
 }
 
+create_new_tag :: proc(ctx: ^Core_Context, tag: string, style: Tag_Style) {
+	ctx.tag_styles[tag] = style
+}
+
 _get_axis_padding :: proc "contextless" (axis: Axis, padding: Vec4f32) -> f32 {
 	switch axis {
 	case .X:
@@ -159,7 +163,7 @@ _get_layout :: proc "contextless" (widget: ^Widget) -> (Layout, bool) {
 }
 
 _clamp_border_radius :: proc(widget: ^Widget) {
-	for &r in widget.style.border.radius {
+	for &r in widget.rect_style.border.radius {
 		r = clamp(0, min(widget.size.x, widget.size.y) / 2, r)
 	}
 }

@@ -26,6 +26,8 @@ DIVIDER_COLOR :: cu.Color{113, 109, 104, 255} // warm gray-600 (#716D68)
 
 main :: proc() {
 
+	fmt.println(size_of(cu.Widget))
+
 	if len(runtime.args__) == 1 {
 		demo_rl()
 	} else {

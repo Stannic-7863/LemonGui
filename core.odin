@@ -73,6 +73,7 @@ Core_Context :: struct {
 	render_commands:             [dynamic]Render_Command,
 	primitives:                  [dynamic]Command_Primitive,
 	clips:                       [dynamic]^Widget,
+	tag_styles:                  map[string]Tag_Style,
 	persistant_data:             map[Id]Persistant_Data, // widgets from last frame. Used to query events. Accessed by widget.id
 	hot_widget_id:               Id, // widget currently under mouse  
 	active_widget_id:            Id, // widget currently being interacted with 
@@ -216,8 +217,7 @@ Primitive_Line :: struct {
 	color:                        Color,
 }
 
-// TODO: Make it consistant. Text style exists in Text while other styles here.
-Style :: struct {
+Rect_Style :: struct {
 	border:  Border_Style,
 	padding: Vec4f32,
 	color:   Color,
@@ -238,6 +238,22 @@ Text_Style :: struct {
 	font_size:      f32,
 	letter_spacing: f32,
 	line_spacing:   f32,
+}
+
+Tag_Style :: struct {
+	padding:          Maybe(Vec4f32),
+	color:            Maybe(Color),
+	border_radius:    Maybe(Vec4f32),
+	border_thickness: Maybe(Vec4f32),
+	border_color:     Maybe([4]Color),
+	border_type:      Maybe([4]Border_Kind),
+	text_color:       Maybe(Color),
+	font_name:        Maybe(string),
+	font:             Maybe(rawptr),
+	font_id:          Maybe(int),
+	font_size:        Maybe(f32),
+	letter_spacing:   Maybe(f32),
+	line_spacing:     Maybe(f32),
 }
 
 Node :: struct {
@@ -268,8 +284,8 @@ Text :: struct {
 	style:        Text_Style,
 	text:         string,
 	_start, _end: int,
-	wrap:         Wrap_Kind,
 	cursor:       Maybe([2]int),
+	wrap:         Wrap_Kind,
 }
 
 Image :: struct {
@@ -283,37 +299,27 @@ Widget_Kind :: union {
 	Text,
 }
 
-Clip :: struct {
-	kind:  Clip_Kind,
-	value: f32,
-	speed: f32,
-}
-
-Clip_Kind :: enum {
-	Custom,
-	Auto,
-}
-
 Key :: struct {
 	string_id: string,
 	parent_id: Id,
 }
 
 Widget :: struct {
-	style:                  Style,
+	rect_style:             Rect_Style,
 	kind:                   Widget_Kind,
 	node:                   Node,
+	primitives:             []Command_Primitive,
+	tags:                   []string,
 	expand:                 [2]Expand,
 	offset:                 [2]Offset,
+	clip:                   [2]Clip,
 	image:                  Maybe(Image),
-	primitives:             []Command_Primitive,
+	custom_data:            Maybe(rawptr),
+	aspect_ratio:           Maybe(f32),
 	key:                    Key,
-	clip:                   Maybe([2]Clip),
 	accumulated_min:        Vec2f32,
 	size, position:         Vec2f32,
 	z_index:                int,
-	custom_data:            Maybe(rawptr),
-	aspect_ratio:           Maybe(f32),
 	is_floating_descendant: bool,
 	event_passthrough:      bool,
 }
@@ -328,10 +334,12 @@ init_core_context :: proc(total_widgets: int) -> Core_Context {
 	ctx.stacks.post_r = make([dynamic]^Widget, 0, total_widgets)
 	ctx.primitives = make([dynamic]Command_Primitive)
 	ctx.persistant_data = make(map[Id]Persistant_Data)
+	ctx.tag_styles = make(map[string]Tag_Style)
 	return ctx
 }
 
 deinit_core_context :: proc(ctx: ^Core_Context) {
+	delete(ctx.tag_styles)
 	delete(ctx.widgets)
 	delete(ctx.render_commands)
 	delete(ctx.persistant_data)
@@ -366,6 +374,7 @@ begin_ui :: proc(ctx: ^Core_Context) {
 // Layout Pass + Positioning + Render commands
 end_ui :: proc(ctx: ^Core_Context) {
 	_build_stacks(ctx)
+	_apply_tag_styles(ctx)
 	_layout_all_sizing_pass(ctx)
 	_layout_all_positioning_pass(ctx)
 
@@ -398,10 +407,11 @@ create_widget :: proc(
 	widget_kind: Widget_Kind = nil,
 	aspect_ratio: Maybe(f32) = nil,
 	image: Maybe(Image) = nil,
-	clip: Maybe([2]Clip) = nil,
+	clip: [2]Clip = {},
 	expand: [2]Expand = {},
 	offset: [2]Offset = {},
-	style: Style = {},
+	tags: []string = {},
+	style: Rect_Style = {},
 	event_passthrough: bool = false,
 ) -> ^Widget {
 
@@ -417,6 +427,7 @@ create_widget :: proc(
 	w.node.parent = ctx.active_parent
 	w.node.index = len(ctx.widgets) - 1
 	w.event_passthrough = event_passthrough
+	w.tags = tags
 
 	if image, ok := w.image.(Image); ok {
 		if aspect_ratio, ok := w.aspect_ratio.(f32); !ok {
@@ -438,7 +449,7 @@ create_widget :: proc(
 	}
 
 	_retrieve_persistant_data(ctx.persistant_data, w)
-	w.style = style
+	w.rect_style = style
 
 	return w
 }
@@ -482,17 +493,14 @@ _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widge
 	widget.position = val.position
 	widget.size = val.size
 
-	if clip, widget_clip_ok := &widget.clip.([2]Clip); widget_clip_ok {
-		val_clip, val_clip_ok := val.clip.([2]Clip)
+	val_clip, val_clip_ok := val.clip.([2]Clip)
 
-		if clip.x.kind == .Auto && val_clip_ok {
-			clip.x.value = val_clip.x.value
-		}
+	if widget.clip.x.kind == .Auto && val_clip_ok {
+		widget.clip.x.value = val_clip.x.value
+	}
 
-		if clip.y.kind == .Auto && val_clip_ok {
-			clip.y.value = val_clip.y.value
-		}
-
+	if widget.clip.y.kind == .Auto && val_clip_ok {
+		widget.clip.y.value = val_clip.y.value
 	}
 
 	if _, ok := widget.kind.(Text); ok {
@@ -500,4 +508,59 @@ _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widge
 	}
 
 	return true
+}
+
+_apply_tag_styles :: proc(ctx: ^Core_Context) {
+	for &w in ctx.widgets {
+		for tag in w.tags {
+			tag_style, tag_not_exists := ctx.tag_styles[tag]
+
+			if tag_not_exists {
+				continue
+			}
+
+			if padding, ok := tag_style.padding.(Vec4f32); ok {
+				w.rect_style.padding = padding
+			}
+			if color, ok := tag_style.color.(Color); ok {
+				w.rect_style.color = color
+			}
+			if border_radius, ok := tag_style.border_radius.(Vec4f32); ok {
+				w.rect_style.border.radius = border_radius
+			}
+			if border_thickness, ok := tag_style.border_thickness.(Vec4f32); ok {
+				w.rect_style.border.thickness = border_thickness
+			}
+			if border_color, ok := tag_style.border_color.([4]Color); ok {
+				w.rect_style.border.color = border_color
+			}
+			if border_type, ok := tag_style.border_type.([4]Border_Kind); ok {
+				w.rect_style.border.type = border_type
+			}
+
+			if text, ok := &w.kind.(Text); ok {
+				if text_color, ok := tag_style.text_color.(Color); ok {
+					text.style.color = text_color
+				}
+				if font_name, ok := tag_style.font_name.(string); ok {
+					text.style.font_name = font_name
+				}
+				if font, ok := tag_style.font.(rawptr); ok {
+					text.style.font = font
+				}
+				if font_id, ok := tag_style.font_id.(int); ok {
+					text.style.font_id = font_id
+				}
+				if font_size, ok := tag_style.font_size.(f32); ok {
+					text.style.font_size = font_size
+				}
+				if letter_spacing, ok := tag_style.letter_spacing.(f32); ok {
+					text.style.letter_spacing = letter_spacing
+				}
+				if line_spacing, ok := tag_style.line_spacing.(f32); ok {
+					text.style.line_spacing = line_spacing
+				}
+			}
+		}
+	}
 }

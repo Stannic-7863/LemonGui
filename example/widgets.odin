@@ -28,6 +28,7 @@ build_ui :: proc(
 		ctx,
 		"Root",
 		cu.Layout{sizing = cu.sizing(cu.fixed(ctx.window_width), cu.fixed(ctx.window_height)), direction = .X, child_gap = 16},
+		tags = {"hm"},
 		style = {padding = 32, color = BACKGROUND_COLOR},
 	)
 
@@ -130,7 +131,7 @@ button :: proc(
 		ctx,
 		label,
 		cu.layout(cu.sizing(cu.grow(max = 128), cu.fit(16)), 8, .X, {.Center, .Center}),
-		style = cu.Style{color = SURFACE_COLOR, padding = 4, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
+		style = cu.Rect_Style{color = SURFACE_COLOR, padding = 4, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
 	)
 
 	if cu.push_parent(ctx, body) {
@@ -213,7 +214,7 @@ toggle_button :: proc(
 		ctx,
 		label,
 		cu.layout(cu.sizing(cu.grow(max = 128), cu.fit(16)), 8, .X, {.Center, .Center}),
-		style = cu.Style{color = SURFACE_COLOR, padding = 4, border = border_style},
+		style = cu.Rect_Style{color = SURFACE_COLOR, padding = 4, border = border_style},
 	)
 
 	if body.node.id == ctx.hot_widget_id {
@@ -287,7 +288,7 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32,
 		ctx,
 		label,
 		cu.Layout{sizing = cu.sizing(cu.grow(50), cu.fit(min = 16, max = 32)), child_gap = 16, direction = .X, child_alignment = {.Center, .Center}},
-		style = cu.Style{padding = 4},
+		style = cu.Rect_Style{padding = 4},
 		event_passthrough = true,
 	)
 	cu.push_parent(ctx, main_container)
@@ -308,7 +309,7 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32,
 		ctx,
 		"slider_text_min",
 		cu.layout(sizing = cu.sizing(cu.grow(), cu.fixed(4)), direction = .Y, child_alignment = {.Center, .Center}),
-		style = cu.Style{color = SURFACE_COLOR},
+		style = cu.Rect_Style{color = SURFACE_COLOR},
 	)
 
 	cu.push_parent(ctx, railing)
@@ -320,7 +321,7 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32,
 		"slider_knob",
 		cu.Layout{sizing = cu.sizing(cu.fixed(20), cu.fixed(20))},
 		offset = cu.offset(cu.offset_percent(knob_offset)),
-		style = cu.Style{color = ELEVATED_SURFACE_COLOR, border = cu.border_style(color = 0, radius = 50)},
+		style = cu.Rect_Style{color = ELEVATED_SURFACE_COLOR, border = cu.border_style(color = 0, radius = 50)},
 	)
 
 	if knob.node.id == ctx.hot_widget_id {
@@ -375,6 +376,7 @@ frame :: proc(
 		ctx,
 		label,
 		cu.layout(cu.sizing(cu.grow(128, 512), cu.fit()), direction = direction, child_gap = child_gap),
+		clip = cu.clip({}, cu.clip_auto(50)),
 		style = {color = 0, padding = padding, border = cu.border_style(BORDER_COLOR)},
 	)
 	cu.push_parent(ctx, frame_w)
