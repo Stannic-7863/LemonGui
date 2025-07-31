@@ -432,15 +432,15 @@ _sizing_fixed_pass :: proc(ctx: ^Core_Context) {
 }
 
 _sizing_apply_aspect_ratio :: proc(widget: ^Widget) {
-	if aspect_ratio, ok := widget.aspect_ratio.(f32); ok {
+	if widget.aspect_ratio != 0 {
 		switch &type in widget.kind {
 		case Layout:
-			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / aspect_ratio
+			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / widget.aspect_ratio
 			widget.size[Axis.Y] = widget.accumulated_min[Axis.Y]
 			type.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
 			type.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
 		case Floating:
-			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / aspect_ratio
+			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / widget.aspect_ratio
 			widget.size[Axis.Y] = widget.accumulated_min[Axis.Y]
 			type.layout.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
 			type.layout.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
@@ -815,15 +815,6 @@ _position_layout_childs :: proc(parent_widget: ^Widget, parent_layout: Layout) {
 }
 
 _position_clip_childs :: proc(ctx: ^Core_Context, parent_widget: ^Widget) {
-	if parent_widget.node.id == ctx.last_hot_widget_id {
-		if parent_widget.clip.x.kind == .Auto {
-			parent_widget.clip.x.value += ctx.mouse.scroll * ctx.delta_time * parent_widget.clip.x.scale
-		}
-		if parent_widget.clip.y.kind == .Auto {
-			parent_widget.clip.y.value += ctx.mouse.scroll * ctx.delta_time * parent_widget.clip.y.scale
-		}
-	}
-
 	for child_widget := parent_widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
 		if _, ok := child_widget.kind.(Floating); ok {continue}
 		if parent_widget.clip.x.kind != .None {
@@ -916,9 +907,8 @@ _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 }
 
 _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
-	image, ok := widget.image.(Image)
-	if ok {
-		_add_render_command(ctx, widget, Command_Image{widget.position, widget.size, image.tint, image.image_data}, z_index)
+	if widget.image.data != nil {
+		_add_render_command(ctx, widget, Command_Image{widget.position, widget.size, widget.image.tint, widget.image.data}, z_index)
 	}
 }
 
@@ -945,8 +935,8 @@ _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_i
 }
 
 _emit_custom_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
-	if custom_data, ok := widget.custom_data.(rawptr); ok {
-		_add_render_command(ctx, widget, Command_Custom{widget.position, custom_data}, z_index)
+	if widget.custom_data != nil {
+		_add_render_command(ctx, widget, Command_Custom{widget.position, widget.custom_data}, z_index)
 	}
 }
 

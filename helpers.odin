@@ -7,19 +7,24 @@ import "core:math/ease"
 import "core:math/linalg"
 import "core:reflect"
 
-// Return Color in rgba format
+// Return Color in rgba format.
 rgba :: proc(r: u8 = 255, g: u8 = 255, b: u8 = 255, a: u8 = 255) -> Color {
 	return {r, g, b, a}
 }
 
-// Return Color in rgba format from hex code 
+// Return Color in rgba format from hex code.
 hex :: proc "contextless" (hex: u32 = 0xFFFFFFFF) -> Color {
 	return (transmute([4]u8)hex).abgr
 }
 
-// Specify alignment of child along each axis
+// Specify alignment of child along each axis.
 child_alignment :: proc "contextless" (x: Child_Alignment_X = .Left, y: Child_Alignment_Y = .Top) -> Child_Alignment {
 	return {x, y}
+}
+
+// No clipping at all. Default behvaiour.
+clip_none :: proc "contextless" () -> Clip {
+	return {}
 }
 
 // Set clip to custom amount provided. Negative values to move children up. Positive values to move children down. Value is multiplied by speed before being added to children position.
@@ -32,52 +37,52 @@ clip_auto :: proc "contextless" (scale: f32 = 1) -> Clip {
 	return Clip{kind = .Auto, scale = scale}
 }
 
-// Return clipping structure. Defaults to custom
+// Return clipping structure. Defaults to custom.
 clip :: proc "contextless" (x: Clip = {}, y: Clip = {}) -> [2]Clip {
 	return {x, y}
 }
 
-// Expand widget size after layout sizing pass
+// Expand widget size after layout sizing pass.
 expand :: proc "contextless" (x: Expand = {}, y: Expand = {}) -> [2]Expand {
 	return {x, y}
 }
 
-// Increase size by given percentage of parent size
+// Increase size by given percentage of parent size.
 expand_percent :: proc "contextless" (value: f32) -> Expand {
 	return Expand{value = value, kind = .Percent}
 }
 
-// Increase size by given percentage of own size
+// Increase size by given percentage of own size.
 expand_percent_self :: proc "contextless" (value: f32) -> Expand {
 	return Expand{value = value, kind = .Percent_Self}
 }
 
-// Increase size by given value in pixels
+// Increase size by given value in pixels.
 expand_absolute :: proc "contextless" (value: f32) -> Expand {
 	return Expand{value = value, kind = .Absolute}
 }
 
-// Offset widget position after layout position pass
+// Offset widget position after layout position pass.
 offset :: proc "contextless" (x: Offset = {}, y: Offset = {}) -> [2]Offset {
 	return {x, y}
 }
 
-// Offset position by given percentage of parent size
+// Offset position by given percentage of parent size.
 offset_percent :: proc "contextless" (value: f32) -> Offset {
 	return Offset{value = value, kind = .Percent}
 }
 
-// Offset position by given percentage of own size
+// Offset position by given percentage of own size.
 offset_percent_self :: proc "contextless" (value: f32) -> Offset {
 	return Offset{value = value, kind = .Percent_Self}
 }
 
-// Offset position by given value in pixels
+// Offset position by given value in pixels.
 offset_absolute :: proc "contextless" (value: f32) -> Offset {
 	return Offset{value = value, kind = .Absolute}
 }
 
-// Set position to given value in pixels
+// Set position to given value in pixels.
 offset_fixed :: proc "contextless" (value: f32) -> Offset {
 	return Offset{value = value, kind = .Fixed}
 }
@@ -86,7 +91,6 @@ text :: proc "contextless" (text: string, wrap: Wrap_Kind = .Words, style: Text_
 	return Text{text = text, style = style, wrap = wrap, cursor = cursor}
 }
 
-// Layout
 floating :: proc "contextless" (
 	layout: Layout = {},
 	parent: Anchor = .Left_Top,
@@ -106,36 +110,37 @@ layout :: proc "contextless" (
 	return Layout{sizing = sizing, child_gap = child_gap, direction = direction, child_alignment = child_alignment}
 }
 
-// Sizing along axis. Default to Fit
+// Sizing along x and y axis. Defaults to Fit.
 sizing :: proc "contextless" (x: Sizing = {}, y: Sizing = {}) -> [Axis]Sizing {
 	return {.X = x, .Y = y}
 }
 
-// Fit sizing type
+// Fit sizing type.
 fit :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Sizing {
 	return Sizing{min = min, max = max, kind = .Fit}
 }
 
-// Grow sizing type
+// Grow sizing type.
 grow :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Sizing {
 	return Sizing{min = min, max = max, kind = .Grow}
 }
 
-// Percent sizing type
+// Percent sizing type.
 percent :: proc "contextless" (value: f32 = 1) -> Sizing {
 	return Sizing{min = value, max = value, kind = .Percent}
 }
 
-// Fixed sizing type
+// Fixed sizing type.
 fixed :: proc "contextless" (size: f32) -> Sizing {
 	return Sizing{size, size, .Fixed}
 }
 
-// Configure border style 
+// Border style.
 border_style :: proc(color: [4]Color, type: [4]Border_Kind = Border_Kind.Single, radius: Vec4f32 = 0, thickness: Vec4f32 = 1) -> Border_Style {
 	return Border_Style{color = color, type = type, radius = radius, thickness = thickness}
 }
 
+// Adds a new tag to the context with the given style.
 create_new_tag :: proc(ctx: ^Core_Context, tag: string, style: Tag_Style) {
 	ctx.tag_styles[tag] = style
 }

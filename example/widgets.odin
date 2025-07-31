@@ -100,7 +100,7 @@ build_ui :: proc(
 				ctx,
 				"Aaloos config",
 				cu.layout(cu.sizing(cu.grow())),
-				image = cu.Image{image_data = aaloo_image.data, tint = aaloo_tint},
+				image = cu.Image{data = aaloo_image.data, tint = aaloo_tint},
 				aspect_ratio = aaloo_image.w / aaloo_image.h,
 			)
 			cu.pop_parent(ctx)

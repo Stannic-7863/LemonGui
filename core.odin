@@ -77,8 +77,6 @@ Core_Context :: struct {
 	persistant_data:             map[Id]Persistant_Data, // widgets from last frame. Used to query events. Accessed by widget.id
 	hot_widget_id:               Id, // widget currently under mouse  
 	active_widget_id:            Id, // widget currently being interacted with 
-	last_hot_widget_id:          Id,
-	last_active_widget_id:       Id,
 	active_clipper:              ^Widget,
 	active_parent:               ^Widget, // parent set by push parent 
 	text_measure_proc:           proc(text: string, style: Text_Style) -> f32,
@@ -88,7 +86,7 @@ Core_Context :: struct {
 
 Core_Error :: enum u8 {
 	No_Parent_To_Bind_Primitive,
-	Image_Provided_With_No_Aspect_Ratio,
+	Zero_Or_No_Aspect_Ratio,
 }
 
 Error_Context :: struct {
@@ -99,7 +97,7 @@ Error_Context :: struct {
 // Data that persists each frame 
 Persistant_Data :: struct {
 	size, position, accumulated_min: Vec2f32,
-	clip:                            Maybe([2]Clip),
+	clip:                            [2]Clip,
 }
 
 Border_Kind :: enum u8 {
@@ -289,8 +287,8 @@ Text :: struct {
 }
 
 Image :: struct {
-	image_data: rawptr,
-	tint:       Color,
+	data: rawptr,
+	tint: Color,
 }
 
 Widget_Kind :: union {
@@ -313,9 +311,9 @@ Widget :: struct {
 	expand:                 [2]Expand,
 	offset:                 [2]Offset,
 	clip:                   [2]Clip,
-	image:                  Maybe(Image),
-	custom_data:            Maybe(rawptr),
-	aspect_ratio:           Maybe(f32),
+	image:                  Image,
+	aspect_ratio:           f32,
+	custom_data:            rawptr,
 	key:                    Key,
 	accumulated_min:        Vec2f32,
 	size, position:         Vec2f32,
@@ -391,9 +389,19 @@ end_ui :: proc(ctx: ^Core_Context) {
 		}
 	}
 
+	hot_widget_pd, ok := &ctx.persistant_data[ctx.hot_widget_id]
+
+	if ok {
+		if hot_widget_pd.clip.x.kind == .Auto {
+			hot_widget_pd.clip.x.value += ctx.mouse.scroll * ctx.delta_time * hot_widget_pd.clip.x.scale
+		}
+		if hot_widget_pd.clip.y.kind == .Auto {
+			hot_widget_pd.clip.y.value += ctx.mouse.scroll * ctx.delta_time * hot_widget_pd.clip.y.scale
+		}
+	}
+
 	ctx.mouse.mapped_events = {}
 	ctx.mouse.old_position = ctx.mouse.position
-	ctx.last_hot_widget_id = ctx.hot_widget_id
 	ctx.active_parent = nil
 	clear(&ctx.primitives)
 	clear(&ctx.stacks.post_r)
@@ -405,8 +413,8 @@ create_widget :: proc(
 	ctx: ^Core_Context,
 	string_id: string,
 	widget_kind: Widget_Kind = nil,
-	aspect_ratio: Maybe(f32) = nil,
-	image: Maybe(Image) = nil,
+	aspect_ratio: f32 = {},
+	image: Image = {},
 	clip: [2]Clip = {},
 	expand: [2]Expand = {},
 	offset: [2]Offset = {},
@@ -429,8 +437,8 @@ create_widget :: proc(
 	w.event_passthrough = event_passthrough
 	w.tags = tags
 
-	if image, ok := w.image.(Image); ok {
-		if aspect_ratio, ok := w.aspect_ratio.(f32); !ok {
+	if w.image.data != nil {
+		if aspect_ratio == 0 {
 			// IMPL: Error 
 		}
 	}
@@ -493,14 +501,12 @@ _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widge
 	widget.position = val.position
 	widget.size = val.size
 
-	val_clip, val_clip_ok := val.clip.([2]Clip)
-
-	if widget.clip.x.kind == .Auto && val_clip_ok {
-		widget.clip.x.value = val_clip.x.value
+	if widget.clip.x.kind == .Auto {
+		widget.clip.x.value = val.clip.x.value
 	}
 
-	if widget.clip.y.kind == .Auto && val_clip_ok {
-		widget.clip.y.value = val_clip.y.value
+	if widget.clip.y.kind == .Auto {
+		widget.clip.y.value = val.clip.y.value
 	}
 
 	if _, ok := widget.kind.(Text); ok {
