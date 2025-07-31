@@ -7,15 +7,14 @@
 - [x] Basic mouse event handling
 - [x] Basic styling options
 ## Planned things:
-- [ ] Keyboard events
 - [ ] Animation system
 - [ ] Caching (text wrapping especially) for better performance
 - [ ] Well defined/documented behaviour for all combinations of layouts and text wrapping
 - [ ] Layout type to support **wrapping** for Widgets and more freedom with floating widgets in terms of anchor position
 	- Anchor position should be defined in terms of a grid perhaps? Parent can specify the grid in terms of rows and columns. Floating would attach to the rows and cols specified. 
 - [ ] Errors and Error handler support
-- [ ] Better Id/Keying system for widget
-	- Current generates id's from some pointers. Very volatile. Perhaps force a string id to for each widget and combine the child + parent id. Childs of different parents then can have same id's.
+- [x] Keyboard events [Done]
+- [x] Better Id/Keying system for widget [Done]
 # How to Use?
 
 ## The general setup is as follows:
