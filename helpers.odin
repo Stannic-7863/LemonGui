@@ -141,7 +141,7 @@ border_style :: proc(color: [4]Color, type: [4]Border_Kind = Border_Kind.Single,
 }
 
 // Adds a new tag to the context with the given style.
-create_new_tag :: proc(ctx: ^Core_Context, tag: string, style: Tag_Style) {
+create_tag :: proc(ctx: ^Core_Context, tag: string, style: Tag_Style) {
 	ctx.tag_styles[tag] = style
 }
 

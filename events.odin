@@ -181,6 +181,7 @@ Keyboard_Context :: struct {
 }
 
 _resolve_events :: proc(ctx: ^Core_Context) {
+	ctx.mouse.events = {}
 	for mouse_events, mouse_button in ctx.mouse.mapped_events {
 		for mouse_event in mouse_events {
 			switch mouse_event {

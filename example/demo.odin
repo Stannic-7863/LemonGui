@@ -60,6 +60,31 @@ demo_rl :: proc() {
 		letter_spacing = 1,
 	}
 
+	cu.create_tag(
+		&ctx,
+		"border",
+		cu.Tag_Style{border_color = [4]cu.Color{BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, BORDER_COLOR}, border_thickness = 1},
+	)
+	cu.create_tag(
+		&ctx,
+		"border toggle on",
+		cu.Tag_Style{border_color = [4]cu.Color{SUCCESS_COLOR, BORDER_COLOR, BORDER_COLOR, BORDER_COLOR}, border_thickness = 1},
+	)
+	cu.create_tag(
+		&ctx,
+		"border toggle off",
+		cu.Tag_Style{border_color = [4]cu.Color{ERROR_COLOR, BORDER_COLOR, BORDER_COLOR, BORDER_COLOR}, border_thickness = 1},
+	)
+
+	cu.create_tag(&ctx, "text big primary", {font_color = TEXT_PRIMARY_COLOR, font = &font, font_size = 20, letter_spacing = 1})
+	cu.create_tag(&ctx, "text small primary", {font_color = TEXT_PRIMARY_COLOR, font = &font, font_size = 16, letter_spacing = 1})
+	cu.create_tag(&ctx, "text big secondary", {font_color = TEXT_SECONDARY_COLOR, font = &font, font_size = 20, letter_spacing = 1})
+	cu.create_tag(&ctx, "text small secondary", {font_color = TEXT_SECONDARY_COLOR, font = &font, font_size = 16, letter_spacing = 1})
+	cu.create_tag(&ctx, "text big disabled", {font_color = TEXT_DISABLED_COLOR, font = &font, font_size = 20, letter_spacing = 1})
+	cu.create_tag(&ctx, "text small disabled", {font_color = TEXT_DISABLED_COLOR, font = &font, font_size = 16, letter_spacing = 1})
+	cu.create_tag(&ctx, "pad small", {padding = 8})
+	cu.create_tag(&ctx, "pad big", {padding = 16})
+
 	for !rl.WindowShouldClose() {
 		defer free_all(context.temp_allocator)
 		defer clear(&buttons_event_log)
@@ -83,7 +108,7 @@ demo_rl :: proc() {
 		update_edit_state(&state)
 
 		cu.begin_ui(&ctx)
-		build_ui(&ctx, tick, aaloo, &state, &buffer, &font, text_style_20)
+		build_ui(&ctx, tick, aaloo, &state, &buffer)
 		cu.end_ui(&ctx)
 
 		rl.BeginDrawing()
@@ -153,7 +178,7 @@ demo_nanovg :: proc() {
 		ctx.window_height = auto_cast h
 
 		cu.begin_ui(&ctx)
-		build_ui(&ctx, tick, aaloo, &state, &buffer, nvg_ctx, text_style_20)
+		build_ui(&ctx, tick, aaloo, &state, &buffer)
 		cu.end_ui(&ctx)
 
 		nvg.BeginFrame(nvg_ctx, ctx.window_width, ctx.window_height, 1)

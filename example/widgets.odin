@@ -15,40 +15,31 @@ Image :: struct {
 	data: rawptr,
 }
 
-build_ui :: proc(
-	ctx: ^cu.Core_Context,
-	tick_image: Image,
-	aaloo_image: Image,
-	state: ^edit.State,
-	buffer: ^strings.Builder,
-	font: rawptr,
-	generic_text_style: cu.Text_Style,
-) {
+build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, state: ^edit.State, buffer: ^strings.Builder) {
 	root := cu.create_widget(
 		ctx,
 		"Root",
 		cu.Layout{sizing = cu.sizing(cu.fixed(ctx.window_width), cu.fixed(ctx.window_height)), direction = .X, child_gap = 16},
-		tags = {"hm"},
 		style = {padding = 32, color = BACKGROUND_COLOR},
 	)
 
 	cu.push_parent(ctx, root)
 
-	if frame(ctx, "Buttons", font, {24, 12, 12, 12}, 16) {
-		e_1 := button(ctx, "Test 1", tick_image, "Flickering is due to Id's not being created with constant data.", font = font)
-		e_2 := button(ctx, "Test 2", tick_image, "Reading tool tips?", font = font)
-		e_3 := button(ctx, "Test 3", tick_image, "Well well well", font = font)
+	if frame(ctx, "Buttons", {24, 12, 12, 12}, 16) {
+		e_1 := button(ctx, "Test 1", tick_image, "Flickering is due to Id's not being created with constant data.")
+		e_2 := button(ctx, "Test 2", tick_image, "Reading tool tips?")
+		e_3 := button(ctx, "Test 3", tick_image, "Well well well")
 
 		@(static) toggle: bool
 		@(static) label: string
-		toggle_button(ctx, label, &toggle, nil, "Toggle to reveal secrets of universe", font = font)
+		toggle_button(ctx, label, &toggle, nil, "Toggle to reveal secrets of universe")
 
 		if toggle {
 			label = "Toggled"
 			@(static) toggle_2: bool
-			toggle_button(ctx, "42", &toggle_2, nil, "Very dynamic eh : )", font = font)
+			toggle_button(ctx, "42", &toggle_2, nil, "Very dynamic eh : )")
 			if toggle_2 {
-				button(ctx, "Yes.", {}, nil, font = font)
+				button(ctx, "Yes.", {}, nil)
 			}
 		} else {
 			label = "Toggle"
@@ -57,45 +48,46 @@ build_ui :: proc(
 	}
 
 
-	if frame(ctx, "Text_Wrap", font, {34, 12, 12, 12}, child_gap = 24) {
-		if frame(ctx, "Wrap_Words", font = font) {
-			cu.create_widget(ctx, "Text_1", cu.text("A quick brown fox jumps over the lazy dog", .Words, generic_text_style))
+	if frame(ctx, "Text_Wrap", {34, 12, 12, 12}, child_gap = 24) {
+		if frame(ctx, "Wrap_Words") {
+			cu.create_widget(ctx, "Text_1", cu.text("A quick brown fox jumps over the lazy dog", .Words), tags = {"text big secondary"})
 			cu.pop_parent(ctx)
 		}
-		if frame(ctx, "Wrap_New_Lines", font) {
-			cu.create_widget(ctx, "Text_2", cu.text("A quick \nbrown \nfox \njumps over \nthe lazy \ndog", .New_Lines, generic_text_style))
+		if frame(ctx, "Wrap_New_Lines") {
+			cu.create_widget(
+				ctx,
+				"Text_2",
+				cu.text("A quick \nbrown \nfox \njumps over \nthe lazy \ndog", .New_Lines),
+				tags = {"text big secondary"},
+			)
 			cu.pop_parent(ctx)
 		}
-		if frame(ctx, "Wrap_None", font) {
-			cu.create_widget(ctx, "Text_3", cu.text("A quick brown fox jumps over the lazy dog", .None, generic_text_style))
+		if frame(ctx, "Wrap_None") {
+			cu.create_widget(ctx, "Text_3", cu.text("A quick brown fox jumps over the lazy dog", .None), tags = {"text big secondary"})
 			cu.pop_parent(ctx)
 		}
-		if frame(ctx, "Wrap_Letters", font) {
-			cu.create_widget(ctx, "Text_4", cu.text("A quick brown fox jumps over the lazy dog", .Letters, generic_text_style))
+		if frame(ctx, "Wrap_Letters") {
+			cu.create_widget(ctx, "Text_4", cu.text("A quick brown fox jumps over the lazy dog", .Letters), tags = {"text big secondary"})
 			cu.pop_parent(ctx)
 		}
 		cu.pop_parent(ctx)
 	}
 
 
-	if frame(ctx, "Text_Input", font) {
+	if frame(ctx, "Text_Input") {
 		t := cu.create_widget(
 			ctx,
 			"Input text",
-			cu.text(
-				transmute(string)buffer.buf[:],
-				.Letters,
-				{font = font, color = TEXT_PRIMARY_COLOR, font_size = 16, letter_spacing = 1},
-				cursor = state.selection,
-			),
+			cu.text(transmute(string)buffer.buf[:], .Letters, cursor = state.selection),
+			tags = {"text small primary"},
 		)
 		type := t.kind.(cu.Text)
 		cu.pop_parent(ctx)
 	}
 
-	if frame(ctx, "Aaloo_Voodoo", font, {32, 12, 12, 12}, 8) {
+	if frame(ctx, "Aaloo_Voodoo", {32, 12, 12, 12}, 8) {
 		@(static) aaloo_tint := cu.Color{255, 255, 255, 255}
-		if frame(ctx, "Aaloos", font) {
+		if frame(ctx, "Aaloos") {
 			cu.create_widget(
 				ctx,
 				"Aaloos config",
@@ -106,11 +98,11 @@ build_ui :: proc(
 			cu.pop_parent(ctx)
 		}
 
-		if frame(ctx, "Aaloo_Tint", font) {
+		if frame(ctx, "Aaloo_Tint") {
 			elem_names := [?]string{"r", "g", "b", "a"}
 			for &elem, i in aaloo_tint {
 				val := cast(f32)(elem)
-				slider(ctx, elem_names[i], &val, 0, 255, font)
+				slider(ctx, elem_names[i], &val, 0, 255)
 				elem = cast(u8)val
 			}
 			cu.pop_parent(ctx)
@@ -120,29 +112,19 @@ build_ui :: proc(
 	cu.pop_parent(ctx)
 }
 
-button :: proc(
-	ctx: ^cu.Core_Context,
-	label: string,
-	icon: Image,
-	tooltip: Maybe(string),
-	font: rawptr,
-) -> [cu.Mouse_Button]bit_set[cu.Widget_Key_Event] {
+button :: proc(ctx: ^cu.Core_Context, label: string, icon: Image, tooltip: Maybe(string)) -> [cu.Mouse_Button]bit_set[cu.Widget_Key_Event] {
 	body := cu.create_widget(
 		ctx,
 		label,
 		cu.layout(cu.sizing(cu.grow(max = 128), cu.fit(16)), 8, .X, {.Center, .Center}),
-		style = cu.Rect_Style{color = SURFACE_COLOR, padding = 4, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
+		tags = {"border"},
+		style = cu.Rect_Style{color = SURFACE_COLOR, padding = 4},
 	)
 
 	if cu.push_parent(ctx, body) {
 		defer cu.pop_parent(ctx)
 
-		label_widget := cu.create_widget(
-			ctx,
-			"body_label_text",
-			cu.text(label, style = cu.Text_Style{font = font, color = TEXT_PRIMARY_COLOR, font_size = 16, letter_spacing = 1}),
-			event_passthrough = true,
-		)
+		label_widget := cu.create_widget(ctx, "body_label_text", cu.text(label), tags = {"text small primary"}, event_passthrough = true)
 
 		if icon.data != nil {
 			cu.create_widget(
@@ -177,15 +159,15 @@ button :: proc(
 				cu.create_widget(
 					ctx,
 					"button_floating_tooltip",
-					cu.text(text = tooltip, style = {font = font, color = TEXT_SECONDARY_COLOR, letter_spacing = 1, font_size = 16}),
+					cu.text(text = tooltip),
+					tags = {"border", "text small primary"},
 					offset = [2]cu.Offset{cu.offset_absolute(offset_value.x), cu.offset_absolute(offset_value.y)},
-					style = {color = ELEVATED_SURFACE_COLOR, padding = 16, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
+					style = {color = ELEVATED_SURFACE_COLOR, padding = 16},
 					event_passthrough = true,
 				)
 			}
 		}
 	}
-
 
 	if body.node.id == ctx.hot_widget_id {
 		return ctx.mouse.events
@@ -200,21 +182,20 @@ toggle_button :: proc(
 	toggle: ^bool,
 	icon: rawptr,
 	tooltip: Maybe(string),
-	font: rawptr,
 ) -> [cu.Mouse_Button]bit_set[cu.Widget_Key_Event] {
 
-	border_style := cu.border_style({BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, ERROR_COLOR}, cu.Border_Kind.Single, 0, 1)
-	text_color := TEXT_DISABLED_COLOR
+
+	tags: []string = {"border toggle off", "text small disabled"}
 	if toggle^ {
-		border_style = cu.border_style({BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, SUCCESS_COLOR}, cu.Border_Kind.Single, 0, {1, 1, 1, 1})
-		text_color = TEXT_PRIMARY_COLOR
+		tags = {"border toggle on", "text small primary"}
 	}
 
 	body := cu.create_widget(
 		ctx,
 		label,
 		cu.layout(cu.sizing(cu.grow(max = 128), cu.fit(16)), 8, .X, {.Center, .Center}),
-		style = cu.Rect_Style{color = SURFACE_COLOR, padding = 4, border = border_style},
+		tags = {tags[0]},
+		style = cu.Rect_Style{color = SURFACE_COLOR, padding = 4},
 	)
 
 	if body.node.id == ctx.hot_widget_id {
@@ -226,12 +207,7 @@ toggle_button :: proc(
 	if cu.push_parent(ctx, body) {
 		defer cu.pop_parent(ctx)
 
-		label_widget := cu.create_widget(
-			ctx,
-			"toggle_button_label_text",
-			cu.text(label, style = cu.Text_Style{font = font, color = text_color, font_size = 16, letter_spacing = 1}),
-			event_passthrough = true,
-		)
+		label_widget := cu.create_widget(ctx, "toggle_button_label_text", cu.text(label), tags = {tags[1]}, event_passthrough = true)
 
 		if icon != nil {
 			icon := cast(^rl.Texture)icon
@@ -267,9 +243,10 @@ toggle_button :: proc(
 				cu.create_widget(
 					ctx,
 					"toggle_button_tooltip_text",
-					cu.text(text = tooltip, style = {font = font, color = TEXT_SECONDARY_COLOR, letter_spacing = 1, font_size = 16}),
+					cu.text(text = tooltip),
+					tags = {"text small primary", "border"},
 					offset = [2]cu.Offset{cu.offset_absolute(offset_value.x), cu.offset_absolute(offset_value.y)},
-					style = {color = ELEVATED_SURFACE_COLOR, padding = 16, border = cu.border_style(BORDER_COLOR, cu.Border_Kind.Single)},
+					style = {color = ELEVATED_SURFACE_COLOR, padding = 16},
 					event_passthrough = true,
 				)
 			}
@@ -283,7 +260,7 @@ toggle_button :: proc(
 	}
 }
 
-slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32, font: rawptr) {
+slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32) {
 	main_container := cu.create_widget(
 		ctx,
 		label,
@@ -292,18 +269,8 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32,
 		event_passthrough = true,
 	)
 	cu.push_parent(ctx, main_container)
-	cu.create_widget(
-		ctx,
-		"slider_text_label",
-		cu.text(label, style = {font = font, color = TEXT_PRIMARY_COLOR, font_size = 20}),
-		style = {border = cu.border_style(BORDER_COLOR), padding = 8},
-	)
-
-	cu.create_widget(
-		ctx,
-		"slider_text_min",
-		cu.text(style = {font = font, letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_PRIMARY_COLOR}, text = fmt.tprint(min)),
-	)
+	cu.create_widget(ctx, "slider_text_label", cu.text(label), tags = {"border", "text small primary"}, style = {padding = 8})
+	cu.create_widget(ctx, "slider_text_min", cu.text(text = fmt.tprint(min)), tags = {"text small primary"})
 
 	railing := cu.create_widget(
 		ctx,
@@ -344,21 +311,14 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32,
 	cu.create_widget(
 		ctx,
 		"slider_knob_current_value_text",
-		cu.Text {
-			text = fmt.tprint(value^),
-			style = {font = font, letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_SECONDARY_COLOR},
-		},
-		{},
+		cu.Text{text = fmt.tprint(value^)},
+		tags = {"text small secondary"},
 		offset = {cu.offset_percent(knob_offset), cu.offset_absolute(12)},
 		event_passthrough = true,
 	)
 	cu.pop_parent(ctx)
 	cu.pop_parent(ctx)
-	cu.create_widget(
-		ctx,
-		"slider_min_value",
-		cu.Text{style = {font = font, letter_spacing = 1, font_size = 16, line_spacing = 0, color = TEXT_PRIMARY_COLOR}, text = fmt.tprint(max)},
-	)
+	cu.create_widget(ctx, "slider_min_value", cu.text(fmt.tprint(max)), tags = {"text small primary"})
 
 	cu.pop_parent(ctx)
 }
@@ -366,7 +326,6 @@ slider :: proc(ctx: ^cu.Core_Context, label: string, value: ^f32, min, max: f32,
 frame :: proc(
 	ctx: ^cu.Core_Context,
 	label: string,
-	font: rawptr,
 	padding: cu.Vec4f32 = {24, 12, 12, 12},
 	child_gap: f32 = 8,
 	direction: cu.Axis = .Y,
@@ -385,12 +344,13 @@ frame :: proc(
 		ctx,
 		"Frame_floating",
 		cu.floating(cu.layout(cu.sizing(cu.fit(), cu.fit())), .Left_Top, .Left_Top),
+		tags = {"border"},
 		offset = cu.offset(cu.offset_absolute(6), cu.offset_percent_self(-0.5)),
-		style = {padding = {4, 8, 4, 8}, color = BACKGROUND_COLOR, border = cu.border_style(BORDER_COLOR)},
+		style = {padding = {4, 8, 4, 8}, color = BACKGROUND_COLOR},
 	)
 
 	cu.push_parent(ctx, title_holder)
-	cu.create_widget(ctx, "frame_floating_text", cu.text(label, style = {font = font, color = TEXT_PRIMARY_COLOR, font_size = 20}))
+	cu.create_widget(ctx, "frame_floating_text", cu.text(label), tags = {"text big primary"})
 	cu.pop_parent(ctx)
 	return true
 }

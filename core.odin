@@ -5,6 +5,7 @@ import "core:hash"
 import "core:image"
 import "core:math"
 import "core:math/linalg"
+import "core:strings"
 import "core:time"
 
 /*
@@ -241,11 +242,11 @@ Text_Style :: struct {
 Tag_Style :: struct {
 	padding:          Maybe(Vec4f32),
 	color:            Maybe(Color),
+	border_color:     Maybe([4]Color),
 	border_radius:    Maybe(Vec4f32),
 	border_thickness: Maybe(Vec4f32),
-	border_color:     Maybe([4]Color),
 	border_type:      Maybe([4]Border_Kind),
-	text_color:       Maybe(Color),
+	font_color:       Maybe(Color),
 	font_name:        Maybe(string),
 	font:             Maybe(rawptr),
 	font_id:          Maybe(int),
@@ -291,7 +292,7 @@ Image :: struct {
 	tint: Color,
 }
 
-Widget_Kind :: union {
+Widget_Kind :: union #no_nil {
 	Layout,
 	Floating,
 	Text,
@@ -375,11 +376,9 @@ end_ui :: proc(ctx: ^Core_Context) {
 	_apply_tag_styles(ctx)
 	_layout_all_sizing_pass(ctx)
 	_layout_all_positioning_pass(ctx)
-
-	clear_map(&ctx.persistant_data)
-	ctx.mouse.events = {}
 	_resolve_events(ctx)
 
+	clear_map(&ctx.persistant_data)
 	for &w in ctx.widgets {
 		ctx.persistant_data[w.node.id] = Persistant_Data {
 			size            = w.size,
@@ -412,7 +411,7 @@ end_ui :: proc(ctx: ^Core_Context) {
 create_widget :: proc(
 	ctx: ^Core_Context,
 	string_id: string,
-	widget_kind: Widget_Kind = nil,
+	widget_kind: Widget_Kind = Layout{},
 	aspect_ratio: f32 = {},
 	image: Image = {},
 	clip: [2]Clip = {},
@@ -435,7 +434,11 @@ create_widget :: proc(
 	w.node.parent = ctx.active_parent
 	w.node.index = len(ctx.widgets) - 1
 	w.event_passthrough = event_passthrough
-	w.tags = tags
+	w.tags = make([]string, len(tags), context.temp_allocator)
+
+	for tag, i in tags {
+		w.tags[i] = strings.clone(tag, context.temp_allocator)
+	}
 
 	if w.image.data != nil {
 		if aspect_ratio == 0 {
@@ -519,9 +522,9 @@ _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widge
 _apply_tag_styles :: proc(ctx: ^Core_Context) {
 	for &w in ctx.widgets {
 		for tag in w.tags {
-			tag_style, tag_not_exists := ctx.tag_styles[tag]
+			tag_style, tag_exists := ctx.tag_styles[tag]
 
-			if tag_not_exists {
+			if !tag_exists {
 				continue
 			}
 
@@ -545,7 +548,7 @@ _apply_tag_styles :: proc(ctx: ^Core_Context) {
 			}
 
 			if text, ok := &w.kind.(Text); ok {
-				if text_color, ok := tag_style.text_color.(Color); ok {
+				if text_color, ok := tag_style.font_color.(Color); ok {
 					text.style.color = text_color
 				}
 				if font_name, ok := tag_style.font_name.(string); ok {
