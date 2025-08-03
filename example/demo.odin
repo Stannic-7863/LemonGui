@@ -50,6 +50,7 @@ demo_rl :: proc() {
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
 	ctx.text_measure_proc = backend_rl.measure_text
+	ctx.error_handler_proc = error_handler
 
 	buttons_event_log: [dynamic]string
 
@@ -157,6 +158,7 @@ demo_nanovg :: proc() {
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
 	ctx.text_measure_proc = backend_nvg.measure_text
+	ctx.error_handler_proc = error_handler
 
 	buttons_event_log: [dynamic]string
 
@@ -188,4 +190,8 @@ demo_nanovg :: proc() {
 		glfw.PollEvents()
 		glfw.SwapBuffers(window)
 	}
+}
+
+error_handler :: proc(error: cu.Core_Error, message: string, args: ..any) {
+	fmt.printfln("---\nError : %v\nMessage : %s", error, fmt.tprintf(message, ..args))
 }

@@ -336,7 +336,8 @@ frame :: proc(
 		label,
 		cu.layout(cu.sizing(cu.grow(128, 512), cu.fit()), direction = direction, child_gap = child_gap),
 		clip = cu.clip({}, cu.clip_auto(50)),
-		style = {color = 0, padding = padding, border = cu.border_style(BORDER_COLOR)},
+		tags = {"border"},
+		style = {color = 0, padding = padding},
 	)
 	cu.push_parent(ctx, frame_w)
 

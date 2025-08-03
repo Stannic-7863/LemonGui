@@ -1,12 +1,7 @@
 package ui_core
 
-import "core:fmt"
 import "core:hash"
-import "core:image"
-import "core:math"
-import "core:math/linalg"
 import "core:strings"
-import "core:time"
 
 /*
 during frame : 
@@ -81,6 +76,7 @@ Core_Context :: struct {
 	active_clipper:              ^Widget,
 	active_parent:               ^Widget, // parent set by push parent 
 	text_measure_proc:           proc(text: string, style: Text_Style) -> f32,
+	error_handler_proc:          proc(error: Core_Error, message: string, args: ..any),
 	window_height, window_width: f32,
 	delta_time:                  f32,
 }
@@ -88,6 +84,7 @@ Core_Context :: struct {
 Core_Error :: enum u8 {
 	No_Parent_To_Bind_Primitive,
 	Zero_Or_No_Aspect_Ratio,
+	Tag_Does_Not_Exists,
 }
 
 Error_Context :: struct {
@@ -102,14 +99,10 @@ Persistant_Data :: struct {
 }
 
 Border_Kind :: enum u8 {
-	None,
 	Single,
 	Double,
 	Dotted,
 	Dashed,
-	Grooved,
-	Inset,
-	Outset,
 }
 
 Render_Command :: struct {
@@ -379,6 +372,7 @@ end_ui :: proc(ctx: ^Core_Context) {
 	_resolve_events(ctx)
 
 	clear_map(&ctx.persistant_data)
+
 	for &w in ctx.widgets {
 		ctx.persistant_data[w.node.id] = Persistant_Data {
 			size            = w.size,
@@ -442,7 +436,10 @@ create_widget :: proc(
 
 	if w.image.data != nil {
 		if aspect_ratio == 0 {
-			// IMPL: Error 
+			ctx.error_handler_proc(
+				.Zero_Or_No_Aspect_Ratio,
+				"Aspect ratio can be set later. However it is preferred to do it while calling create_widget()",
+			)
 		}
 	}
 
@@ -467,10 +464,17 @@ create_widget :: proc(
 
 // Adds a primitive shape to current parent set in Core_Context
 create_primitive :: proc(ctx: ^Core_Context, primitive: Command_Primitive) {
-	if ctx.active_parent != nil { 	// IMPL: Error
+	if ctx.active_parent != nil {
 		append(&ctx.primitives, primitive)
 		ctx.active_parent.primitives = ctx.primitives[len(ctx.primitives) - 1 - len(ctx.active_parent.primitives):len(ctx.primitives)]
+	} else {
+		ctx.error_handler_proc(.No_Parent_To_Bind_Primitive, "Use push_parent to set a parent before calling create_primitive()")
 	}
+}
+
+// Adds a new tag to the context with the given style.
+create_tag :: proc(ctx: ^Core_Context, tag: string, style: Tag_Style) {
+	ctx.tag_styles[tag] = style
 }
 
 _add_widget :: proc(ctx: ^Core_Context, widget: ^Widget) {
@@ -525,6 +529,7 @@ _apply_tag_styles :: proc(ctx: ^Core_Context) {
 			tag_style, tag_exists := ctx.tag_styles[tag]
 
 			if !tag_exists {
+				ctx.error_handler_proc(.Tag_Does_Not_Exists, "Tag %s specified in widget of id %v and key %v does not exist", tag, w.node.id, w.key)
 				continue
 			}
 

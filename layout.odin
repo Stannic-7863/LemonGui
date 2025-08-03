@@ -1,6 +1,7 @@
 package ui_core
 
 import "core:fmt"
+import "core:math/linalg"
 import "core:sort"
 import "core:unicode/utf8"
 
@@ -838,11 +839,11 @@ _emit_all :: proc(ctx: ^Core_Context, widget: ^Widget, z_index_offset: ^int) {
 	}
 
 	_emit_rect_command(ctx, widget, z_index_offset)
-	_emit_widget_border_command(ctx, widget, z_index_offset)
 	_emit_image_command(ctx, widget, z_index_offset)
 	_emit_widget_primitive_commands(ctx, widget, z_index_offset)
 	_emit_custom_command(ctx, widget, z_index_offset)
 	_emit_text_command(ctx, widget, z_index_offset)
+	_emit_widget_border_command(ctx, widget, z_index_offset)
 
 	if widget.node.next == nil && widget.node.first_child == nil {
 		for parent := widget.node.parent; parent != nil; parent = parent.node.parent {
@@ -865,21 +866,18 @@ _emit_clip_end_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int
 }
 
 _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: int) {
-	clip_size := widget.size
-	clip_position := widget.position
+	clip_size := linalg.round(widget.size)
+	clip_position := linalg.round(widget.position)
 
 	border := widget.rect_style.border
-	clip_size.x += border.thickness[1] + border.thickness[3]
-	clip_size.y += border.thickness[2] + border.thickness[0]
-
 	append(&ctx.render_commands, Render_Command{kind = Command_Clip_Start{clip_size = clip_size, clip_position = clip_position}, z_index = z_index})
 }
 
 _emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	if widget.rect_style.border != {} {
 		command_border: Command_Border
-		command_border.position = widget.position
-		command_border.size = widget.size
+		command_border.position = linalg.round(widget.position)
+		command_border.size = linalg.round(widget.size)
 		command_border.style = widget.rect_style.border
 		_add_render_command(ctx, widget, command_border, z_index)
 	}
@@ -915,20 +913,6 @@ _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) 
 _emit_widget_primitive_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	if len(widget.primitives) > 0 {
 		for &p, i in widget.primitives {
-			switch &v in p {
-			case Primitive_Rect:
-				v.position += widget.position
-			case Primitive_Ellipse:
-				v.position += widget.position
-			case Primitive_Line:
-				v.end_position += widget.position
-				v.start_position += widget.position
-			case Primitive_Points:
-				for &point in v.points {
-					point += widget.position
-				}
-			case Primitive_Custom:
-			}
 			_add_render_command(ctx, widget, p, z_index)
 		}
 	}

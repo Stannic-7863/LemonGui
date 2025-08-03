@@ -140,11 +140,6 @@ border_style :: proc(color: [4]Color, type: [4]Border_Kind = Border_Kind.Single,
 	return Border_Style{color = color, type = type, radius = radius, thickness = thickness}
 }
 
-// Adds a new tag to the context with the given style.
-create_tag :: proc(ctx: ^Core_Context, tag: string, style: Tag_Style) {
-	ctx.tag_styles[tag] = style
-}
-
 _get_axis_padding :: proc "contextless" (axis: Axis, padding: Vec4f32) -> f32 {
 	switch axis {
 	case .X:

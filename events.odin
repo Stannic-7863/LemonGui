@@ -187,10 +187,12 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 			switch mouse_event {
 			case .Pressed:
 				_handle_mouse_pressed(ctx, mouse_button, mouse_event)
+				ctx.active_widget_id = ctx.hot_widget_id
 			case .Down:
 				_handle_mouse_down(ctx, mouse_button, mouse_event)
 			case .Released:
 				_handle_mouse_released(ctx, mouse_button, mouse_event)
+				ctx.active_widget_id = 0
 			}
 		}
 	}
@@ -207,7 +209,6 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 			}
 		}
 	}
-
 	return
 }
 
