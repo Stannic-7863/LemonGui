@@ -14,11 +14,40 @@ Axis :: enum u8 {
 	Y,
 }
 
-Layout_Kind :: enum u8 {
-	Fit, // Fit to content size [Default]
-	Grow, // Grow to take up all space inside parent 
-	Fixed, // A fixed size provided in pixel value 
-	Percent, // Percentage of parent size, provided in range 0.0-1.0
+Min_Max :: struct {
+	min, max: f32,
+}
+
+Value :: struct {
+	value: f32,
+}
+
+Fit :: distinct Min_Max
+Grow :: distinct Min_Max
+Fixed :: distinct Value
+Percent :: distinct Value
+Percent_Self :: distinct Value
+Relative :: distinct Value
+Absolute :: distinct Value
+
+Sizing :: union {
+	Fit,
+	Grow,
+	Fixed,
+	Percent,
+}
+
+Offset :: union {
+	Fixed, // Set position to value provided in pixels
+	Absolute, // Offset position by value provided in pixel relative to parent's position 
+	Percent, // Offset position by percent of parent size
+	Percent_Self, // Offset position by percentange of own size
+}
+
+Expand :: union {
+	Absolute, // Exapand size by provided size in pixels
+	Percent, // Expand size by percentage of parent size 
+	Percent_Self, // Expand size by percentage of own size
 }
 
 Child_Alignment_X :: enum u8 {
@@ -54,21 +83,6 @@ Attachment_To :: enum u8 {
 	Id,
 }
 
-Offset_Kind :: enum u8 {
-	None, // Not affected [Default]
-	Fixed, // Set position to value provided in pixels
-	Absolute, // Offset position by value provided in pixel relative to parent's position 
-	Percent, // Offset position by percent of parent size
-	Percent_Self, // Offset position by percentange of own size
-}
-
-Expand_Kind :: enum u8 {
-	None, // Not affected [Default]
-	Absolute, // Exapand size by provided size in pixels
-	Percent, // Expand size by percentage of parent size 
-	Percent_Self, // Expand size by percentage of own size
-}
-
 Clip_Kind :: enum {
 	None,
 	Custom,
@@ -89,24 +103,9 @@ Clip :: struct {
 	scale: f32,
 }
 
-Expand :: struct {
-	value: f32,
-	kind:  Expand_Kind,
-}
-
-Offset :: struct {
-	value: f32,
-	kind:  Offset_Kind,
-}
-
 Child_Alignment :: struct {
 	x: Child_Alignment_X,
 	y: Child_Alignment_Y,
-}
-
-Sizing :: struct {
-	min, max: f32,
-	kind:     Layout_Kind,
 }
 
 @(private = "file")
@@ -216,7 +215,7 @@ _fit_into_parent :: proc(axis: Axis, child_widget: ^Widget) {
 
 	if !parent_is_layout {return}
 
-	if parent_layout.sizing[axis].kind == .Fit {
+	if _, ok := parent_layout.sizing[axis].(Fit); ok {
 		if parent.is_floating_descendant == child_widget.is_floating_descendant { 	// we don't want floating elements contributing into non floating widgets
 			if parent_layout.direction == axis {
 				parent.size[axis] += child_widget.size[axis]
@@ -251,9 +250,9 @@ _fit_into_parent :: proc(axis: Axis, child_widget: ^Widget) {
 		child_widget.size[axis] += child_gaps
 	}
 
-	if widget_layout.sizing[axis].kind == .Fit {
-		child_widget.accumulated_min[axis] = max(child_widget.accumulated_min[axis], widget_layout.sizing[axis].min)
-		child_widget.accumulated_min[axis] = min(child_widget.accumulated_min[axis], widget_layout.sizing[axis].max)
+	if axis_sizing, ok := &widget_layout.sizing[axis].(Fit); ok {
+		child_widget.accumulated_min[axis] = max(child_widget.accumulated_min[axis], axis_sizing.min)
+		child_widget.accumulated_min[axis] = min(child_widget.accumulated_min[axis], axis_sizing.max)
 		child_widget.size[axis] = child_widget.accumulated_min[axis]
 	}
 }
@@ -267,31 +266,31 @@ _grow_shrink_children_along_axis :: proc(axis: Axis, parent_layout: Layout, pare
 	for child_widget := parent_widget.node.first_child; child_widget != nil; child_widget = child_widget.node.next {
 		switch type in child_widget.kind {
 		case Floating:
-			if type.layout.sizing[axis].kind == .Grow {
+			if _, ok := type.layout.sizing[axis].(Grow); ok {
 				child_widget.size[axis] = parent_widget.size[axis] - parent_padding
 			}
-			if type.layout.sizing[axis].kind == .Percent {
-				child_widget.size[axis] = parent_widget.size[axis] * type.layout.sizing[axis].min - parent_padding
+			if axis_sizing, ok := type.layout.sizing[axis].(Percent); ok {
+				child_widget.size[axis] = parent_widget.size[axis] * axis_sizing.value - parent_padding
 				child_widget.size[axis] = max(child_widget.size[axis], child_widget.accumulated_min[axis])
 			}
 			continue
 		case Layout:
-			switch type.sizing[axis].kind {
-			case .Grow:
-				child_widget.size[axis] = max(child_widget.accumulated_min[axis], type.sizing[axis].min)
-				append(growables, Growable{&child_widget.size, child_widget.size[axis], type.sizing[axis].max, false})
-			case .Percent:
+			switch &axis_sizing in type.sizing[axis] {
+			case Grow:
+				child_widget.size[axis] = max(child_widget.accumulated_min[axis], axis_sizing.min)
+				append(growables, Growable{&child_widget.size, child_widget.size[axis], axis_sizing.max, false})
+			case Percent:
 				child_widget.size[axis] =
 					(parent_widget.size[axis] -
 						_get_axis_padding(axis, parent_widget.rect_style.padding) -
 						f32(parent_widget.node.total_children - 1) * parent_layout.child_gap) *
-					type.sizing[axis].min
+					axis_sizing.value
 				child_widget.size[axis] = max(child_widget.accumulated_min[axis], child_widget.size[axis])
-			case .Fixed:
-			case .Fit:
+			case Fixed:
+			case Fit:
 			}
 		case Text:
-			if axis != .Y {
+			if axis != .Y { 	// GOOFY : Change this
 				append(growables, Growable{&child_widget.size, child_widget.accumulated_min.x, max(f32), true})
 			}
 		}
@@ -399,18 +398,18 @@ _grow_children_across_axis :: proc(axis: Axis, parent_layout: Layout, parent_wid
 			continue
 		}
 
-		if child_layout.sizing[axis].kind == .Percent {
+		if axis_sizing, ok := child_layout.sizing[axis].(Percent); ok {
 			child_widget.size[axis] =
 				(parent_widget.size[axis] -
 					_get_axis_padding(axis, parent_widget.rect_style.padding) -
 					f32(parent_widget.node.total_children - 1) * parent_layout.child_gap) *
-				child_layout.sizing[axis].min
+				axis_sizing.value
 			child_widget.size[axis] = max(child_widget.accumulated_min[axis], child_widget.size[axis])
 		}
-		if child_layout.sizing[axis].kind == .Grow {
-			child_min := max(child_widget.accumulated_min[axis], child_layout.sizing[axis].min)
+		if axis_sizing, ok := child_layout.sizing[axis].(Grow); ok {
+			child_min := max(child_widget.accumulated_min[axis], axis_sizing.min)
 			child_widget.size[axis] = max(parent_widget.size[axis] - parent_padding, child_min)
-			child_widget.size[axis] = min(child_widget.size[axis], child_layout.sizing[axis].max)
+			child_widget.size[axis] = min(child_widget.size[axis], axis_sizing.max)
 		}
 	}
 }
@@ -422,11 +421,13 @@ _sizing_fixed_pass :: proc(ctx: ^Core_Context) {
 			w.size = 0
 		}
 		for &sizing, i in layout.sizing {
-			switch sizing.kind {
-			case .Fit, .Percent:
+			switch sizing_axis in sizing {
+			case Fit, Percent:
 				w.size[i] = 0
-			case .Fixed, .Grow:
-				w.size[i] = sizing.min
+			case Fixed:
+				w.size[i] = sizing_axis.value
+			case Grow:
+				w.size[i] = sizing_axis.min
 			}
 		}
 	}
@@ -438,13 +439,9 @@ _sizing_apply_aspect_ratio :: proc(widget: ^Widget) {
 		case Layout:
 			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / widget.aspect_ratio
 			widget.size[Axis.Y] = widget.accumulated_min[Axis.Y]
-			type.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
-			type.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
 		case Floating:
 			widget.accumulated_min[Axis.Y] = widget.size[Axis.X] / widget.aspect_ratio
 			widget.size[Axis.Y] = widget.accumulated_min[Axis.Y]
-			type.layout.sizing[Axis.Y].min = widget.accumulated_min[Axis.Y]
-			type.layout.sizing[Axis.Y].max = widget.accumulated_min[Axis.Y]
 		case Text:
 			return
 		}
@@ -608,34 +605,32 @@ _sizing_get_measured_words :: proc(ctx: ^Core_Context, text: Text, measured_word
 
 _offset_widget :: proc(widget: ^Widget) {
 	for offset, i in widget.offset {
-		switch offset.kind {
-		case .None:
-		case .Fixed:
-			widget.position[i] = offset.value
-		case .Absolute:
-			widget.position[i] += offset.value
-		case .Percent:
+		switch kind in offset {
+		case Fixed:
+			widget.position[i] = kind.value
+		case Absolute:
+			widget.position[i] += kind.value
+		case Percent:
 			if widget.node.parent != nil {
-				widget.position[i] += offset.value * widget.node.parent.size[i]
+				widget.position[i] += kind.value * widget.node.parent.size[i]
 			}
-		case .Percent_Self:
-			widget.position[i] += offset.value * widget.size[i]
+		case Percent_Self:
+			widget.position[i] += kind.value * widget.size[i]
 		}
 	}
 }
 
 _expand_widget :: proc(widget: ^Widget) {
 	for expand, i in widget.expand {
-		switch expand.kind {
-		case .None:
-		case .Absolute:
-			widget.size[i] += expand.value
-		case .Percent:
+		switch kind in expand {
+		case Absolute:
+			widget.size[i] += kind.value
+		case Percent:
 			if widget.node.parent != nil {
-				widget.size[i] += expand.value * widget.node.parent.size[i]
+				widget.size[i] += kind.value * widget.node.parent.size[i]
 			}
-		case .Percent_Self:
-			widget.size[i] += expand.value * widget.size[i]
+		case Percent_Self:
+			widget.size[i] += kind.value * widget.size[i]
 		}
 	}
 }

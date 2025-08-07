@@ -49,17 +49,17 @@ expand :: proc "contextless" (x: Expand = {}, y: Expand = {}) -> [2]Expand {
 
 // Increase size by given percentage of parent size.
 expand_percent :: proc "contextless" (value: f32) -> Expand {
-	return Expand{value = value, kind = .Percent}
+	return Percent{value = value}
 }
 
 // Increase size by given percentage of own size.
 expand_percent_self :: proc "contextless" (value: f32) -> Expand {
-	return Expand{value = value, kind = .Percent_Self}
+	return Percent_Self{value = value}
 }
 
 // Increase size by given value in pixels.
 expand_absolute :: proc "contextless" (value: f32) -> Expand {
-	return Expand{value = value, kind = .Absolute}
+	return Absolute{value = value}
 }
 
 // Offset widget position after layout position pass.
@@ -69,22 +69,22 @@ offset :: proc "contextless" (x: Offset = {}, y: Offset = {}) -> [2]Offset {
 
 // Offset position by given percentage of parent size.
 offset_percent :: proc "contextless" (value: f32) -> Offset {
-	return Offset{value = value, kind = .Percent}
+	return Percent{value = value}
 }
 
 // Offset position by given percentage of own size.
 offset_percent_self :: proc "contextless" (value: f32) -> Offset {
-	return Offset{value = value, kind = .Percent_Self}
+	return Percent_Self{value = value}
 }
 
 // Offset position by given value in pixels.
 offset_absolute :: proc "contextless" (value: f32) -> Offset {
-	return Offset{value = value, kind = .Absolute}
+	return Absolute{value = value}
 }
 
 // Set position to given value in pixels.
 offset_fixed :: proc "contextless" (value: f32) -> Offset {
-	return Offset{value = value, kind = .Fixed}
+	return Fixed{value = value}
 }
 
 text :: proc "contextless" (text: string, wrap: Wrap_Kind = .Words, style: Text_Style = {}, cursor: Maybe([2]int) = nil) -> Text {
@@ -117,22 +117,22 @@ sizing :: proc "contextless" (x: Sizing = {}, y: Sizing = {}) -> [Axis]Sizing {
 
 // Fit sizing type.
 fit :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Sizing {
-	return Sizing{min = min, max = max, kind = .Fit}
+	return Fit{min = min, max = max}
 }
 
 // Grow sizing type.
 grow :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Sizing {
-	return Sizing{min = min, max = max, kind = .Grow}
+	return Grow{min = min, max = max}
 }
 
 // Percent sizing type.
 percent :: proc "contextless" (value: f32 = 1) -> Sizing {
-	return Sizing{min = value, max = value, kind = .Percent}
+	return Percent{value = value}
 }
 
 // Fixed sizing type.
-fixed :: proc "contextless" (size: f32) -> Sizing {
-	return Sizing{size, size, .Fixed}
+fixed :: proc "contextless" (value: f32) -> Sizing {
+	return Fixed{value = value}
 }
 
 // Border style.

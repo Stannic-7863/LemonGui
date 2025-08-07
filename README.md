@@ -1,11 +1,14 @@
 # A simple (POTENTIAL) Imgui written in Odin
 
+# Note
+Some api changes happening right now. `Floating` layout type will be removed in favour of a new `Grid` parameter in `Layout` and some flags will be added to define if widget contributes to parent size per axis and can it overflow parent per axis. 
+
 # Progress so far
 ## Features:
 - [x] Layout
 - [x] Word Wrapping
 - [x] Basic mouse event handling
-- [x] Basic styling options
+- [x] Basic styling options and tag system for compose-able styles
 ## Planned things:
 - [ ] Animation system
 - [ ] Caching (text wrapping especially) for better performance
@@ -91,13 +94,12 @@ Axis :: enum {
 }
 ``` 
 
-`Sizing` is defined for each `Axis`. Sizing holds a `min`, `max` value and `Layout_Kind`. Layout can be of four Kinds. 
-- `Fit`: The widget will expand or shrink its own size to accommodate its children.
-- `Grow`: The widget will expand to fill up any remaining space in the parent. Space is distributed equally between multiple `Grow` widgets.
-- `Fixed`: The size of widget is fixed and given by user in pixels.  
-- `Percent`: Percentage of parent's size minus all child gaps and parent padding. Percent widgets can overgrow their parents. 
+`Sizing` is defined for each `Axis`. Its a union of different kinds of layout kinds. 
+- `Fit`: Of type `Min_Max`. The widget will expand or shrink its own size to accommodate its children.
+- `Grow`: Of type `Min_Max`. The widget will expand to fill up any remaining space in the parent. Space is distributed equally between multiple `Grow` widgets.
+- `Fixed`: Of type `Value`. The size of widget is fixed and given by user in pixels.  
+- `Percent`: Of type `Value`. Percentage of parent's size minus all child gaps and parent padding. Percent widgets can overgrow their parents. 
 
-`min`, `max` values for `Fit`, `Grow` and `Fixed` sizing are defined in pixels. For `Percent` `min`, `max` are in range 0-1. In `Fixed` and `Percent` widgets `min = max`.
 `child_gap` is spacing between each children of a parent. 
 
 `child_alignment` defines how the children of a widget are aligned along x and y axis. Children can be aligned at `Left`, `Center` or `Right` at `X` axis and `Top`, `Center` or `Bottom` at `Y` axis. 
@@ -151,7 +153,7 @@ Unlike `Floating` or `Layout` `Text` does not have children. Nor can you push it
 - `New_Line_Wrap`: Wraps on only new lines.
 - `None`: No Wrap at all.
 
-`cursor` interpretation up to user. 
+`cursor` interpretation up to renderer. 
 
 ### string_id : string
 
@@ -181,24 +183,22 @@ It is passed down to the renderer unmodified with a position and size. Aspect ra
 
 ### expand : [2]Expand
 
-`expand` expands the size of the widget after the sizing pass in layout along a axis. `Expand` has a `value` and a `Expand_Kind`
+`expand` expands the size of the widget after the sizing pass in layout along a axis. `Expand` is a union for several expand kinds.
 
 Different kinds of expand are:
-- `None`: Nothing happens. 
 - `Absolute`: Expand size by provided size defined in pixels.
 - `Percent`: Expand size by percentage of parent's size.
 - `Percent_Self`: Expand size by percentage of widget's size.
 
 ### offset : [2]Offset
 
-`offset` offsets the widget after its been positioned in layout along a axis. `Offset` has a `value` and a `Offset_Kind`
+`offset` offsets the widget after its been positioned in layout along a axis. `Offset` is a union for several offset kinds. 
 
 Different kinds of offset are:
-- `None`: Nothing happens. 
 - `Fixed`: Set position of the widget to value defined in pixels.
 - `Absolute`: Offset position by value defined in pixels relative to parent's position.
 - `Percent`:  Offset position by percent of parent's size.
-- `Percent_Self`: Offset position by percentange of widget's size.
+- `Percent_Self`: Offset position by percentage of widget's size.
 
 ### style : Style
 
@@ -219,7 +219,7 @@ Style :: struct {
 
 ### event_passthrough : bool
 
-Widget will this set to true will not detect event and will not ocllude the parent
+Widget will this set to true will not detect event and will not occlude the parent
 
 ## Creating primitives
 
