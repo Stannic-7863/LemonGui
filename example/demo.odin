@@ -83,8 +83,8 @@ demo_rl :: proc() {
 	cu.create_tag(&ctx, "text small secondary", {font_color = TEXT_SECONDARY_COLOR, font = &font, font_size = 16, letter_spacing = 1})
 	cu.create_tag(&ctx, "text big disabled", {font_color = TEXT_DISABLED_COLOR, font = &font, font_size = 20, letter_spacing = 1})
 	cu.create_tag(&ctx, "text small disabled", {font_color = TEXT_DISABLED_COLOR, font = &font, font_size = 16, letter_spacing = 1})
-	cu.create_tag(&ctx, "pad small", {padding = 8})
-	cu.create_tag(&ctx, "pad big", {padding = 16})
+	cu.create_tag(&ctx, "pad small", {padding = cu.padding(8)})
+	cu.create_tag(&ctx, "pad big", {padding = cu.padding(16)})
 
 	for !rl.WindowShouldClose() {
 		defer free_all(context.temp_allocator)

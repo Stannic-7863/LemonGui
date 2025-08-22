@@ -9,6 +9,19 @@ render :: proc(ctx: cu.Core_Context) {
 	for command in ctx.render_commands {
 		switch command_kind in command.kind {
 		case cu.Command_Rect:
+		case cu.Command_Text:
+		case cu.Command_Image:
+		case cu.Command_Border:
+		case cu.Command_Custom:
+		case cu.Command_Clip_End:
+		case cu.Command_Primitive:
+		case cu.Command_Clip_Start:
+		}
+	}
+
+	for command in ctx.render_commands {
+		switch command_kind in command.kind {
+		case cu.Command_Rect:
 			rl.DrawRectangleV(command_kind.position, command_kind.size, cast(rl.Color)command_kind.color)
 		case cu.Command_Text:
 			if cursor, ok := command_kind.cursor.([2]int); ok {
