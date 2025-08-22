@@ -69,6 +69,7 @@ Core_Context :: struct {
 	render_commands:             [dynamic]Render_Command,
 	primitives:                  [dynamic]Command_Primitive,
 	clips:                       [dynamic]^Widget,
+	growable:                    [dynamic]Growable,
 	tag_styles:                  map[string]Tag_Style,
 	persistant_data:             map[Id]Persistant_Data, // widgets from last frame. Used to query events. Accessed by widget.id
 	hot_widget_id:               Id, // widget currently under mouse  
@@ -94,8 +95,10 @@ Error_Context :: struct {
 
 // Data that persists each frame 
 Persistant_Data :: struct {
-	size, position, accumulated_min: Vec2f32,
-	clip:                            [2]Clip,
+	size, position:     Vec2f32,
+	accumulating_min:   [Axis]f32,
+	text_minimum_width: f32,
+	clip:               [Axis]Clip,
 }
 
 Border_Kind :: enum u8 {
@@ -211,7 +214,7 @@ Primitive_Line :: struct {
 
 Rect_Style :: struct {
 	border:  Border_Style,
-	padding: Vec4f32,
+	padding: [Axis]Vec2f32,
 	color:   Color,
 }
 
@@ -233,7 +236,7 @@ Text_Style :: struct {
 }
 
 Tag_Style :: struct {
-	padding:          Maybe(Vec4f32),
+	padding:          Maybe([Axis]Vec2f32),
 	color:            Maybe(Color),
 	border_color:     Maybe([4]Color),
 	border_radius:    Maybe(Vec4f32),
@@ -248,36 +251,22 @@ Tag_Style :: struct {
 	line_spacing:     Maybe(f32),
 }
 
-Node :: struct {
-	id:                    Id,
-	next:                  ^Widget,
-	prev:                  ^Widget,
-	parent:                ^Widget,
-	last_child:            ^Widget,
-	first_child:           ^Widget,
-	index, total_children: int,
-}
-
-Floating :: struct {
-	layout:          Layout,
-	id:              Id,
-	parent, element: Anchor,
-	attachment_to:   Attachment_To,
-}
-
 Layout :: struct {
-	sizing:          [Axis]Sizing,
-	child_gap:       f32,
-	child_alignment: Child_Alignment,
-	direction:       Axis,
+	sizing:           [Axis]Sizing,
+	alignment:        [Axis]Alignment,
+	direction:        Axis,
+	child_gap:        f32,
+	accumulating_min: [Axis]f32,
 }
 
 Text :: struct {
-	style:        Text_Style,
-	text:         string,
-	_start, _end: int,
-	cursor:       Maybe([2]int),
-	wrap:         Wrap_Kind,
+	style:                        Text_Style,
+	text:                         string,
+	cursor:                       Maybe([2]int),
+	wrap:                         Wrap_Kind,
+	start, end:                   int,
+	minimum_width, maximum_width: f32,
+	preferred_min, preferred_max: f32,
 }
 
 Image :: struct {
@@ -287,7 +276,6 @@ Image :: struct {
 
 Widget_Kind :: union #no_nil {
 	Layout,
-	Floating,
 	Text,
 }
 
@@ -297,23 +285,29 @@ Key :: struct {
 }
 
 Widget :: struct {
-	rect_style:             Rect_Style,
-	kind:                   Widget_Kind,
-	node:                   Node,
-	primitives:             []Command_Primitive,
-	tags:                   []string,
-	expand:                 [2]Expand,
-	offset:                 [2]Offset,
-	clip:                   [2]Clip,
-	image:                  Image,
-	aspect_ratio:           f32,
-	custom_data:            rawptr,
-	key:                    Key,
-	accumulated_min:        Vec2f32,
-	size, position:         Vec2f32,
-	z_index:                int,
-	is_floating_descendant: bool,
-	event_passthrough:      bool,
+	// Data 
+	id:                    Id,
+	next:                  ^Widget,
+	prev:                  ^Widget,
+	parent:                ^Widget,
+	last:                  ^Widget,
+	first:                 ^Widget,
+	index, total_children: int,
+
+	// Widget Data 
+	style:                 Rect_Style,
+	kind:                  Widget_Kind,
+	primitives:            []Command_Primitive,
+	tags:                  []string,
+	override:              [Axis]Override,
+	clip:                  [Axis]Clip,
+	image:                 Image,
+	aspect_ratio:          f32,
+	custom_data:           rawptr,
+	key:                   Key,
+	size, position:        Vec2f32,
+	z_index:               int,
+	event_passthrough:     bool,
 }
 
 init_core_context :: proc(total_widgets: int) -> Core_Context {
@@ -351,8 +345,8 @@ push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
 }
 
 pop_parent :: proc(ctx: ^Core_Context) {
-	if ctx.active_parent.node.parent != nil {
-		ctx.active_parent = ctx.active_parent.node.parent
+	if ctx.active_parent.parent != nil {
+		ctx.active_parent = ctx.active_parent.parent
 	}
 }
 
@@ -367,29 +361,36 @@ begin_ui :: proc(ctx: ^Core_Context) {
 end_ui :: proc(ctx: ^Core_Context) {
 	_build_stacks(ctx)
 	_apply_tag_styles(ctx)
-	_layout_all_sizing_pass(ctx)
-	_layout_all_positioning_pass(ctx)
+	_layout_apply_sizing_pass(ctx)
+	_layout_apply_positioning_pass(ctx)
 	_resolve_events(ctx)
 
 	clear_map(&ctx.persistant_data)
 
 	for &w in ctx.widgets {
-		ctx.persistant_data[w.node.id] = Persistant_Data {
-			size            = w.size,
-			position        = w.position,
-			accumulated_min = w.accumulated_min,
-			clip            = w.clip,
+		w_layout, is_layout := _get_layout(&w)
+		largest_word_width: f32 = 0
+		if !is_layout {
+			largest_word_width = w.kind.(Text).minimum_width
+		}
+
+		ctx.persistant_data[w.id] = Persistant_Data {
+			size               = w.size,
+			position           = w.position,
+			accumulating_min   = w_layout.accumulating_min,
+			clip               = w.clip,
+			text_minimum_width = largest_word_width,
 		}
 	}
 
 	hot_widget_pd, ok := &ctx.persistant_data[ctx.hot_widget_id]
 
 	if ok {
-		if hot_widget_pd.clip.x.kind == .Auto {
-			hot_widget_pd.clip.x.value += ctx.mouse.scroll * ctx.delta_time * hot_widget_pd.clip.x.scale
+		if hot_widget_pd.clip[.X].kind == .Auto {
+			hot_widget_pd.clip[.X].value += ctx.mouse.scroll * ctx.delta_time * hot_widget_pd.clip[.X].scale
 		}
-		if hot_widget_pd.clip.y.kind == .Auto {
-			hot_widget_pd.clip.y.value += ctx.mouse.scroll * ctx.delta_time * hot_widget_pd.clip.y.scale
+		if hot_widget_pd.clip[.Y].kind == .Auto {
+			hot_widget_pd.clip[.Y].value += ctx.mouse.scroll * ctx.delta_time * hot_widget_pd.clip[.Y].scale
 		}
 	}
 
@@ -408,9 +409,8 @@ create_widget :: proc(
 	widget_kind: Widget_Kind = Layout{},
 	aspect_ratio: f32 = {},
 	image: Image = {},
-	clip: [2]Clip = {},
-	expand: [2]Expand = nil,
-	offset: [2]Offset = nil,
+	override: [Axis]Override = {},
+	clip: [Axis]Clip = {},
 	tags: []string = {},
 	style: Rect_Style = {},
 	event_passthrough: bool = false,
@@ -423,10 +423,8 @@ create_widget :: proc(
 	w.kind = widget_kind
 	w.image = image
 	w.aspect_ratio = aspect_ratio
-	w.offset = offset
-	w.expand = expand
-	w.node.parent = ctx.active_parent
-	w.node.index = len(ctx.widgets) - 1
+	w.parent = ctx.active_parent
+	w.index = len(ctx.widgets) - 1
 	w.event_passthrough = event_passthrough
 	w.tags = make([]string, len(tags), context.temp_allocator)
 
@@ -446,18 +444,8 @@ create_widget :: proc(
 	_add_widget(ctx, w)
 	w.key.string_id = string_id
 	_generate_widget_id(w)
-
-	if _, ok := w.kind.(Floating); ok {
-		w.z_index += max(int) / 2
-		w.is_floating_descendant = true
-	}
-
-	if w.is_floating_descendant {
-		w.node.parent.node.total_children -= 1
-	}
-
 	_retrieve_persistant_data(ctx.persistant_data, w)
-	w.rect_style = style
+	w.style = style
 
 	return w
 }
@@ -479,45 +467,44 @@ create_tag :: proc(ctx: ^Core_Context, tag: string, style: Tag_Style) {
 
 _add_widget :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	if ctx.active_parent != nil {
-		ctx.active_parent.node.total_children += 1
+		ctx.active_parent.total_children += 1
 
-		if ctx.active_parent.node.first_child == nil {
-			ctx.active_parent.node.first_child = widget
+		if ctx.active_parent.first == nil {
+			ctx.active_parent.first = widget
 		}
 
-		widget.node.prev = ctx.active_parent.node.last_child
+		widget.prev = ctx.active_parent.last
 
-		if ctx.active_parent.node.last_child != nil {
-			ctx.active_parent.node.last_child.node.next = widget
+		if ctx.active_parent.last != nil {
+			ctx.active_parent.last.next = widget
 		}
-		ctx.active_parent.node.last_child = widget
+		ctx.active_parent.last = widget
 
 		widget.z_index = ctx.active_parent.z_index
-		widget.is_floating_descendant = ctx.active_parent.is_floating_descendant
-		widget.key.parent_id = ctx.active_parent.node.id
+		widget.key.parent_id = ctx.active_parent.id
 	}
 }
 
 _generate_widget_id :: proc(widget: ^Widget) {
 	id := cast(Id)hash.fnv64(transmute([]u8)widget.key.string_id)
-	widget.node.id = widget.key.parent_id * 9 + id
+	widget.id = widget.key.parent_id * 9 + id
 }
 
 _retrieve_persistant_data :: proc(persistant_data: map[Id]Persistant_Data, widget: ^Widget) -> bool {
-	val := persistant_data[widget.node.id] or_return
-	widget.position = val.position
-	widget.size = val.size
+	val := persistant_data[widget.id] or_return
+	// widget.position = val.position
+	// widget.size = val.size
 
-	if widget.clip.x.kind == .Auto {
-		widget.clip.x.value = val.clip.x.value
+	if widget.clip[.X].kind == .Auto {
+		widget.clip[.X].value = val.clip[.X].value
 	}
 
-	if widget.clip.y.kind == .Auto {
-		widget.clip.y.value = val.clip.y.value
+	if widget.clip[.Y].kind == .Auto {
+		widget.clip[.Y].value = val.clip[.Y].value
 	}
 
-	if _, ok := widget.kind.(Text); ok {
-		widget.accumulated_min = val.accumulated_min
+	if text, ok := &widget.kind.(Text); ok {
+		text.minimum_width = val.text_minimum_width
 	}
 
 	return true
@@ -529,27 +516,27 @@ _apply_tag_styles :: proc(ctx: ^Core_Context) {
 			tag_style, tag_exists := ctx.tag_styles[tag]
 
 			if !tag_exists {
-				ctx.error_handler_proc(.Tag_Does_Not_Exists, "Tag %s specified in widget of id %v and key %v does not exist", tag, w.node.id, w.key)
+				ctx.error_handler_proc(.Tag_Does_Not_Exists, "Tag %s specified in widget of id %v and key %v does not exist", tag, w.id, w.key)
 				continue
 			}
 
-			if padding, ok := tag_style.padding.(Vec4f32); ok {
-				w.rect_style.padding = padding
+			if padding, ok := tag_style.padding.([Axis]Vec2f32); ok {
+				w.style.padding = padding
 			}
 			if color, ok := tag_style.color.(Color); ok {
-				w.rect_style.color = color
+				w.style.color = color
 			}
 			if border_radius, ok := tag_style.border_radius.(Vec4f32); ok {
-				w.rect_style.border.radius = border_radius
+				w.style.border.radius = border_radius
 			}
 			if border_thickness, ok := tag_style.border_thickness.(Vec4f32); ok {
-				w.rect_style.border.thickness = border_thickness
+				w.style.border.thickness = border_thickness
 			}
 			if border_color, ok := tag_style.border_color.([4]Color); ok {
-				w.rect_style.border.color = border_color
+				w.style.border.color = border_color
 			}
 			if border_type, ok := tag_style.border_type.([4]Border_Kind); ok {
-				w.rect_style.border.type = border_type
+				w.style.border.type = border_type
 			}
 
 			if text, ok := &w.kind.(Text); ok {
