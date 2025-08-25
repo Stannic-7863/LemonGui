@@ -24,9 +24,9 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, s
 	)
 
 	cu.push_parent(ctx, root)
-	cu.create_widget(ctx, "child 1", cu.layout(cu.sizing(cu.grow(), cu.grow())), {}, cu.style(SURFACE_COLOR))
-	cu.create_widget(ctx, "child 2", cu.layout(cu.sizing(cu.grow(), cu.grow())), {}, cu.style(SURFACE_COLOR))
-	cu.create_widget(ctx, "child 3", cu.layout(cu.sizing(cu.grow(), cu.grow())), {}, cu.style(SURFACE_COLOR))
+	cu.create_widget(ctx, "child 1", cu.layout(cu.sizing(cu.grow(), cu.grow())), {}, {.Lock_Active}, cu.style(SURFACE_COLOR))
+	cu.create_widget(ctx, "child 2", cu.layout(cu.sizing(cu.grow(), cu.grow())), {}, {}, cu.style(SURFACE_COLOR))
+	cu.create_widget(ctx, "child 3", cu.layout(cu.sizing(cu.grow(), cu.grow())), {}, {}, cu.style(SURFACE_COLOR))
 	cu.pop_parent(ctx)
 }
 

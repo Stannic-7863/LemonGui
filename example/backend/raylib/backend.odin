@@ -8,15 +8,15 @@ render :: proc(ctx: ui.Core_Context) {
 	for command in ctx.render_commands {
 		switch command_kind in command.kind {
 		case ui.Command_Rect:
-			rl.DrawRectangleV(command_kind.rect.position, command_kind.rect.size, color_to_rl(command_kind.color))
+			rl.DrawRectangleV(command.rect.position, command.rect.size, color_to_rl(command_kind.color))
 		case ui.Command_Text:
-			line_y := command_kind.rect.position.y
+			line_y := command.rect.position.y
 			font := (cast(^rl.Font)command_kind.style.font)^
 			for l, i in command_kind.lines {
 				rl.DrawTextEx(
 					font,
 					fmt.ctprint(l),
-					{command_kind.rect.position.x, line_y},
+					{command.rect.position.x, line_y},
 					command_kind.style.font_size,
 					command_kind.style.letter_spacing,
 					color_to_rl(command_kind.style.color),
@@ -26,17 +26,12 @@ render :: proc(ctx: ui.Core_Context) {
 		case ui.Command_Clip_End:
 			rl.EndScissorMode()
 		case ui.Command_Clip_Start:
-			rl.BeginScissorMode(
-				cast(i32)command_kind.rect.position.x,
-				cast(i32)command_kind.rect.position.y,
-				cast(i32)command_kind.rect.size.x,
-				cast(i32)command_kind.rect.size.y,
-			)
+			rl.BeginScissorMode(cast(i32)command.rect.position.x, cast(i32)command.rect.position.y, cast(i32)command.rect.size.x, cast(i32)command.rect.size.y)
 		case ui.Command_Custom:
 		case ui.Command_Border:
 			{
-				pos := command_kind.rect.position
-				size := command_kind.rect.size
+				pos := command.rect.position
+				size := command.rect.size
 				t := command_kind.style.thickness
 				c := command_kind.style.color
 

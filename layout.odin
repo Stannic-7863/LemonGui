@@ -1,5 +1,6 @@
 package core_ui
 
+import "base:intrinsics"
 import "core:unicode/utf8"
 
 Axis :: enum {
@@ -49,9 +50,9 @@ Override_Flag :: enum u8 {
 Override_Flags :: bit_set[Override_Flag]
 
 Override :: struct {
-	offset: Override_Transform,
-	expand: Override_Transform,
-	flags:  Override_Flags,
+	offset: [Axis]Override_Transform,
+	expand: [Axis]Override_Transform,
+	flags:  [Axis]Override_Flags,
 }
 
 Growable :: struct {
@@ -104,8 +105,15 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	z_index_offset: int
 	for n in ctx.pre {
 		layout, is_layout := _get_layout(n)
-		_position_layout_childs(n, layout)
+		if is_layout {
+			_position_layout_childs(n, layout)
+		}
 		_emit_render_commands(ctx, n, &z_index_offset)
+
+		if _is_point_in_rect(n.rect, ctx.mouse.position, n.style.border) && .Pointer_Passthrough not_in n.event_flags {
+			ctx.mouse.hovered = n.key.hash
+			ctx.mouse.hover_is_locker = .Lock_Active in n.event_flags
+		}
 	}
 }
 
@@ -141,7 +149,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) {
 	parent := widget.parent
 	if parent == nil {return}
 
-	if .No_Size_Propagation not_in widget.override[axis].flags {
+	if .No_Size_Propagation not_in widget.override.flags[axis] {
 		parent_kind := &parent.kind.(Layout)
 		if parent_kind.direction == axis {
 			parent_kind.accumulating_min[axis] += widget.rect.size[axis]
@@ -166,7 +174,7 @@ _resolve_other_sizing_along_axis :: proc(ctx: ^Core_Context, widget: ^Widget, ax
 		case Layout:
 			#partial switch kind in child_kind.sizing[axis] {
 			case Grow:
-				contribute := .No_Size_Propagation not_in child.override[axis].flags
+				contribute := .No_Size_Propagation not_in child.override.flags[axis]
 				child.rect.size[axis] = min(child.rect.size[axis], kind.max)
 				append(&ctx.growable, Growable{&child.rect.size[axis], child.rect.size[axis], kind.max, false, contribute})
 			case Percent:
@@ -174,14 +182,14 @@ _resolve_other_sizing_along_axis :: proc(ctx: ^Core_Context, widget: ^Widget, ax
 			}
 		case Text:
 			if axis == .X {
-				contribute := .No_Size_Propagation not_in child.override[axis].flags
+				contribute := .No_Size_Propagation not_in child.override.flags[axis]
 				child.rect.size[axis] = child_kind.maximum_width
 				child.rect.size[axis] = min(child.rect.size[axis], child_kind.preferred_max)
 				append(&ctx.growable, Growable{&child.rect.size[axis], child_kind.minimum_width, child.rect.size[axis], true, contribute})
 			}
 		}
 
-		if .No_Size_Propagation not_in child.override[axis].flags {
+		if .No_Size_Propagation not_in child.override.flags[axis] {
 			available -= child.rect.size[axis]
 		}
 	}
@@ -439,12 +447,12 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 		offset_value := _get_override_transform_value(child, axis)
 		offset_value_other_axis := _get_override_transform_value(child, other_axis)
 
-		if .No_Positioning not_in child.override[axis].flags {
+		if .No_Positioning not_in child.override.flags[axis] {
 			child.rect.position[axis] = increment[axis]
 			increment[axis] += child.rect.size[axis] + layout.child_gap + offset_value
 		}
 
-		if .No_Positioning not_in child.override[other_axis].flags {
+		if .No_Positioning not_in child.override.flags[other_axis] {
 			switch layout.alignment[other_axis] {
 			case .Negative:
 				child.rect.position[other_axis] = increment[other_axis]
@@ -461,7 +469,7 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 }
 
 _get_override_transform_value :: proc(widget: ^Widget, axis: Axis) -> (offset_value: f32) {
-	switch kind in widget.override[axis].offset {
+	switch kind in widget.override.offset[axis] {
 	case Percent_Self:
 		offset_value = widget.rect.size[axis] * kind.value
 	case Percent:

@@ -83,6 +83,8 @@ demo_rl :: proc() {
 		build_ui(&ctx, tick, aaloo, &state, &buffer, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight()))
 		cu.end_ui(&ctx)
 
+		fmt.println(ctx.mouse.hovered, ctx.mouse.active)
+
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.BLANK)
 		backend_rl.render(ctx)

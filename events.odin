@@ -156,6 +156,13 @@ Widget_Key_Event :: enum u8 {
 	Long_Down,
 }
 
+Event_Flag :: enum u8 {
+	Pointer_Passthrough,
+	Lock_Active,
+}
+
+Event_Flags :: bit_set[Event_Flag]
+
 Mouse_Context :: struct {
 	last_click:           [Mouse_Button]time.Time,
 	down_start:           [Mouse_Button]time.Time,
@@ -168,6 +175,10 @@ Mouse_Context :: struct {
 	delta:                Vec2f32,
 	scroll_v:             Vec2f32,
 	scroll:               f32,
+	hovered:              u64,
+	active:               u64,
+	hover_is_locker:      bool,
+	active_is_locked:     bool,
 }
 
 Keyboard_Context :: struct {
@@ -182,18 +193,30 @@ Keyboard_Context :: struct {
 
 _resolve_events :: proc(ctx: ^Core_Context) {
 	ctx.mouse.events = {}
+
 	for mouse_events, mouse_button in ctx.mouse.mapped_events {
 		for mouse_event in mouse_events {
 			switch mouse_event {
 			case .Pressed:
 				_handle_mouse_pressed(ctx, mouse_button, mouse_event)
+				if !ctx.mouse.active_is_locked {
+					ctx.mouse.active = ctx.mouse.hovered
+					ctx.mouse.active_is_locked = ctx.mouse.hover_is_locker
+				}
 			case .Down:
 				_handle_mouse_down(ctx, mouse_button, mouse_event)
+				if !ctx.mouse.active_is_locked {
+					ctx.mouse.active = ctx.mouse.hovered
+					ctx.mouse.active_is_locked = ctx.mouse.hover_is_locker
+				}
 			case .Released:
 				_handle_mouse_released(ctx, mouse_button, mouse_event)
+				ctx.mouse.active_is_locked = false
+				ctx.mouse.active = 0
 			}
 		}
 	}
+
 	for keyboard_events, keyboard_key in ctx.keyboard.mapped_events {
 		for keyboard_event in keyboard_events {
 			switch keyboard_event {

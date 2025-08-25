@@ -1,7 +1,9 @@
 package core_ui
 
-override :: proc(flags: [Axis]Override_Flags, offset: [Axis]Override_Transform, expand: [Axis]Override_Transform) -> [Axis]Override {
-	return {.X = {flags = flags[.X], offset = offset[.X], expand = expand[.X]}, .Y = {flags = flags[.Y], offset = offset[.Y], expand = expand[.Y]}}
+import "core:math/linalg"
+
+override :: proc(flags: [Axis]Override_Flags, offset: [Axis]Override_Transform, expand: [Axis]Override_Transform) -> Override {
+	return {flags = flags, offset = offset, expand = expand}
 }
 
 flags :: proc(x: Override_Flags = {}, y: Override_Flags = {}) -> [Axis]Override_Flags {
@@ -82,4 +84,24 @@ axis_vec2f32 :: proc "contextless" (x: Vec2f32 = 0, y: Vec2f32 = 0) -> [Axis]Vec
 
 vec4f32_to_axis_vec2f32 :: proc "contextless" (padding: Vec4f32) -> [Axis]Vec2f32 {
 	return {.X = {padding[3], padding[1]}, .Y = {padding[0], padding[2]}}
+}
+
+_is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style) -> bool {
+
+	border_radius := border_style.radius.zywx
+
+	half_size := rect.size / 2
+	rel_pos := point - (rect.position + half_size)
+
+	border_radius.xy = rel_pos.x > 0 ? border_radius.xy : border_radius.zw
+	border_radius.x = rel_pos.y > 0 ? border_radius.x : border_radius.y
+
+	p := [2]f32{abs(rel_pos.x), abs(rel_pos.y)} - half_size + border_radius.x
+
+	dist := linalg.length(linalg.max(p, 0.0)) + min(max(p.x, p.y), 0.0) - border_radius.x
+
+	if dist < 0 {
+		return true
+	}
+	return false
 }

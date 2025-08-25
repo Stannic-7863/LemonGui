@@ -65,11 +65,12 @@ Widget :: struct {
 	total_children, z_index:         int,
 	id:                              u64,
 	kind:                            Widget_Kind,
-	override:                        [Axis]Override,
+	override:                        Override,
 	style:                           Rect_Style,
 	rect:                            Rect,
 	resolved_rect:                   Rect,
 	key:                             Hash,
+	event_flags:                     Event_Flags,
 }
 
 Core_Context :: struct {
@@ -101,17 +102,27 @@ deinit_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.widgets)
 }
 
-create_widget :: proc(ctx: ^Core_Context, id: string, kind: Widget_Kind = {}, override: [Axis]Override = {}, style: Rect_Style = {}) -> ^Widget {
-
+create_widget :: proc(
+	ctx: ^Core_Context,
+	id: string,
+	kind: Widget_Kind = {},
+	override: Override = {},
+	event_flags: Event_Flags = {},
+	style: Rect_Style = {},
+) -> ^Widget {
 	widget := _get_new_widget(ctx)
 
 	widget.kind = kind
 	widget.style = style
 	widget.override = override
+	widget.event_flags = event_flags
 	widget.key.string_id = id
-	_add_widget_to_tree(ctx, widget)
+	widget.parent = ctx.active_parent
+
+	_add_widget_to_tree(widget)
 	_generate_widget_hash(widget)
 	_read_persistant_data(ctx, widget)
+
 	return widget
 }
 
@@ -122,8 +133,7 @@ _get_new_widget :: proc(ctx: ^Core_Context) -> ^Widget {
 	return widget
 }
 
-_add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	widget.parent = ctx.active_parent
+_add_widget_to_tree :: proc(widget: ^Widget) {
 	if widget.parent != nil {
 		widget.parent.total_children += 1
 		if widget.parent.first == nil {
@@ -205,6 +215,9 @@ end_ui :: proc(ctx: ^Core_Context) {
 
 	clear(&ctx.persistant_data)
 	for n in ctx.pre {
+		_resolve_events(ctx)
 		_write_persistant_data(ctx, n)
 	}
+
+	ctx.mouse.mapped_events = {}
 }
