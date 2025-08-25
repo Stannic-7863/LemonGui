@@ -45,12 +45,11 @@ demo_rl :: proc() {
 	edit.init(&state, context.allocator, context.allocator)
 	edit.setup_once(&state, &buffer)
 
-	ctx := cu.init_core_context(256)
-	defer cu.deinit_core_context(&ctx)
+	ctx := cu.init_context(250)
+	defer cu.deinit_context(&ctx)
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
-	ctx.text_measure_proc = backend_rl.measure_text
-	ctx.error_handler_proc = error_handler
+	ctx.measure_text_proc = backend_rl.measure_text
 
 	buttons_event_log: [dynamic]string
 
@@ -61,37 +60,9 @@ demo_rl :: proc() {
 		letter_spacing = 1,
 	}
 
-	cu.create_tag(
-		&ctx,
-		"border",
-		cu.Tag_Style{border_color = [4]cu.Color{BORDER_COLOR, BORDER_COLOR, BORDER_COLOR, BORDER_COLOR}, border_thickness = 1},
-	)
-	cu.create_tag(
-		&ctx,
-		"border toggle on",
-		cu.Tag_Style{border_color = [4]cu.Color{SUCCESS_COLOR, BORDER_COLOR, BORDER_COLOR, BORDER_COLOR}, border_thickness = 1},
-	)
-	cu.create_tag(
-		&ctx,
-		"border toggle off",
-		cu.Tag_Style{border_color = [4]cu.Color{ERROR_COLOR, BORDER_COLOR, BORDER_COLOR, BORDER_COLOR}, border_thickness = 1},
-	)
-
-	cu.create_tag(&ctx, "text big primary", {font_color = TEXT_PRIMARY_COLOR, font = &font, font_size = 20, letter_spacing = 1})
-	cu.create_tag(&ctx, "text small primary", {font_color = TEXT_PRIMARY_COLOR, font = &font, font_size = 16, letter_spacing = 1})
-	cu.create_tag(&ctx, "text big secondary", {font_color = TEXT_SECONDARY_COLOR, font = &font, font_size = 20, letter_spacing = 1})
-	cu.create_tag(&ctx, "text small secondary", {font_color = TEXT_SECONDARY_COLOR, font = &font, font_size = 16, letter_spacing = 1})
-	cu.create_tag(&ctx, "text big disabled", {font_color = TEXT_DISABLED_COLOR, font = &font, font_size = 20, letter_spacing = 1})
-	cu.create_tag(&ctx, "text small disabled", {font_color = TEXT_DISABLED_COLOR, font = &font, font_size = 16, letter_spacing = 1})
-	cu.create_tag(&ctx, "pad small", {padding = cu.padding(8)})
-	cu.create_tag(&ctx, "pad big", {padding = cu.padding(16)})
-
 	for !rl.WindowShouldClose() {
 		defer free_all(context.temp_allocator)
 		defer clear(&buttons_event_log)
-		ctx.window_width = cast(f32)rl.GetScreenWidth()
-		ctx.window_height = cast(f32)rl.GetScreenHeight()
-		ctx.delta_time = rl.GetFrameTime()
 		ctx.mouse.position = rl.GetMousePosition()
 		ctx.mouse.scroll = rl.GetMouseWheelMove()
 		ctx.mouse.scroll_v = rl.GetMouseWheelMoveV()
@@ -109,7 +80,7 @@ demo_rl :: proc() {
 		update_edit_state(&state)
 
 		cu.begin_ui(&ctx)
-		build_ui(&ctx, tick, aaloo, &state, &buffer)
+		build_ui(&ctx, tick, aaloo, &state, &buffer, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight()))
 		cu.end_ui(&ctx)
 
 		rl.BeginDrawing()
@@ -117,81 +88,4 @@ demo_rl :: proc() {
 		backend_rl.render(ctx)
 		rl.EndDrawing()
 	}
-}
-
-demo_nanovg :: proc() {
-
-	window := init_window_glfw()
-	defer close_window_glfw(window)
-
-	nvg_ctx := nvg_gl.Create({.ANTI_ALIAS})
-	defer nvg_gl.Destroy(nvg_ctx)
-
-	nvg.CreateFont(nvg_ctx, "default", "./assets/OpenSans-Regular.ttf")
-	nvg.FontBlur(nvg_ctx, 5)
-
-	aaloo_nvg := nvg.CreateImagePath(nvg_ctx, "./assets/DA TRULY BIG AALOO.jpg", {})
-	tick_nvg := nvg.CreateImagePath(nvg_ctx, "./assets/tick.png", {})
-
-	a_w, a_h := nvg.ImageSize(nvg_ctx, aaloo_nvg)
-	t_w, t_h := nvg.ImageSize(nvg_ctx, tick_nvg)
-
-	aaloo := Image {
-		data = &aaloo_nvg,
-		w    = cast(f32)a_w,
-		h    = cast(f32)a_h,
-	}
-
-	tick := Image {
-		data = &tick_nvg,
-		w    = cast(f32)t_w,
-		h    = cast(f32)t_h,
-	}
-
-	buffer := strings.Builder{}
-	state := edit.State{}
-	edit.init(&state, context.allocator, context.allocator)
-	edit.setup_once(&state, &buffer)
-
-	ctx := cu.init_core_context(256)
-	defer cu.deinit_core_context(&ctx)
-	ctx.mouse.double_click_timeout = time.Millisecond * 300
-	ctx.mouse.long_down_timeout = time.Millisecond * 1000
-	ctx.text_measure_proc = backend_nvg.measure_text
-	ctx.error_handler_proc = error_handler
-
-	buttons_event_log: [dynamic]string
-
-	text_style_20 := cu.Text_Style {
-		font           = nvg_ctx,
-		color          = PRIMARY_COLOR,
-		font_size      = 20,
-		letter_spacing = 1,
-	}
-
-	for !glfw.WindowShouldClose(window) {
-		defer free_all(context.temp_allocator)
-		defer clear(&buttons_event_log)
-		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
-		gl.ClearColor(0.1, 0.1, 0.1, 1)
-
-		w, h := glfw.GetWindowSize(window)
-		ctx.window_width = auto_cast w
-		ctx.window_height = auto_cast h
-
-		cu.begin_ui(&ctx)
-		build_ui(&ctx, tick, aaloo, &state, &buffer)
-		cu.end_ui(&ctx)
-
-		nvg.BeginFrame(nvg_ctx, ctx.window_width, ctx.window_height, 1)
-		backend_nvg.render(nvg_ctx, &ctx)
-		nvg.EndFrame(nvg_ctx)
-
-		glfw.PollEvents()
-		glfw.SwapBuffers(window)
-	}
-}
-
-error_handler :: proc(error: cu.Core_Error, message: string, args: ..any) {
-	fmt.printfln("---\nError : %v\nMessage : %s", error, fmt.tprintf(message, ..args))
 }

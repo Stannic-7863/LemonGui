@@ -1,6 +1,6 @@
-package ui_core
+package core_ui
 
-import "core:math/linalg"
+import "core:relative"
 import "core:time"
 
 Mouse_Button :: enum u8 {
@@ -58,8 +58,8 @@ Keyboard_Key :: enum u8 {
 	F10,
 	F11,
 	F12,
-	Left_Bracket, // [ 
-	Right_Bracket, // ]
+	Left_Bracket,
+	Right_Bracket,
 	Comma,
 	Period,
 	Minus,
@@ -187,16 +187,13 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 			switch mouse_event {
 			case .Pressed:
 				_handle_mouse_pressed(ctx, mouse_button, mouse_event)
-				ctx.active_widget_id = ctx.hot_widget_id
 			case .Down:
 				_handle_mouse_down(ctx, mouse_button, mouse_event)
 			case .Released:
 				_handle_mouse_released(ctx, mouse_button, mouse_event)
-				ctx.active_widget_id = 0
 			}
 		}
 	}
-
 	for keyboard_events, keyboard_key in ctx.keyboard.mapped_events {
 		for keyboard_event in keyboard_events {
 			switch keyboard_event {
@@ -226,7 +223,6 @@ _handle_mouse_down :: proc(ctx: ^Core_Context, button: Mouse_Button, event: Key_
 
 _handle_mouse_released :: proc(ctx: ^Core_Context, button: Mouse_Button, event: Key_Event) {
 	ctx.mouse.events[button] += {.Clicked}
-	ctx.active_widget_id = 0
 	if time.since(ctx.mouse.last_click[button]) < ctx.mouse.double_click_timeout {
 		ctx.mouse.events[button] += {.Double_Clicked}
 	} else {

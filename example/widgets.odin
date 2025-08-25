@@ -15,15 +15,18 @@ Image :: struct {
 	data: rawptr,
 }
 
-build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, state: ^edit.State, buffer: ^strings.Builder) {
+build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, state: ^edit.State, buffer: ^strings.Builder, width, height: f32) {
 	root := cu.create_widget(
 		ctx,
 		"Root",
-		cu.layout(cu.sizing(cu.fixed(ctx.window_width), cu.fixed(ctx.window_height))),
-		style = {padding = cu.padding(32), color = BACKGROUND_COLOR},
+		cu.layout(cu.sizing(cu.fixed(width), cu.fixed(height)), {}, 16),
+		style = {padding = cu.axis_vec2f32(32, 32), color = BACKGROUND_COLOR},
 	)
 
 	cu.push_parent(ctx, root)
+	cu.create_widget(ctx, "child 1", cu.layout(cu.sizing(cu.grow(), cu.grow())), {}, cu.style(SURFACE_COLOR))
+	cu.create_widget(ctx, "child 2", cu.layout(cu.sizing(cu.grow(), cu.grow())), {}, cu.style(SURFACE_COLOR))
+	cu.create_widget(ctx, "child 3", cu.layout(cu.sizing(cu.grow(), cu.grow())), {}, cu.style(SURFACE_COLOR))
 	cu.pop_parent(ctx)
 }
 

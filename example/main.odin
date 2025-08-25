@@ -33,8 +33,7 @@ main :: proc() {
 	} else {
 		for arg in runtime.args__ {
 			if arg == "nvg" {
-				demo_nanovg()
-				break
+				unimplemented("Nah")
 			}
 			if arg == "rl" {
 				demo_rl()
