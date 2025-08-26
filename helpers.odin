@@ -2,6 +2,22 @@ package core_ui
 
 import "core:math/linalg"
 
+clip :: proc(x_kind: Clip_Kind, x_value: f32, x_scale: f32, y_kind: Clip_Kind, y_value: f32, y_scale: f32) -> Clip {
+	return Clip{value = {.X = x_value, .Y = y_value}, kind = {.X = x_kind, .Y = y_kind}, scale = {.X = x_scale, .Y = y_scale}}
+}
+
+clip_none :: proc() -> (Clip_Kind, f32, f32) {
+	return .None, 0, 0
+}
+
+clip_custom :: proc(value: f32, scale: f32) -> (Clip_Kind, f32, f32) {
+	return .Custom, value, scale
+}
+
+clip_auto :: proc(scale: f32) -> (Clip_Kind, f32, f32) {
+	return .Auto, 0, scale
+}
+
 override :: proc(flags: [Axis]Override_Flags, offset: [Axis]Override_Transform, expand: [Axis]Override_Transform) -> Override {
 	return {flags = flags, offset = offset, expand = expand}
 }
@@ -32,6 +48,10 @@ sizing :: proc(x: Sizing = Fit{0, max(f32)}, y: Sizing = Fit{0, max(f32)}) -> [A
 
 alignment :: proc(x: Alignment = .Negative, y: Alignment = .Negative) -> [Axis]Alignment {
 	return {.X = x, .Y = y}
+}
+
+ratio :: proc "contextless" (value: f32) -> Sizing {
+	return Ratio{value = value}
 }
 
 fit :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Sizing {
@@ -84,6 +104,39 @@ axis_vec2f32 :: proc "contextless" (x: Vec2f32 = 0, y: Vec2f32 = 0) -> [Axis]Vec
 
 vec4f32_to_axis_vec2f32 :: proc "contextless" (padding: Vec4f32) -> [Axis]Vec2f32 {
 	return {.X = {padding[3], padding[1]}, .Y = {padding[0], padding[2]}}
+}
+
+// EVENTS
+
+is_mouse_pressed :: proc(ctx: ^Core_Context, button: Mouse_Button) -> bool {
+	return .Pressed in ctx.mouse.mapped_events[button]
+}
+
+is_mouse_down :: proc(ctx: ^Core_Context, button: Mouse_Button) -> bool {
+	return .Down in ctx.mouse.mapped_events[button]
+}
+
+is_mouse_released :: proc(ctx: ^Core_Context, button: Mouse_Button) -> bool {
+	return .Released in ctx.mouse.mapped_events[button]
+}
+
+is_widget_hovered :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
+	return widget.key.hash == ctx.mouse.hovered
+}
+
+is_widget_active :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
+	return widget.key.hash == ctx.mouse.active
+}
+
+get_widget_mouse_events_all :: proc(ctx: ^Core_Context, widget: ^Widget) -> [Mouse_Button]bit_set[Widget_Key_Event] {
+	if is_widget_active(ctx, widget) {
+		return ctx.mouse.events
+	}
+	return {}
+}
+
+get_widget_mouse_events :: proc(ctx: ^Core_Context, widget: ^Widget, button: Mouse_Button) -> bit_set[Widget_Key_Event] {
+	return get_widget_mouse_events_all(ctx, widget)[button]
 }
 
 _is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style) -> bool {

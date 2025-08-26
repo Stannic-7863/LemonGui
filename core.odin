@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:fmt"
 import "core:hash"
 
 Vec2f32 :: [2]f32
@@ -60,13 +61,28 @@ Hash :: struct {
 	string_id:         string,
 }
 
+Clip :: struct {
+	kind:  [Axis]Clip_Kind,
+	value: [Axis]f32,
+	scale: [Axis]f32,
+}
+
+Clip_Kind :: enum u8 {
+	None,
+	Custom,
+	Auto,
+}
+
 Widget :: struct {
 	first, last, prev, next, parent: ^Widget,
 	total_children, z_index:         int,
 	id:                              u64,
 	kind:                            Widget_Kind,
 	override:                        Override,
+	clip:                            Clip,
 	style:                           Rect_Style,
+	image:                           rawptr,
+	custom:                          rawptr,
 	rect:                            Rect,
 	resolved_rect:                   Rect,
 	key:                             Hash,
@@ -74,21 +90,22 @@ Widget :: struct {
 }
 
 Core_Context :: struct {
-	active_parent:     ^Widget,
-	temp, post_r, pre: [dynamic]^Widget,
-	growable:          [dynamic]Growable,
-	widgets:           [dynamic]Widget,
-	text_lines:        [dynamic]string,
-	render_commands:   [dynamic]Render_Command,
-	persistant_data:   map[u64]Persistant_Data,
-	measure_text_proc: proc(text: string, style: Text_Style) -> f32,
-	mouse:             Mouse_Context,
-	keyboard:          Keyboard_Context,
+	active_parent, active_clip: ^Widget,
+	temp, post_r, pre, clips:   [dynamic]^Widget,
+	growable:                   [dynamic]Growable,
+	widgets:                    [dynamic]Widget,
+	text_lines:                 [dynamic]string,
+	render_commands:            [dynamic]Render_Command,
+	persistant_data:            map[u64]Persistant_Data,
+	measure_text_proc:          proc(text: string, style: Text_Style) -> f32,
+	mouse:                      Mouse_Context,
+	keyboard:                   Keyboard_Context,
 }
 
 Persistant_Data :: struct {
 	text_minimum_width: f32,
 	rect:               Rect,
+	auto_clip_value:    [Axis]f32,
 }
 
 init_context :: proc(size: int) -> Core_Context {
@@ -108,12 +125,16 @@ create_widget :: proc(
 	kind: Widget_Kind = {},
 	override: Override = {},
 	event_flags: Event_Flags = {},
+	clip: Clip = {},
+	image: rawptr = nil,
 	style: Rect_Style = {},
 ) -> ^Widget {
 	widget := _get_new_widget(ctx)
 
 	widget.kind = kind
+	widget.clip = clip
 	widget.style = style
+	widget.image = image
 	widget.override = override
 	widget.event_flags = event_flags
 	widget.key.string_id = id
@@ -162,6 +183,12 @@ _read_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 
 	widget.resolved_rect = data.rect
 
+	for axis in Axis {
+		if widget.clip.kind[axis] == .Auto {
+			widget.clip.value[axis] = data.auto_clip_value[axis]
+		}
+	}
+
 	if text, ok := &widget.kind.(Text); ok {
 		text.minimum_width = data.text_minimum_width
 	}
@@ -172,6 +199,7 @@ _write_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	ctx.persistant_data[widget.key.hash] = Persistant_Data {
 		text_minimum_width = text.minimum_width,
 		rect               = widget.rect,
+		auto_clip_value    = widget.clip.value,
 	}
 }
 
@@ -214,10 +242,24 @@ end_ui :: proc(ctx: ^Core_Context) {
 	_positioning_pass(ctx)
 
 	clear(&ctx.persistant_data)
-	for n in ctx.pre {
-		_resolve_events(ctx)
-		_write_persistant_data(ctx, n)
+
+	ctx.mouse.hovered = 0
+	if !ctx.mouse.active_is_locked {
+		ctx.mouse.active = 0
 	}
 
+	for n in ctx.pre {
+		_write_persistant_data(ctx, n)
+		if _is_point_in_rect(n.rect, ctx.mouse.position, n.style.border) && .Pointer_Passthrough not_in n.event_flags {
+			ctx.mouse.hovered = n.key.hash
+			ctx.mouse.hover_is_locker = .Lock_Active in n.event_flags
+		}
+	}
+
+
+	ctx.mouse.events = {}
+	ctx.keyboard.events = {}
+	_resolve_events(ctx)
 	ctx.mouse.mapped_events = {}
+	ctx.keyboard.mapped_events = {}
 }

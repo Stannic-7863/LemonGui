@@ -27,7 +27,6 @@ render :: proc(ctx: ui.Core_Context) {
 			rl.EndScissorMode()
 		case ui.Command_Clip_Start:
 			rl.BeginScissorMode(cast(i32)command.rect.position.x, cast(i32)command.rect.position.y, cast(i32)command.rect.size.x, cast(i32)command.rect.size.y)
-		case ui.Command_Custom:
 		case ui.Command_Border:
 			{
 				pos := command.rect.position
@@ -52,8 +51,9 @@ render :: proc(ctx: ui.Core_Context) {
 				}
 			}
 		case ui.Command_Image:
-		// image := cast(^rl.Texture)command_kind.image_data
-		// rl.DrawTextureEx(image^, command_kind.position, 0, command_kind.size.x / cast(f32)image.width, cast(rl.Color)command_kind.color)
+			image := cast(^rl.Texture)command_kind.data
+			rl.DrawTextureEx(image^, command.rect.position, 0, command.rect.size.x / cast(f32)image.width, cast(rl.Color)rl.WHITE)
+		case ui.Command_Custom:
 		}
 	}
 }

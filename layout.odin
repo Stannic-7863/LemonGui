@@ -1,6 +1,8 @@
 package core_ui
 
 import "base:intrinsics"
+import "core:fmt"
+import "core:sort"
 import "core:unicode/utf8"
 
 Axis :: enum {
@@ -20,12 +22,14 @@ Fit :: distinct Min_Max
 Grow :: distinct Min_Max
 Fixed :: distinct Value
 Percent :: distinct Value
+Ratio :: distinct Value
 
 Sizing :: union #no_nil {
 	Fit,
 	Grow,
 	Percent,
 	Fixed,
+	Ratio,
 }
 
 Alignment :: enum u8 {
@@ -106,15 +110,11 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	for n in ctx.pre {
 		layout, is_layout := _get_layout(n)
 		if is_layout {
-			_position_layout_childs(n, layout)
+			_position_layout_childs(ctx, n, layout)
 		}
 		_emit_render_commands(ctx, n, &z_index_offset)
-
-		if _is_point_in_rect(n.rect, ctx.mouse.position, n.style.border) && .Pointer_Passthrough not_in n.event_flags {
-			ctx.mouse.hovered = n.key.hash
-			ctx.mouse.hover_is_locker = .Lock_Active in n.event_flags
-		}
 	}
+	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
 }
 
 _resolve_fit_sizing :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) {
@@ -136,6 +136,8 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) {
 			widget_kind.accumulating_min[axis] += _get_axis_padding(axis, widget.style.padding)
 		case Fixed:
 			widget_kind.accumulating_min[axis] = kind.value
+		case Ratio:
+			widget_kind.accumulating_min[axis] = kind.value * widget.resolved_rect.size[_get_other_axis(axis)]
 		}
 		widget.rect.size[axis] = max(widget_kind.accumulating_min[axis], widget.rect.size[axis])
 	case Text:
@@ -412,7 +414,7 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, measured_words: ^[dy
 	}
 }
 
-_position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
+_position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Layout) {
 	total_size: f32
 	axis := layout.direction
 	other_axis := _get_other_axis(axis)
@@ -442,6 +444,9 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 		increment[other_axis] = widget.rect.position[other_axis] + widget.rect.size[other_axis] / 2
 	}
 
+	clip_on_axis := _get_clip_value(ctx, widget, axis)
+	clip_on_other_axis := _get_clip_value(ctx, widget, other_axis)
+
 	for child := widget.first; child != nil; child = child.next {
 
 		offset_value := _get_override_transform_value(child, axis)
@@ -463,8 +468,8 @@ _position_layout_childs :: proc(widget: ^Widget, layout: Layout) {
 			}
 		}
 
-		child.rect.position[axis] += offset_value
-		child.rect.position[other_axis] += offset_value_other_axis
+		child.rect.position[axis] += offset_value + clip_on_axis
+		child.rect.position[other_axis] += offset_value_other_axis + clip_on_other_axis
 	}
 }
 
@@ -478,6 +483,21 @@ _get_override_transform_value :: proc(widget: ^Widget, axis: Axis) -> (offset_va
 		offset_value = kind.value
 	}
 	return offset_value
+}
+
+_get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 {
+	switch widget.clip.kind[axis] {
+	case .None:
+		return 0
+	case .Custom:
+		return widget.clip.value[axis] * widget.clip.scale[axis]
+	case .Auto:
+		if ctx.mouse.hovered == widget.key.hash {
+			widget.clip.value[axis] += ctx.mouse.scroll * widget.clip.scale[axis]
+		}
+		return widget.clip.value[axis]
+	}
+	return 0
 }
 
 _get_other_axis :: proc(axis: Axis) -> Axis {

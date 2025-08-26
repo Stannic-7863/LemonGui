@@ -3,17 +3,10 @@ package main
 import cu "../"
 import "core:fmt"
 
-import backend_nvg "backend/nanovg"
 import backend_rl "backend/raylib"
 
-import "core:strings"
-import "core:text/edit"
 import "core:time"
 
-import gl "vendor:OpenGL"
-import glfw "vendor:glfw"
-import nvg "vendor:nanovg"
-import nvg_gl "vendor:nanovg/gl"
 import rl "vendor:raylib"
 
 demo_rl :: proc() {
@@ -40,29 +33,14 @@ demo_rl :: proc() {
 		h    = auto_cast aaloo_rl.height,
 	}
 
-	buffer := strings.Builder{}
-	state := edit.State{}
-	edit.init(&state, context.allocator, context.allocator)
-	edit.setup_once(&state, &buffer)
-
 	ctx := cu.init_context(250)
 	defer cu.deinit_context(&ctx)
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
 	ctx.measure_text_proc = backend_rl.measure_text
 
-	buttons_event_log: [dynamic]string
-
-	text_style_20 := cu.Text_Style {
-		font           = &font,
-		color          = PRIMARY_COLOR,
-		font_size      = 20,
-		letter_spacing = 1,
-	}
-
 	for !rl.WindowShouldClose() {
 		defer free_all(context.temp_allocator)
-		defer clear(&buttons_event_log)
 		ctx.mouse.position = rl.GetMousePosition()
 		ctx.mouse.scroll = rl.GetMouseWheelMove()
 		ctx.mouse.scroll_v = rl.GetMouseWheelMoveV()
@@ -77,10 +55,8 @@ demo_rl :: proc() {
 		if rl.IsMouseButtonReleased(.RIGHT) {ctx.mouse.mapped_events[.Right] += {.Released}}
 		if rl.IsMouseButtonReleased(.MIDDLE) {ctx.mouse.mapped_events[.Middle] += {.Released}}
 
-		update_edit_state(&state)
-
 		cu.begin_ui(&ctx)
-		build_ui(&ctx, tick, aaloo, &state, &buffer, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight()))
+		build_ui(&ctx, tick, aaloo, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight()))
 		cu.end_ui(&ctx)
 
 		fmt.println(ctx.mouse.hovered, ctx.mouse.active)

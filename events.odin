@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:fmt"
 import "core:relative"
 import "core:time"
 
@@ -193,6 +194,7 @@ Keyboard_Context :: struct {
 
 _resolve_events :: proc(ctx: ^Core_Context) {
 	ctx.mouse.events = {}
+	ctx.keyboard.events = {}
 
 	for mouse_events, mouse_button in ctx.mouse.mapped_events {
 		for mouse_event in mouse_events {
@@ -212,7 +214,6 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 			case .Released:
 				_handle_mouse_released(ctx, mouse_button, mouse_event)
 				ctx.mouse.active_is_locked = false
-				ctx.mouse.active = 0
 			}
 		}
 	}
