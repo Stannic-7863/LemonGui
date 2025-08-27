@@ -142,10 +142,14 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) {
 		widget.rect.size[axis] = max(widget_kind.accumulating_min[axis], widget.rect.size[axis])
 	case Text:
 		if axis == .X {
-			widget_kind.maximum_width = ctx.measure_text_proc(widget_kind.text, widget_kind.style) + _get_axis_padding(axis, widget.style.padding)
-			widget.rect.size[axis] = max(min(widget_kind.maximum_width, widget_kind.preferred_min), widget_kind.minimum_width)
+			padding := _get_axis_padding(axis, widget.style.padding)
+			widget_kind.maximum_width = ctx.measure_text_proc(widget_kind.text, widget_kind.style) + padding
+			clamped_min := min(widget_kind.maximum_width, widget_kind.preferred_min)
+			clamped_min = max(widget_kind.minimum_width + padding, clamped_min)
+			widget.rect.size[axis] = clamped_min
+		} else {
+			widget.rect.size[axis] += _get_axis_padding(axis, widget.style.padding)
 		}
-		widget.rect.size[axis] += _get_axis_padding(axis, widget.style.padding)
 	}
 
 	parent := widget.parent
