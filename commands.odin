@@ -38,7 +38,9 @@ Command_Text :: struct {
 
 Command_Image :: struct {
 	data: rawptr,
+	tint: Color,
 }
+
 Command_Custom :: struct {
 	data: rawptr,
 }
@@ -111,7 +113,7 @@ _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 
 _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 	if widget.image != nil {
-		_add_render_command(ctx, widget, Command_Image{data = widget.image}, z_index)
+		_add_render_command(ctx, widget, Command_Image{data = widget.image, tint = widget.style.color}, z_index)
 	}
 }
 
