@@ -160,6 +160,8 @@ Widget_Key_Event :: enum u8 {
 Event_Flag :: enum u8 {
 	Pointer_Passthrough,
 	Lock_Active,
+	Lock_Hover,
+	Focusable,
 }
 
 Event_Flags :: bit_set[Event_Flag]
@@ -178,8 +180,10 @@ Mouse_Context :: struct {
 	scroll:               f32,
 	hovered:              u64,
 	active:               u64,
-	hover_is_locker:      bool,
+	can_lock_active:      bool,
+	can_lock_hover:       bool,
 	active_is_locked:     bool,
+	hover_is_locked:      bool,
 }
 
 Keyboard_Context :: struct {
@@ -189,6 +193,7 @@ Keyboard_Context :: struct {
 	events:               [Keyboard_Key]bit_set[Widget_Key_Event],
 	double_click_timeout: time.Duration,
 	long_down_timeout:    time.Duration,
+	focused:              u64,
 	pressed_char:         []rune,
 }
 
@@ -203,17 +208,24 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 				_handle_mouse_pressed(ctx, mouse_button, mouse_event)
 				if !ctx.mouse.active_is_locked {
 					ctx.mouse.active = ctx.mouse.hovered
-					ctx.mouse.active_is_locked = ctx.mouse.hover_is_locker
+					ctx.mouse.active_is_locked = ctx.mouse.can_lock_active
+				}
+				if !ctx.mouse.hover_is_locked {
+					ctx.mouse.hover_is_locked = ctx.mouse.can_lock_hover
 				}
 			case .Down:
 				_handle_mouse_down(ctx, mouse_button, mouse_event)
 				if !ctx.mouse.active_is_locked {
 					ctx.mouse.active = ctx.mouse.hovered
-					ctx.mouse.active_is_locked = ctx.mouse.hover_is_locker
+					ctx.mouse.active_is_locked = ctx.mouse.can_lock_active
+				}
+				if !ctx.mouse.hover_is_locked {
+					ctx.mouse.hover_is_locked = ctx.mouse.can_lock_hover
 				}
 			case .Released:
 				_handle_mouse_released(ctx, mouse_button, mouse_event)
 				ctx.mouse.active_is_locked = false
+				ctx.mouse.hover_is_locked = false
 			}
 		}
 	}

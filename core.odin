@@ -143,7 +143,6 @@ create_widget :: proc(
 	_add_widget_to_tree(widget)
 	_generate_widget_hash(widget)
 	_read_persistant_data(ctx, widget)
-
 	return widget
 }
 
@@ -243,16 +242,19 @@ end_ui :: proc(ctx: ^Core_Context) {
 
 	clear(&ctx.persistant_data)
 
-	ctx.mouse.hovered = 0
+	if !ctx.mouse.can_lock_hover {
+		ctx.mouse.hovered = 0
+	}
 	if !ctx.mouse.active_is_locked {
 		ctx.mouse.active = 0
 	}
 
 	for n in ctx.pre {
 		_write_persistant_data(ctx, n)
-		if _is_point_in_rect(n.rect, ctx.mouse.position, n.style.border) && .Pointer_Passthrough not_in n.event_flags {
+		if _is_point_in_rect(n.rect, ctx.mouse.position, n.style.border) && .Pointer_Passthrough not_in n.event_flags && !ctx.mouse.hover_is_locked {
 			ctx.mouse.hovered = n.key.hash
-			ctx.mouse.hover_is_locker = .Lock_Active in n.event_flags
+			ctx.mouse.can_lock_active = .Lock_Active in n.event_flags
+			ctx.mouse.can_lock_hover = .Lock_Hover in n.event_flags
 		}
 	}
 
