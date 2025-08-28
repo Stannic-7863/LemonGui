@@ -75,7 +75,7 @@ Clip_Kind :: enum u8 {
 
 Widget :: struct {
 	first, last, prev, next, parent: ^Widget,
-	total_children, z_index:         int,
+	total_children:                  int,
 	id:                              u64,
 	kind:                            Widget_Kind,
 	override:                        Override,
@@ -167,7 +167,7 @@ _add_widget_to_tree :: proc(widget: ^Widget) {
 		}
 
 		widget.parent.last = widget
-		widget.z_index = widget.parent.z_index
+		widget.override.z_index += widget.parent.override.z_index
 		widget.key.parent_hash = widget.parent.key.hash
 	}
 }
@@ -208,15 +208,6 @@ push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
 		return true
 	}
 	return false
-}
-
-@(deferred_in = _pop_parent_scoped)
-push_parent_scoped :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
-	return push_parent(ctx, widget)
-}
-
-_pop_parent_scoped :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	pop_parent(ctx)
 }
 
 pop_parent :: proc(ctx: ^Core_Context) {

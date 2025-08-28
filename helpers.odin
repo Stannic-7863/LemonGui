@@ -18,8 +18,8 @@ clip_auto :: proc(scale: f32) -> (Clip_Kind, f32, f32) {
 	return .Auto, 0, scale
 }
 
-override :: proc(flags: [Axis]Override_Flags, offset: [Axis]Override_Transform, expand: [Axis]Override_Transform) -> Override {
-	return {flags = flags, offset = offset, expand = expand}
+override :: proc(flags: [Axis]Override_Flags, offset: [Axis]Override_Transform, expand: [Axis]Override_Transform, z_index: int = 0) -> Override {
+	return {flags = flags, offset = offset, expand = expand, z_index = z_index}
 }
 
 flags :: proc(x: Override_Flags = {}, y: Override_Flags = {}) -> [Axis]Override_Flags {
@@ -54,19 +54,19 @@ ratio :: proc "contextless" (value: f32) -> Sizing {
 	return Ratio{value = value}
 }
 
-fit :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Sizing {
+fit :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Fit {
 	return Fit{min = min, max = max}
 }
 
-grow :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Sizing {
+grow :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Grow {
 	return Grow{min = min, max = max}
 }
 
-percent :: proc "contextless" (value: f32 = 1) -> Sizing {
+percent :: proc "contextless" (value: f32 = 1) -> Percent {
 	return Percent{value = value}
 }
 
-fixed :: proc "contextless" (value: f32) -> Sizing {
+fixed :: proc "contextless" (value: f32) -> Fixed {
 	return Fixed{value = value}
 }
 

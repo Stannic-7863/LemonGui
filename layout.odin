@@ -54,9 +54,10 @@ Override_Flag :: enum u8 {
 Override_Flags :: bit_set[Override_Flag]
 
 Override :: struct {
-	offset: [Axis]Override_Transform,
-	expand: [Axis]Override_Transform,
-	flags:  [Axis]Override_Flags,
+	offset:  [Axis]Override_Transform,
+	expand:  [Axis]Override_Transform,
+	flags:   [Axis]Override_Flags,
+	z_index: int,
 }
 
 Growable :: struct {
@@ -482,7 +483,9 @@ _get_override_transform_value :: proc(widget: ^Widget, axis: Axis) -> (offset_va
 	case Percent_Self:
 		offset_value = widget.rect.size[axis] * kind.value
 	case Percent:
-		offset_value = widget.rect.size[axis] * kind.value
+		if widget.parent != nil {
+			offset_value = widget.parent.resolved_rect.size[axis] * kind.value
+		}
 	case Fixed:
 		offset_value = kind.value
 	}

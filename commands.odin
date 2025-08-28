@@ -126,7 +126,13 @@ _emit_custom_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int)
 _add_render_command :: proc(ctx: ^Core_Context, widget: ^Widget, kind: Render_Command_Kind, z_index: ^int) {
 	append(
 		&ctx.render_commands,
-		Render_Command{kind = kind, z_index = z_index^ + widget.z_index, rect = widget.rect, emitter_id = widget.id, emitter_string_id = widget.key.string_id},
+		Render_Command {
+			kind = kind,
+			z_index = z_index^ + widget.override.z_index,
+			rect = widget.rect,
+			emitter_id = widget.id,
+			emitter_string_id = widget.key.string_id,
+		},
 	)
 	z_index^ += 1
 }
