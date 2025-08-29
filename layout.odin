@@ -518,7 +518,7 @@ _get_axis_padding :: proc(axis: Axis, padding: [Axis]Vec2f32) -> f32 {
 }
 
 _get_child_gap :: proc(widget: ^Widget) -> f32 {
-	return max(0, f32(widget.total_children - 1) * widget.kind.(Layout).child_gap)
+	return max(0, f32(widget.total_children - 1)) * widget.kind.(Layout).child_gap
 }
 
 _get_layout :: proc(widget: ^Widget) -> (Layout, bool) {

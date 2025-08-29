@@ -21,10 +21,10 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	grow_1 := cu.create_widget(
 		ctx,
 		"child 1",
-		cu.layout(cu.sizing(cu.grow(), cu.grow()), child_gap = -18, direction = .Y),
+		cu.layout(cu.sizing(cu.grow(), cu.grow()), child_gap = -24, direction = .Y),
 		{},
 		{.Lock_Active, .Lock_Hover},
-		style = cu.style(SURFACE_COLOR, cu.axis_vec2f32(8)),
+		style = cu.style(SURFACE_COLOR, cu.axis_vec2f32(8, 8)),
 	)
 
 	cu.push_parent(ctx, grow_1)
@@ -35,11 +35,12 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 			i,
 			cu.layout(cu.sizing(cu.grow(), cu.grow())),
 			event_flags = {.Lock_Hover},
-			style = cu.style(ELEVATED_SURFACE_COLOR, border = cu.border(BORDER_COLOR, {}, cu.axis_vec2f32(4, 4))),
+			style = cu.style(ELEVATED_SURFACE_COLOR, border = cu.border(BORDER_COLOR, {}, cu.axis_vec2f32(1, 1))),
 		)
 		if cu.is_widget_hovered(ctx, w) {
 			w.style.color = WARNING_COLOR
 			w.override.z_index = 50
+			w.style.border.thickness = cu.axis_vec2f32(1, 1)
 		}
 	}
 
