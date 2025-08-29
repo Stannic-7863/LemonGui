@@ -425,7 +425,9 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 	other_axis := _get_other_axis(axis)
 
 	for child := widget.first; child != nil; child = child.next {
-		total_size += child.rect.size[axis]
+		if .No_Positioning not_in child.override.flags[axis] {
+			total_size += child.rect.size[axis]
+		}
 	}
 	total_size += max(0, layout.child_gap * f32(widget.total_children - 1))
 
@@ -534,14 +536,25 @@ _build_stacks :: proc(ctx: ^Core_Context) {
 
 	for {
 		widget := pop_safe(&ctx.temp) or_break
+
 		append(&ctx.post_r, widget)
+
 		for child_widget := widget.first; child_widget != nil; child_widget = child_widget.next {
 			append(&ctx.temp, child_widget)
 		}
 	}
 
-	for &widget in ctx.widgets {
-		append(&ctx.pre, &widget)
+	clear(&ctx.temp)
+	append(&ctx.temp, &ctx.widgets[0])
+
+	for {
+		widget := pop_safe(&ctx.temp) or_break
+
+		append(&ctx.pre, widget)
+
+		for child_widget := widget.last; child_widget != nil; child_widget = child_widget.prev {
+			append(&ctx.temp, child_widget)
+		}
 	}
 
 	clear(&ctx.temp)
