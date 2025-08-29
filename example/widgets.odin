@@ -18,28 +18,30 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	)
 
 	cu.push_parent(ctx, root)
-	grow_1 := cu.create_widget(ctx, "child 1", cu.layout(cu.sizing(cu.grow(), cu.grow())), {}, {.Lock_Active, .Lock_Hover}, style = cu.style(SURFACE_COLOR))
+	grow_1 := cu.create_widget(
+		ctx,
+		"child 1",
+		cu.layout(cu.sizing(cu.grow(), cu.grow()), child_gap = -18, direction = .Y),
+		{},
+		{.Lock_Active, .Lock_Hover},
+		style = cu.style(SURFACE_COLOR, cu.axis_vec2f32(8)),
+	)
 
 	cu.push_parent(ctx, grow_1)
 
-	grow_1_child := cu.create_widget(
-		ctx,
-		"e",
-		cu.layout(cu.sizing(cu.grow(), cu.fixed(50)), cu.alignment(.Center, .Center)),
-		style = cu.style(ELEVATED_SURFACE_COLOR),
-	)
-
-	cu.push_parent(ctx, grow_1_child)
-
-	cu.create_widget(
-		ctx,
-		"f",
-		cu.layout(cu.sizing(cu.fixed(25), cu.fixed(25))),
-		override = cu.override(cu.flags(), cu.offset(cu.percent(0.5)), cu.expand()),
-		style = cu.style(WARNING_COLOR),
-	)
-
-	cu.pop_parent(ctx)
+	for i in 0 ..< 5 {
+		w := cu.create_widget(
+			ctx,
+			i,
+			cu.layout(cu.sizing(cu.grow(), cu.grow())),
+			event_flags = {.Lock_Hover},
+			style = cu.style(ELEVATED_SURFACE_COLOR, border = cu.border(BORDER_COLOR, {}, cu.axis_vec2f32(4, 4))),
+		)
+		if cu.is_widget_hovered(ctx, w) {
+			w.style.color = WARNING_COLOR
+			w.override.z_index = 50
+		}
+	}
 
 	cu.pop_parent(ctx)
 
@@ -61,7 +63,7 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	thumb_rail := cu.create_widget(
 		ctx,
 		"grow fixed",
-		cu.layout(cu.sizing(cu.grow(), cu.fixed(8)), cu.alignment(.Center, .Center)),
+		cu.layout(cu.sizing(cu.grow(), cu.fixed(8)), cu.alignment(.Center, .Center), direction = .Y),
 		style = cu.style(ELEVATED_SURFACE_COLOR),
 	)
 
@@ -87,8 +89,8 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 		"slider value label",
 		cu.text(fmt.tprintf("%v", value), cu.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, font)),
 		cu.override(
-			cu.flags({.No_Size_Propagation, .No_Positioning}, {.No_Size_Propagation, .No_Positioning}),
-			cu.offset(cu.fixed(thumb.resolved_rect.position.x), cu.fixed(thumb.resolved_rect.position.y + thumb.resolved_rect.size.x + 8)),
+			cu.flags({.No_Size_Propagation}, {.No_Size_Propagation, .No_Positioning}),
+			cu.offset(cu.percent(thumb_along), cu.fixed(thumb.resolved_rect.position.y + thumb.resolved_rect.size.x + 8)),
 			cu.expand(),
 		),
 	)
@@ -103,6 +105,7 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	}
 
 	cu.pop_parent(ctx)
+
 	cu.pop_parent(ctx)
 
 	cu.pop_parent(ctx)

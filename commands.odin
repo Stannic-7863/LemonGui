@@ -16,7 +16,7 @@ Render_Command :: struct {
 	rect:              Rect,
 	z_index:           int,
 	emitter_id:        u64,
-	emitter_string_id: string,
+	emitter_string_id: Keying_Id,
 }
 
 Command_Rect :: struct {
@@ -131,7 +131,7 @@ _add_render_command :: proc(ctx: ^Core_Context, widget: ^Widget, kind: Render_Co
 			z_index = z_index^ + widget.override.z_index,
 			rect = widget.rect,
 			emitter_id = widget.id,
-			emitter_string_id = widget.key.string_id,
+			emitter_string_id = widget.key.keying_id,
 		},
 	)
 	z_index^ += 1

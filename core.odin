@@ -56,9 +56,14 @@ Widget_Kind :: union {
 	Text,
 }
 
+Keying_Id :: union {
+	string,
+	int,
+}
+
 Hash :: struct {
 	hash, parent_hash: u64,
-	string_id:         string,
+	keying_id:         Keying_Id,
 }
 
 Clip :: struct {
@@ -121,7 +126,7 @@ deinit_context :: proc(ctx: ^Core_Context) {
 
 create_widget :: proc(
 	ctx: ^Core_Context,
-	id: string,
+	id: Keying_Id,
 	kind: Widget_Kind = {},
 	override: Override = {},
 	event_flags: Event_Flags = {},
@@ -137,7 +142,7 @@ create_widget :: proc(
 	widget.image = image
 	widget.override = override
 	widget.event_flags = event_flags
-	widget.key.string_id = id
+	widget.key.keying_id = id
 	widget.parent = ctx.active_parent
 
 	_add_widget_to_tree(widget)
@@ -173,7 +178,13 @@ _add_widget_to_tree :: proc(widget: ^Widget) {
 }
 
 _generate_widget_hash :: proc(widget: ^Widget) {
-	widget.key.hash = hash.fnv64(transmute([]u8)widget.key.string_id)
+	if key, ok := widget.key.keying_id.(string); ok {
+		widget.key.hash = hash.fnv64(transmute([]u8)key)
+	}
+	if key, ok := widget.key.keying_id.(int); ok {
+		e := (transmute([size_of(int)]u8)key)
+		widget.key.hash = hash.fnv64(e[:])
+	}
 	widget.key.hash ~= (widget.key.hash >> 2 ~ widget.key.parent_hash << 6)
 }
 
