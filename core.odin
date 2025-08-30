@@ -1,6 +1,5 @@
 package core_ui
 
-import "core:fmt"
 import "core:hash"
 
 Vec2f32 :: [2]f32
@@ -61,7 +60,7 @@ Keying_Id :: union {
 	int,
 }
 
-Hash :: struct {
+Key :: struct {
 	hash, parent_hash: u64,
 	keying_id:         Keying_Id,
 }
@@ -78,19 +77,23 @@ Clip_Kind :: enum u8 {
 	Auto,
 }
 
+Resolved :: struct {
+	size, content_size, position: Vec2f32,
+}
+
 Widget :: struct {
-	first, last, prev, next, parent: ^Widget,
-	total_children:                  int,
-	id:                              u64,
+	style:                           Rect_Style,
 	kind:                            Widget_Kind,
 	override:                        Override,
+	key:                             Key,
+	resolved:                        Resolved,
 	clip:                            Clip,
-	style:                           Rect_Style,
+	rect:                            Rect,
+	id:                              u64,
+	total_children:                  int,
 	image:                           rawptr,
 	custom:                          rawptr,
-	rect:                            Rect,
-	resolved_rect:                   Rect,
-	key:                             Hash,
+	first, last, prev, next, parent: ^Widget,
 	event_flags:                     Event_Flags,
 }
 
@@ -108,9 +111,10 @@ Core_Context :: struct {
 }
 
 Persistant_Data :: struct {
-	text_minimum_width: f32,
 	rect:               Rect,
+	content_size:       Vec2f32,
 	auto_clip_value:    [Axis]f32,
+	text_minimum_width: f32,
 }
 
 init_context :: proc(size: int) -> Core_Context {
@@ -191,7 +195,9 @@ _generate_widget_hash :: proc(widget: ^Widget) {
 _read_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	data := ctx.persistant_data[widget.key.hash]
 
-	widget.resolved_rect = data.rect
+	widget.resolved.position = data.rect.position
+	widget.resolved.size = data.rect.size
+	widget.resolved.content_size = data.content_size
 
 	for axis in Axis {
 		if widget.clip.kind[axis] == .Auto {
@@ -210,6 +216,7 @@ _write_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 		text_minimum_width = text.minimum_width,
 		rect               = widget.rect,
 		auto_clip_value    = widget.clip.value,
+		content_size       = widget.resolved.content_size,
 	}
 }
 

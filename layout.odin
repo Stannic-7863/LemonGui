@@ -1,7 +1,6 @@
 package core_ui
 
 import "base:intrinsics"
-import "core:fmt"
 import "core:sort"
 import "core:unicode/utf8"
 
@@ -138,7 +137,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) {
 		case Fixed:
 			widget_kind.accumulating_min[axis] = kind.value
 		case Ratio:
-			widget_kind.accumulating_min[axis] = kind.value * widget.resolved_rect.size[_get_other_axis(axis)]
+			widget_kind.accumulating_min[axis] = kind.value * widget.resolved.size[_get_other_axis(axis)]
 		}
 		widget.rect.size[axis] = max(widget_kind.accumulating_min[axis], widget.rect.size[axis])
 	case Text:
@@ -156,7 +155,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) {
 	parent := widget.parent
 	if parent == nil {return}
 
-	if .No_Size_Propagation not_in widget.override.flags[axis] {
+	if .No_Size_Propagation not_in widget.override.flags[axis] && parent.clip.kind[axis] == .None {
 		parent_kind := &parent.kind.(Layout)
 		if parent_kind.direction == axis {
 			parent_kind.accumulating_min[axis] += widget.rect.size[axis]
@@ -420,16 +419,29 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, measured_words: ^[dy
 }
 
 _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Layout) {
-	total_size: f32
+	total_size: [Axis]f32
 	axis := layout.direction
 	other_axis := _get_other_axis(axis)
 
 	for child := widget.first; child != nil; child = child.next {
+		expand_axis := _get_expand_override_transform_value(child, axis)
+		expand_other_axis := _get_expand_override_transform_value(child, other_axis)
+
+		child.rect.size[axis] += expand_axis
+		child.rect.size[other_axis] += expand_other_axis
+
 		if .No_Positioning not_in child.override.flags[axis] {
-			total_size += child.rect.size[axis]
+			total_size[axis] += child.rect.size[axis]
+		}
+		if .No_Positioning not_in child.override.flags[other_axis] {
+			total_size[other_axis] = max(total_size[other_axis], child.rect.size[other_axis])
 		}
 	}
-	total_size += max(0, layout.child_gap * f32(widget.total_children - 1))
+
+	total_size[axis] += _get_child_gap(widget)
+
+	widget.resolved.content_size[axis] = total_size[axis] + _get_axis_padding(axis, widget.style.padding)
+	widget.resolved.content_size[other_axis] = total_size[other_axis] + _get_axis_padding(other_axis, widget.style.padding)
 
 	increment: Vec2f32
 
@@ -437,9 +449,9 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 	case .Negative:
 		increment[axis] = widget.rect.position[axis] + widget.style.padding[axis][0]
 	case .Positive:
-		increment[axis] = widget.rect.position[axis] + widget.rect.size[axis] - widget.style.padding[axis][1] - total_size
+		increment[axis] = widget.rect.position[axis] + widget.rect.size[axis] - widget.style.padding[axis][1] - total_size[axis]
 	case .Center:
-		increment[axis] = widget.rect.position[axis] + (widget.rect.size[axis] - total_size) / 2
+		increment[axis] = widget.rect.position[axis] + (widget.rect.size[axis] - total_size[axis]) / 2
 	}
 
 	switch layout.alignment[other_axis] {
@@ -451,17 +463,17 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 		increment[other_axis] = widget.rect.position[other_axis] + widget.rect.size[other_axis] / 2
 	}
 
-	clip_on_axis := _get_clip_value(ctx, widget, axis)
-	clip_on_other_axis := _get_clip_value(ctx, widget, other_axis)
+	clip_axis := _get_clip_value(ctx, widget, axis)
+	clip_other_axis := _get_clip_value(ctx, widget, other_axis)
 
 	for child := widget.first; child != nil; child = child.next {
 
-		offset_value := _get_override_transform_value(child, axis)
-		offset_value_other_axis := _get_override_transform_value(child, other_axis)
+		offset_axis := _get_offset_override_transform_value(child, axis)
+		offset_other_axis := _get_offset_override_transform_value(child, other_axis)
 
 		if .No_Positioning not_in child.override.flags[axis] {
 			child.rect.position[axis] = increment[axis]
-			increment[axis] += child.rect.size[axis] + layout.child_gap + offset_value
+			increment[axis] += child.rect.size[axis] + layout.child_gap + offset_axis
 		}
 
 		if .No_Positioning not_in child.override.flags[other_axis] {
@@ -475,24 +487,39 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 			}
 		}
 
-		child.rect.position[axis] += offset_value + clip_on_axis
-		child.rect.position[other_axis] += offset_value_other_axis + clip_on_other_axis
+		child.rect.position[axis] += offset_axis + clip_axis
+		child.rect.position[other_axis] += offset_other_axis + clip_other_axis
 	}
 }
 
-_get_override_transform_value :: proc(widget: ^Widget, axis: Axis) -> (offset_value: f32) {
+_get_offset_override_transform_value :: proc(widget: ^Widget, axis: Axis) -> (offset_value: f32) {
 	switch kind in widget.override.offset[axis] {
 	case Percent_Self:
 		offset_value = widget.rect.size[axis] * kind.value
 	case Percent:
 		if widget.parent != nil {
-			offset_value = widget.parent.resolved_rect.size[axis] * kind.value
+			offset_value = widget.parent.resolved.size[axis] * kind.value
 		}
 	case Fixed:
 		offset_value = kind.value
 	}
 	return offset_value
 }
+
+_get_expand_override_transform_value :: proc(widget: ^Widget, axis: Axis) -> (expand_value: f32) {
+	switch kind in widget.override.expand[axis] {
+	case Percent_Self:
+		expand_value = widget.rect.size[axis] * kind.value
+	case Percent:
+		if widget.parent != nil {
+			expand_value = widget.parent.resolved.size[axis] * kind.value
+		}
+	case Fixed:
+		expand_value = kind.value
+	}
+	return expand_value
+}
+
 
 _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 {
 	switch widget.clip.kind[axis] {

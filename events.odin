@@ -1,7 +1,5 @@
 package core_ui
 
-import "core:fmt"
-import "core:relative"
 import "core:time"
 
 Mouse_Button :: enum u8 {
