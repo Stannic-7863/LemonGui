@@ -21,19 +21,35 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	grow_1 := cu.create_widget(
 		ctx,
 		"child 1",
-		cu.layout(cu.sizing(cu.grow(), cu.grow()), child_gap = -24, direction = .Y),
-		{},
-		{.Lock_Active, .Lock_Hover},
+		cu.layout(cu.sizing(cu.grow(), cu.grow()), child_gap = 8, direction = .Y),
+		event_flags = {.Lock_Active, .Lock_Hover},
+		clip = cu.clip(cu.clip_none(), cu.clip_auto(50)),
 		style = cu.style(SURFACE_COLOR, cu.axis_vec2f32(8, 8)),
 	)
 
 	cu.push_parent(ctx, grow_1)
 
+	bar_size := (grow_1.resolved.size.y / grow_1.resolved.content_size.y) * grow_1.resolved.size.y
+	bar_progress := grow_1.clip.value[.Y] / grow_1.resolved.content_size.y
+	scrool := cu.create_widget(
+		ctx,
+		"scroll",
+		cu.layout(cu.sizing(cu.fixed(10), cu.fixed(bar_size))),
+		cu.override(
+			cu.flags({.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset}, {.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset}),
+			cu.offset(cu.fixed(grow_1.resolved.size.x - 10), cu.percent(-bar_progress)),
+			cu.expand(),
+			10,
+		),
+		event_flags = {.Pointer_Passthrough},
+		style = cu.style(SUCCESS_COLOR),
+	)
+
 	for i in 0 ..< 5 {
 		w := cu.create_widget(
 			ctx,
 			i,
-			cu.layout(cu.sizing(cu.grow(), cu.grow())),
+			cu.layout(cu.sizing(cu.grow(), cu.percent(0.5))),
 			event_flags = {.Lock_Hover},
 			style = cu.style(ELEVATED_SURFACE_COLOR, border = cu.border(BORDER_COLOR, {}, cu.axis_vec2f32(1, 1))),
 		)
@@ -91,15 +107,15 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 		cu.text(fmt.tprintf("%v", value), cu.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, font)),
 		cu.override(
 			cu.flags({.No_Size_Propagation}, {.No_Size_Propagation, .No_Positioning}),
-			cu.offset(cu.percent(thumb_along), cu.fixed(thumb.resolved_rect.position.y + thumb.resolved_rect.size.x + 8)),
+			cu.offset(cu.percent(thumb_along), cu.fixed(thumb.resolved.position.y + thumb.resolved.size.x + 8)),
 			cu.expand(),
 		),
 	)
 
 	if cu.is_widget_active(ctx, thumb) {
 		thumb.style.color = WARNING_COLOR
-		local_position_x := ctx.mouse.position.x - thumb_rail.resolved_rect.position.x
-		local_position_x /= thumb_rail.resolved_rect.size.x
+		local_position_x := ctx.mouse.position.x - thumb_rail.resolved.position.x
+		local_position_x /= thumb_rail.resolved.size.x
 		value = f32(minimum) + f32(maximum - minimum) * local_position_x
 		value = max(minimum, value)
 		value = min(maximum, value)

@@ -47,7 +47,9 @@ Override_Transform :: union {
 
 Override_Flag :: enum u8 {
 	No_Positioning,
+	No_Clip_Offset,
 	No_Size_Propagation,
+	No_Positioning_Relative,
 }
 
 Override_Flags :: bit_set[Override_Flag]
@@ -430,10 +432,12 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 		child.rect.size[axis] += expand_axis
 		child.rect.size[other_axis] += expand_other_axis
 
-		if .No_Positioning not_in child.override.flags[axis] {
+		ignore_flags := Override_Flags{.No_Positioning, .No_Clip_Offset, .No_Positioning_Relative}
+
+		if ignore_flags & child.override.flags[axis] == {} {
 			total_size[axis] += child.rect.size[axis]
 		}
-		if .No_Positioning not_in child.override.flags[other_axis] {
+		if ignore_flags & child.override.flags[other_axis] == {} {
 			total_size[other_axis] = max(total_size[other_axis], child.rect.size[other_axis])
 		}
 	}
@@ -471,12 +475,17 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 		offset_axis := _get_offset_override_transform_value(child, axis)
 		offset_other_axis := _get_offset_override_transform_value(child, other_axis)
 
-		if .No_Positioning not_in child.override.flags[axis] {
+		if .No_Positioning not_in child.override.flags[axis] && .No_Positioning_Relative not_in child.override.flags[axis] {
 			child.rect.position[axis] = increment[axis]
 			increment[axis] += child.rect.size[axis] + layout.child_gap + offset_axis
+		} else {
+			child.rect.position[axis] = 0
+			if .No_Positioning_Relative in child.override.flags[axis] {
+				child.rect.position[axis] = widget.rect.position[axis]
+			}
 		}
 
-		if .No_Positioning not_in child.override.flags[other_axis] {
+		if .No_Positioning not_in child.override.flags[other_axis] && .No_Positioning_Relative not_in child.override.flags[axis] {
 			switch layout.alignment[other_axis] {
 			case .Negative:
 				child.rect.position[other_axis] = increment[other_axis]
@@ -485,10 +494,23 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 			case .Center:
 				child.rect.position[other_axis] = increment[other_axis] - child.rect.size[other_axis] / 2
 			}
+		} else {
+			child.rect.position[other_axis] = 0
+			if .No_Positioning_Relative in child.override.flags[other_axis] {
+				child.rect.position[other_axis] = widget.rect.position[other_axis]
+			}
 		}
 
-		child.rect.position[axis] += offset_axis + clip_axis
-		child.rect.position[other_axis] += offset_other_axis + clip_other_axis
+		child.rect.position[axis] += offset_axis
+		child.rect.position[other_axis] += offset_other_axis
+
+		if .No_Clip_Offset not_in child.override.flags[axis] {
+			child.rect.position[axis] += clip_axis
+		}
+
+		if .No_Clip_Offset not_in child.override.flags[other_axis] {
+			child.rect.position[other_axis] += clip_other_axis
+		}
 	}
 }
 
@@ -520,8 +542,10 @@ _get_expand_override_transform_value :: proc(widget: ^Widget, axis: Axis) -> (ex
 	return expand_value
 }
 
-
 _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 {
+	if widget.rect.size[axis] > widget.resolved.content_size[axis] {
+		return 0
+	}
 	switch widget.clip.kind[axis] {
 	case .None:
 		return 0
@@ -531,6 +555,10 @@ _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 
 		if ctx.mouse.hovered == widget.key.hash {
 			widget.clip.value[axis] += ctx.mouse.scroll * widget.clip.scale[axis]
 		}
+
+		widget.clip.value[axis] = min(0, widget.clip.value[axis])
+		widget.clip.value[axis] = max(widget.clip.value[axis], -(widget.resolved.content_size[axis] - widget.rect.size[axis]))
+
 		return widget.clip.value[axis]
 	}
 	return 0
