@@ -7,8 +7,7 @@ import rl "vendor:raylib"
 render :: proc(ctx: ui.Core_Context) {
 	for command in ctx.render_commands {
 		switch command_kind in command.kind {
-		case ui.Command_Rect:
-			rl.DrawRectangleV(command.rect.position, command.rect.size, color_to_rl(command_kind.color))
+		case ui.Command_Rect: rl.DrawRectangleRounded(transmute(rl.Rectangle)command.rect, command_kind.border_radius.x, 12, color_to_rl(command_kind.color))
 		case ui.Command_Text:
 			line_y := command.rect.position.y
 			font := (cast(^rl.Font)command_kind.style.font)^
@@ -23,32 +22,10 @@ render :: proc(ctx: ui.Core_Context) {
 				)
 				line_y += command_kind.style.line_spacing + command_kind.style.font_size
 			}
-		case ui.Command_Clip_End:
-			rl.EndScissorMode()
-		case ui.Command_Clip_Start:
-			rl.BeginScissorMode(cast(i32)command.rect.position.x, cast(i32)command.rect.position.y, cast(i32)command.rect.size.x, cast(i32)command.rect.size.y)
-		case ui.Command_Border:
-			{
-				pos := command.rect.position
-				size := command.rect.size
-				t := command_kind.style.thickness
-				c := command_kind.style.color
-
-				if t[.Y][0] > 0 { 	// top
-					rl.DrawRectangleRec(rl.Rectangle{pos.x, pos.y, size.x, t[.Y][0]}, color_to_rl(c[0]))
-				}
-
-				if t[.X][1] > 0 { 	// right
-					rl.DrawRectangleRec(rl.Rectangle{pos.x + size.x - t[.X][1], pos.y, t[.X][1], size.y}, color_to_rl(c[1]))
-				}
-
-				if t[.Y][1] > 0 { 	// bottom
-					rl.DrawRectangleRec(rl.Rectangle{pos.x, pos.y + size.y - t[.Y][1], size.x, t[.Y][1]}, color_to_rl(c[2]))
-				}
-
-				if t[.X][0] > 0 { 	// left
-					rl.DrawRectangleRec(rl.Rectangle{pos.x, pos.y, t[.X][0], size.y}, color_to_rl(c[3]))
-				}
+		case ui.Command_Clip_End: rl.EndScissorMode()
+		case ui.Command_Clip_Start: rl.BeginScissorMode(cast(i32)command.rect.position.x, cast(i32)command.rect.position.y, cast(i32)command.rect.size.x, cast(i32)command.rect.size.y)
+		case ui.Command_Border: {
+				rl.DrawRectangleRoundedLines(transmute(rl.Rectangle)command.rect, command_kind.style.radius.x, 12, color_to_rl(command_kind.style.color.x))
 			}
 		case ui.Command_Image:
 			image := cast(^rl.Texture)command_kind.data

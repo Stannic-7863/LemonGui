@@ -202,28 +202,9 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 	for mouse_events, mouse_button in ctx.mouse.mapped_events {
 		for mouse_event in mouse_events {
 			switch mouse_event {
-			case .Pressed:
-				_handle_mouse_pressed(ctx, mouse_button, mouse_event)
-				if !ctx.mouse.active_is_locked {
-					ctx.mouse.active = ctx.mouse.hovered
-					ctx.mouse.active_is_locked = ctx.mouse.can_lock_active
-				}
-				if !ctx.mouse.hover_is_locked {
-					ctx.mouse.hover_is_locked = ctx.mouse.can_lock_hover
-				}
-			case .Down:
-				_handle_mouse_down(ctx, mouse_button, mouse_event)
-				if !ctx.mouse.active_is_locked {
-					ctx.mouse.active = ctx.mouse.hovered
-					ctx.mouse.active_is_locked = ctx.mouse.can_lock_active
-				}
-				if !ctx.mouse.hover_is_locked {
-					ctx.mouse.hover_is_locked = ctx.mouse.can_lock_hover
-				}
-			case .Released:
-				_handle_mouse_released(ctx, mouse_button, mouse_event)
-				ctx.mouse.active_is_locked = false
-				ctx.mouse.hover_is_locked = false
+			case .Pressed: _handle_mouse_pressed(ctx, mouse_button, mouse_event)
+			case .Down: _handle_mouse_down(ctx, mouse_button, mouse_event)
+			case .Released: _handle_mouse_released(ctx, mouse_button, mouse_event)
 			}
 		}
 	}
@@ -231,21 +212,29 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 	for keyboard_events, keyboard_key in ctx.keyboard.mapped_events {
 		for keyboard_event in keyboard_events {
 			switch keyboard_event {
-			case .Pressed:
-				_handle_keyboard_pressed(ctx, keyboard_key, keyboard_event)
-			case .Released:
-				_handle_keyboard_released(ctx, keyboard_key, keyboard_event)
-			case .Down:
-				_handle_keyboard_down(ctx, keyboard_key, keyboard_event)
+			case .Pressed: _handle_keyboard_pressed(ctx, keyboard_key, keyboard_event)
+			case .Released: _handle_keyboard_released(ctx, keyboard_key, keyboard_event)
+			case .Down: _handle_keyboard_down(ctx, keyboard_key, keyboard_event)
 			}
 		}
 	}
 	return
 }
 
+_handle_mouse_event_locking :: proc(ctx: ^Core_Context) {
+	if !ctx.mouse.active_is_locked {
+		ctx.mouse.active = ctx.mouse.hovered
+		ctx.mouse.active_is_locked = ctx.mouse.can_lock_active
+	}
+	if !ctx.mouse.hover_is_locked {
+		ctx.mouse.hover_is_locked = ctx.mouse.can_lock_hover
+	}
+}
+
 _handle_mouse_pressed :: proc(ctx: ^Core_Context, button: Mouse_Button, event: Key_Event) {
 	ctx.mouse.events[button] += {.Pressed}
 	ctx.mouse.down_start[button] = time.now()
+	_handle_mouse_event_locking(ctx)
 }
 
 _handle_mouse_down :: proc(ctx: ^Core_Context, button: Mouse_Button, event: Key_Event) {
@@ -253,6 +242,7 @@ _handle_mouse_down :: proc(ctx: ^Core_Context, button: Mouse_Button, event: Key_
 	if time.since(ctx.mouse.down_start[button]) > ctx.mouse.long_down_timeout {
 		ctx.mouse.events[button] += {.Long_Down}
 	}
+	_handle_mouse_event_locking(ctx)
 }
 
 _handle_mouse_released :: proc(ctx: ^Core_Context, button: Mouse_Button, event: Key_Event) {
@@ -262,6 +252,8 @@ _handle_mouse_released :: proc(ctx: ^Core_Context, button: Mouse_Button, event: 
 	} else {
 		ctx.mouse.last_click[button] = time.now()
 	}
+	ctx.mouse.active_is_locked = false
+	ctx.mouse.hover_is_locked = false
 }
 
 _handle_keyboard_pressed :: proc(ctx: ^Core_Context, key: Keyboard_Key, event: Key_Event) {

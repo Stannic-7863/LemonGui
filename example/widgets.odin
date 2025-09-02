@@ -87,10 +87,10 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	cu.push_parent(ctx, thumb_rail)
 
 	maximum: f32 = 10
-	minimum: f32 = 0
+	minimum: f32 = 5
 	@(static) value: f32
 
-	thumb_along := (f32(value) / f32(maximum - minimum)) - minimum - 0.5
+	thumb_along := (value - minimum) / (maximum - minimum) - 0.5
 
 	thumb := cu.create_widget(
 		ctx,
@@ -117,9 +117,9 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 		local_position_x := ctx.mouse.position.x - thumb_rail.resolved.position.x
 		local_position_x /= thumb_rail.resolved.size.x
 		value = f32(minimum) + f32(maximum - minimum) * local_position_x
-		value = max(minimum, value)
-		value = min(maximum, value)
 	}
+	value = max(minimum, value)
+	value = min(maximum, value)
 
 	cu.pop_parent(ctx)
 
