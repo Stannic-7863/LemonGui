@@ -108,6 +108,7 @@ Core_Context :: struct {
 	measure_text_proc:          proc(text: string, style: Text_Style) -> f32,
 	mouse:                      Mouse_Context,
 	keyboard:                   Keyboard_Context,
+	window_size:                Vec2f32,
 }
 
 Persistant_Data :: struct {
