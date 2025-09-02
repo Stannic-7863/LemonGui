@@ -58,7 +58,7 @@ measure_text :: proc(text: string, config: ui.Text_Style) -> f32 {
 		} else {
 			advance = font.recs[glyph_index].width * scale + f32(glyph.offsetX) + config.letter_spacing
 		}
-		width += advance
+		width += advance - 0.0001
 	}
 	return width
 }

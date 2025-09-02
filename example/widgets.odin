@@ -73,6 +73,22 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 
 	cu.push_parent(ctx, grow_3)
 
+	cu.push_parent(
+		ctx,
+		cu.create_widget(
+			ctx,
+			"idk",
+			cu.layout(cu.sizing(cu.grow(), cu.fit()), child_gap = 8, direction = .Y),
+			style = cu.style(padding = cu.axis_vec2f32(8, 8)),
+		),
+	)
+	cu.create_widget(
+		ctx,
+		"text",
+		cu.text("Last session info", {color = TEXT_PRIMARY_COLOR, font = font, font_size = 16, letter_spacing = 2, line_spacing = 0}),
+	)
+
+	cu.pop_parent(ctx)
 	body := cu.create_widget(ctx, "body", cu.layout(cu.sizing(cu.grow(), cu.fit())), style = cu.style(ERROR_COLOR, cu.axis_vec2f32(8, 8)))
 
 	cu.push_parent(ctx, body)

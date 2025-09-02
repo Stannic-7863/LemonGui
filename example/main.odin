@@ -33,10 +33,10 @@ main :: proc() {
 	rl.InitWindow(0, 0, "Window")
 	defer rl.CloseWindow()
 
-	font_ := rl.LoadFontEx("./assets/OpenSans-Regular.ttf", 64, nil, 0)
+	font := rl.GetFontDefault() //rl.LoadFontEx("./assets/OpenSans-Regular.ttf", 64, nil, 0)
 	tick_rl := rl.LoadTexture("./assets/tick.png")
 	aaloo_rl := rl.LoadTexture("./assets/DA TRULY BIG AALOO.jpg")
-	defer rl.UnloadFont(font_)
+	defer rl.UnloadFont(font)
 	defer rl.UnloadTexture(tick_rl)
 	defer rl.UnloadTexture(aaloo_rl)
 
@@ -76,7 +76,7 @@ main :: proc() {
 		if rl.IsMouseButtonReleased(.MIDDLE) {ctx.mouse.mapped_events[.Middle] += {.Released}}
 
 		cu.begin_ui(&ctx)
-		build_ui(&ctx, tick, aaloo, &font_, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight()))
+		build_ui(&ctx, tick, aaloo, &font, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight()))
 		cu.end_ui(&ctx)
 
 		fmt.println(ctx.mouse.hovered, ctx.mouse.active)
