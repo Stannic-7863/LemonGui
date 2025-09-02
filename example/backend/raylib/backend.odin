@@ -7,7 +7,7 @@ import rl "vendor:raylib"
 render :: proc(ctx: ui.Core_Context) {
 	for command in ctx.render_commands {
 		switch command_kind in command.kind {
-		case ui.Command_Rect: rl.DrawRectangleRounded(transmute(rl.Rectangle)command.rect, command_kind.border_radius.x / min(command.rect.size.y, command.rect.size.x), 100, color_to_rl(command_kind.color))
+		case ui.Command_Rect: rl.DrawRectangleRounded(transmute(rl.Rectangle)command.rect, (command_kind.border_radius.x / min(command.rect.size.y, command.rect.size.x)) * 2, 100, color_to_rl(command_kind.color))
 		case ui.Command_Text:
 			line_y := command.rect.position.y
 			font := (cast(^rl.Font)command_kind.style.font)^
@@ -27,7 +27,7 @@ render :: proc(ctx: ui.Core_Context) {
 		case ui.Command_Border: {
 				rl.DrawRectangleRoundedLines(
 					transmute(rl.Rectangle)command.rect,
-					command_kind.style.radius.x / min(command.rect.size.y, command.rect.size.x),
+					(command_kind.style.radius.x / min(command.rect.size.y, command.rect.size.x)) * 2,
 					100,
 					color_to_rl(command_kind.style.color.x),
 				)

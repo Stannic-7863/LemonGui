@@ -114,6 +114,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		if is_layout {
 			_position_layout_childs(ctx, n, layout)
 		}
+		_clamp_border_radius(n)
 		_emit_render_commands(ctx, n, &z_index_offset)
 	}
 	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
@@ -558,6 +559,13 @@ _get_layout :: proc(widget: ^Widget) -> (Layout, bool) {
 	case Text: return {}, false
 	}
 	unreachable()
+}
+
+_clamp_border_radius :: proc(widget: ^Widget) {
+	comp := min(widget.rect.size.x, widget.rect.size.y)
+	for &r in widget.style.border.radius {
+		r = min(comp / 2, r)
+	}
 }
 
 _build_stacks :: proc(ctx: ^Core_Context) {
