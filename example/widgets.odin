@@ -79,13 +79,17 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 			ctx,
 			"idk",
 			cu.layout(cu.sizing(cu.grow(), cu.fit()), child_gap = 8, direction = .Y),
-			style = cu.style(padding = cu.axis_vec2f32(8, 8)),
+			style = cu.style(padding = cu.axis_vec2f32(8, 8), border = cu.border(BORDER_COLOR, 0, cu.axis_vec2f32(2, 2))),
 		),
 	)
 	cu.create_widget(
 		ctx,
 		"text",
-		cu.text("Last session info", {color = TEXT_PRIMARY_COLOR, font = font, font_size = 16, letter_spacing = 2, line_spacing = 0}),
+		cu.text(
+			"A QUICK BROWN FOX JUMPS OVER THE LAZY DOG",
+			{color = TEXT_PRIMARY_COLOR, font = font, font_size = 16, letter_spacing = 2, line_spacing = 0},
+			.None,
+		),
 	)
 
 	cu.pop_parent(ctx)

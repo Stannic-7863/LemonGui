@@ -312,46 +312,54 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 	for widget in ctx.pre {
 		switch &type in widget.kind {
 		case Layout: continue
-		case Text:
-			_get_measured_words(ctx, type, &measured_words)
-			space_width := ctx.measure_text_proc(" ", type.style)
-			line_start: int = 0
-			largest_width: f32
-			x_padding := _get_axis_padding(.X, widget.style.padding)
-			widget_lines_start := len(ctx.text_lines)
-			additional_height: f32 = 0
-			accumulated_width: f32 = 0
-			cursor_found: bool
+		case Text: switch type.wrap_mode {
+			case .Words:
+				_get_measured_words(ctx, type, &measured_words)
+				space_width := ctx.measure_text_proc(" ", type.style)
+				line_start: int = 0
+				largest_width: f32
+				x_padding := _get_axis_padding(.X, widget.style.padding)
+				widget_lines_start := len(ctx.text_lines)
+				additional_height: f32 = 0
+				accumulated_width: f32 = 0
+				cursor_found: bool
 
-			for w, index in measured_words {
-				if w.word == "\n" {
-					accumulated_width = 0
-					append(&ctx.text_lines, type.text[line_start:w.word_start])
-					line_start = w.word_start
-					if index == len(measured_words) - 1 {
-						additional_height += (type.style.font_size + type.style.line_spacing)
+				for w, index in measured_words {
+					if w.word == "\n" {
+						accumulated_width = 0
+						append(&ctx.text_lines, type.text[line_start:w.word_start])
+						line_start = w.word_start
+						if index == len(measured_words) - 1 {
+							additional_height += (type.style.font_size + type.style.line_spacing)
+						}
+						continue
 					}
-					continue
+					largest_width = max(largest_width, w.width)
+					accumulated_width += space_width * f32(w.spaces_before)
+					if accumulated_width + w.width > widget.rect.size.x - x_padding {
+						accumulated_width = 0
+						append(&ctx.text_lines, type.text[line_start:w.word_start])
+						line_start = w.word_start
+					}
+					accumulated_width += w.width
 				}
-				largest_width = max(largest_width, w.width)
-				accumulated_width += space_width * f32(w.spaces_before)
-				if accumulated_width + w.width > widget.rect.size.x - x_padding {
-					accumulated_width = 0
-					append(&ctx.text_lines, type.text[line_start:w.word_start])
-					line_start = w.word_start
+
+				if line_start < len(type.text) {
+					append(&ctx.text_lines, type.text[line_start:])
 				}
-				accumulated_width += w.width
-			}
 
-			if line_start < len(type.text) {
-				append(&ctx.text_lines, type.text[line_start:])
+				type.start = widget_lines_start
+				type.end = len(ctx.text_lines)
+				widget.rect.size.y = f32(type.end - type.start) * (type.style.font_size + type.style.line_spacing) + additional_height
+				type.minimum_width = largest_width
+				clear(&measured_words)
+			case .None:
+				append(&ctx.text_lines, type.text)
+				type.start = len(ctx.text_lines) - 1
+				type.end = len(ctx.text_lines)
+				widget.rect.size.y = type.style.font_size
+				type.minimum_width = type.maximum_width
 			}
-
-			type.start = widget_lines_start
-			type.end = len(ctx.text_lines)
-			widget.rect.size.y = f32(type.end - type.start) * (type.style.font_size + type.style.line_spacing) + additional_height
-			type.minimum_width = largest_width
-			clear(&measured_words)
 		}
 	}
 }

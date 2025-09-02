@@ -34,8 +34,8 @@ offset :: proc(x: Override_Transform = nil, y: Override_Transform = nil) -> [Axi
 	return {.X = x, .Y = y}
 }
 
-text :: proc(text: string, style: Text_Style = {}, preferred_min: f32 = 0, preferred_max: f32 = max(f32)) -> Text {
-	return Text{text = text, style = style, preferred_min = preferred_min, preferred_max = preferred_max}
+text :: proc(text: string, style: Text_Style = {}, wrap_mode: Text_Wrap_Mode = .Words, preferred_min: f32 = 0, preferred_max: f32 = max(f32)) -> Text {
+	return Text{text = text, style = style, preferred_min = preferred_min, preferred_max = preferred_max, wrap_mode = wrap_mode}
 }
 
 layout :: proc(sizing: [Axis]Sizing, alignment: [Axis]Alignment = {}, child_gap: f32 = 0, direction: Axis = .X) -> Layout {

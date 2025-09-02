@@ -18,14 +18,20 @@ Layout :: struct {
 	child_gap:        f32,
 }
 
+Text_Wrap_Mode :: enum {
+	None,
+	Words,
+}
+
 Text :: struct {
+	style:         Text_Style,
 	text:          string,
 	minimum_width: f32,
 	maximum_width: f32,
 	preferred_min: f32,
 	preferred_max: f32,
-	style:         Text_Style,
 	start, end:    int,
+	wrap_mode:     Text_Wrap_Mode,
 }
 
 Text_Style :: struct {
