@@ -1,6 +1,7 @@
 package core_ui
 
 import "core:math/linalg"
+import "core:text/regex/compiler"
 
 clip :: proc "contextless" (x_kind: Clip_Kind, x_value: f32, x_scale: f32, y_kind: Clip_Kind, y_value: f32, y_scale: f32) -> Clip {
 	return Clip{value = {.X = x_value, .Y = y_value}, kind = {.X = x_kind, .Y = y_kind}, scale = {.X = x_scale, .Y = y_scale}}
@@ -234,29 +235,44 @@ _clamp_border_radius :: proc(widget: ^Widget) {
 	}
 }
 
-_build_stacks :: proc(ctx: ^Core_Context) {
-	append(&ctx.temp, &ctx.widgets[0])
+_build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
 
-	for {
-		widget := pop_safe(&ctx.temp) or_break
+	required_length := len(ctx.widgets)
+	resize(&ctx.pre, required_length)
+	resize(&ctx.temp, required_length)
+	resize(&ctx.post_r, required_length)
 
-		append(&ctx.post_r, widget)
+	ctx.temp[0] = &ctx.widgets[0]
+	temp_cursor: int
+	buffer_cursor: int
+
+	for temp_cursor >= 0 {
+		widget := ctx.temp[temp_cursor]
+		temp_cursor -= 1
+
+		ctx.post_r[buffer_cursor] = widget
+		buffer_cursor += 1
 
 		for child_widget := widget.first; child_widget != nil; child_widget = child_widget.next {
-			append(&ctx.temp, child_widget)
+			temp_cursor += 1
+			ctx.temp[temp_cursor] = child_widget
 		}
 	}
 
-	clear(&ctx.temp)
-	append(&ctx.temp, &ctx.widgets[0])
+	temp_cursor = 0
+	buffer_cursor = 0
+	ctx.temp[0] = &ctx.widgets[0]
 
-	for {
-		widget := pop_safe(&ctx.temp) or_break
+	for temp_cursor >= 0 {
+		widget := ctx.temp[temp_cursor]
+		temp_cursor -= 1
 
-		append(&ctx.pre, widget)
+		ctx.pre[buffer_cursor] = widget
+		buffer_cursor += 1
 
 		for child_widget := widget.last; child_widget != nil; child_widget = child_widget.prev {
-			append(&ctx.temp, child_widget)
+			temp_cursor += 1
+			ctx.temp[temp_cursor] = child_widget
 		}
 	}
 
