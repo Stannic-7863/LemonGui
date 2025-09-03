@@ -2,6 +2,8 @@ package main
 
 import "base:runtime"
 import "core:fmt"
+import "core:prof/spall"
+import "core:reflect"
 import "core:time"
 
 import rl "vendor:raylib"
@@ -28,7 +30,16 @@ INFO_COLOR :: cu.Color{115, 115, 115, 255} // neutral gray (#737373)
 BORDER_COLOR :: cu.Color{87, 83, 78, 255} // warm gray-700 (#57534E)
 DIVIDER_COLOR :: cu.Color{113, 109, 104, 255} // warm gray-600 (#716D68)
 
+// spall_ctx: spall.Context
+// @(thread_local)
+// spall_buffer: spall.Buffer
+
 main :: proc() {
+	// spall_buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
+	// spall_ctx = spall.context_create_with_sleep("./spall.spall")
+	// spall_buffer = spall.buffer_create(spall_buffer_backing)
+	// spall.context_destroy(&spall_ctx)
+
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
 	rl.InitWindow(0, 0, "Window")
 	defer rl.CloseWindow()
@@ -54,6 +65,7 @@ main :: proc() {
 
 	ctx := cu.init_context(250)
 	defer cu.deinit_context(&ctx)
+
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
 	ctx.measure_text_proc = backend_rl.measure_text
@@ -79,12 +91,21 @@ main :: proc() {
 		build_ui(&ctx, tick, aaloo, &font, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight()))
 		cu.end_ui(&ctx)
 
-		fmt.println(ctx.mouse.hovered, ctx.mouse.active)
-
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.BLANK)
 		backend_rl.render(ctx)
 		rl.DrawFPS(10, 10)
 		rl.EndDrawing()
 	}
+
 }
+//
+// @(instrumentation_enter)
+// spall_enter :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc: runtime.Source_Code_Location) {
+// 	spall._buffer_begin(&spall_ctx, &spall_buffer, "", "", loc)
+// }
+//
+// @(instrumentation_exit)
+// spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc: runtime.Source_Code_Location) {
+// 	spall._buffer_end(&spall_ctx, &spall_buffer)
+// }

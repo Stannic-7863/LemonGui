@@ -2,51 +2,62 @@ package core_ui
 
 import "core:math/linalg"
 
-clip :: proc(x_kind: Clip_Kind, x_value: f32, x_scale: f32, y_kind: Clip_Kind, y_value: f32, y_scale: f32) -> Clip {
+clip :: proc "contextless" (x_kind: Clip_Kind, x_value: f32, x_scale: f32, y_kind: Clip_Kind, y_value: f32, y_scale: f32) -> Clip {
 	return Clip{value = {.X = x_value, .Y = y_value}, kind = {.X = x_kind, .Y = y_kind}, scale = {.X = x_scale, .Y = y_scale}}
 }
 
-clip_none :: proc() -> (Clip_Kind, f32, f32) {
+clip_none :: proc "contextless" () -> (Clip_Kind, f32, f32) {
 	return .None, 0, 0
 }
 
-clip_custom :: proc(value: f32, scale: f32) -> (Clip_Kind, f32, f32) {
+clip_custom :: proc "contextless" (value: f32, scale: f32) -> (Clip_Kind, f32, f32) {
 	return .Custom, value, scale
 }
 
-clip_auto :: proc(scale: f32) -> (Clip_Kind, f32, f32) {
+clip_auto :: proc "contextless" (scale: f32) -> (Clip_Kind, f32, f32) {
 	return .Auto, 0, scale
 }
 
-override :: proc(flags: [Axis]Override_Flags, offset: [Axis]Override_Transform, expand: [Axis]Override_Transform, z_index: int = 0) -> Override {
+override :: proc "contextless" (
+	flags: [Axis]Override_Flags,
+	offset: [Axis]Override_Transform,
+	expand: [Axis]Override_Transform,
+	z_index: int = 0,
+) -> Override {
 	return {flags = flags, offset = offset, expand = expand, z_index = z_index}
 }
 
-flags :: proc(x: Override_Flags = {}, y: Override_Flags = {}) -> [Axis]Override_Flags {
+flags :: proc "contextless" (x: Override_Flags = {}, y: Override_Flags = {}) -> [Axis]Override_Flags {
 	return {.X = x, .Y = y}
 }
 
-expand :: proc(x: Override_Transform = nil, y: Override_Transform = nil) -> [Axis]Override_Transform {
+expand :: proc "contextless" (x: Override_Transform = nil, y: Override_Transform = nil) -> [Axis]Override_Transform {
 	return {.X = x, .Y = y}
 }
 
-offset :: proc(x: Override_Transform = nil, y: Override_Transform = nil) -> [Axis]Override_Transform {
+offset :: proc "contextless" (x: Override_Transform = nil, y: Override_Transform = nil) -> [Axis]Override_Transform {
 	return {.X = x, .Y = y}
 }
 
-text :: proc(text: string, style: Text_Style = {}, wrap_mode: Text_Wrap_Mode = .Words, preferred_min: f32 = 0, preferred_max: f32 = max(f32)) -> Text {
+text :: proc "contextless" (
+	text: string,
+	style: Text_Style = {},
+	wrap_mode: Text_Wrap_Mode = .Words,
+	preferred_min: f32 = 0,
+	preferred_max: f32 = max(f32),
+) -> Text {
 	return Text{text = text, style = style, preferred_min = preferred_min, preferred_max = preferred_max, wrap_mode = wrap_mode}
 }
 
-layout :: proc(sizing: [Axis]Sizing, alignment: [Axis]Alignment = {}, child_gap: f32 = 0, direction: Axis = .X) -> Layout {
+layout :: proc "contextless" (sizing: [Axis]Sizing, alignment: [Axis]Alignment = {}, child_gap: f32 = 0, direction: Axis = .X) -> Layout {
 	return {sizing = sizing, alignment = alignment, direction = direction, child_gap = child_gap}
 }
 
-sizing :: proc(x: Sizing = Fit{0, max(f32)}, y: Sizing = Fit{0, max(f32)}) -> [Axis]Sizing {
+sizing :: proc "contextless" (x: Sizing = Fit{0, max(f32)}, y: Sizing = Fit{0, max(f32)}) -> [Axis]Sizing {
 	return {.X = x, .Y = y}
 }
 
-alignment :: proc(x: Alignment = .Negative, y: Alignment = .Negative) -> [Axis]Alignment {
+alignment :: proc "contextless" (x: Alignment = .Negative, y: Alignment = .Negative) -> [Axis]Alignment {
 	return {.X = x, .Y = y}
 }
 
@@ -139,7 +150,7 @@ get_widget_mouse_events :: proc(ctx: ^Core_Context, widget: ^Widget, button: Mou
 	return get_widget_mouse_events_all(ctx, widget)[button]
 }
 
-_is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style) -> bool {
+is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style) -> bool {
 
 	border_radius := border_style.radius.zywx
 
@@ -157,4 +168,91 @@ _is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style
 		return true
 	}
 	return false
+}
+
+// INTERNALS
+
+_get_override_transform_value :: proc(transform: [Axis]Override_Transform, widget_size: Vec2f32, parent_size: Vec2f32, axis: Axis) -> (offset_value: f32) {
+	switch kind in transform[axis] {
+	case Percent_Self: offset_value = widget_size[axis] * kind.value
+	case Percent: offset_value = parent_size[axis] * kind.value
+	case Fixed: offset_value = kind.value
+	}
+	return offset_value
+}
+
+_get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 {
+	if widget.rect.size[axis] > widget.resolved.content_size[axis] {
+		return 0
+	}
+	switch widget.clip.kind[axis] {
+	case .None: return 0
+	case .Custom: return widget.clip.value[axis] * widget.clip.scale[axis]
+	case .Auto:
+		if ctx.mouse.hovered == widget.key.hash {
+			widget.clip.value[axis] += ctx.mouse.scroll * widget.clip.scale[axis]
+		}
+
+		widget.clip.value[axis] = min(0, widget.clip.value[axis])
+		widget.clip.value[axis] = max(widget.clip.value[axis], -(widget.resolved.content_size[axis] - widget.rect.size[axis]))
+
+		return widget.clip.value[axis]
+	}
+	return 0
+}
+
+_get_other_axis :: proc(axis: Axis) -> Axis {
+	return (Axis(int(axis) ~ int(max(Axis))))
+}
+
+_get_axis_padding :: proc(axis: Axis, padding: [Axis]Vec2f32) -> f32 {
+	return padding[axis].x + padding[axis].y
+}
+
+_get_child_gap :: proc(widget: ^Widget) -> f32 {
+	return max(0, f32(widget.total_children - 1)) * widget.kind.(Layout).child_gap
+}
+
+_get_layout :: proc(widget: ^Widget) -> (Layout, bool) {
+	switch kind in widget.kind {
+	case Layout: return kind, true
+	case Text: return {}, false
+	}
+	unreachable()
+}
+
+_clamp_border_radius :: proc(widget: ^Widget) {
+	comp := min(widget.rect.size.x, widget.rect.size.y)
+	for &r in widget.style.border.radius {
+		r = min(comp / 2, r)
+	}
+}
+
+_build_stacks :: proc(ctx: ^Core_Context) {
+	append(&ctx.temp, &ctx.widgets[0])
+
+	for {
+		widget := pop_safe(&ctx.temp) or_break
+
+		append(&ctx.post_r, widget)
+
+		for child_widget := widget.first; child_widget != nil; child_widget = child_widget.next {
+			append(&ctx.temp, child_widget)
+		}
+	}
+
+	clear(&ctx.temp)
+	append(&ctx.temp, &ctx.widgets[0])
+
+	for {
+		widget := pop_safe(&ctx.temp) or_break
+
+		append(&ctx.pre, widget)
+
+		for child_widget := widget.last; child_widget != nil; child_widget = child_widget.prev {
+			append(&ctx.temp, child_widget)
+		}
+	}
+
+	clear(&ctx.temp)
 }

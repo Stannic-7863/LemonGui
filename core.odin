@@ -12,13 +12,13 @@ Rect :: struct {
 
 Layout :: struct {
 	sizing:           [Axis]Sizing,
-	alignment:        [Axis]Alignment,
 	accumulating_min: [Axis]f32,
 	direction:        Axis,
 	child_gap:        f32,
+	alignment:        [Axis]Alignment,
 }
 
-Text_Wrap_Mode :: enum {
+Text_Wrap_Mode :: enum u8 {
 	None,
 	Words,
 }
@@ -26,11 +26,11 @@ Text_Wrap_Mode :: enum {
 Text :: struct {
 	style:         Text_Style,
 	text:          string,
+	start, end:    int,
 	minimum_width: f32,
 	maximum_width: f32,
 	preferred_min: f32,
 	preferred_max: f32,
-	start, end:    int,
 	wrap_mode:     Text_Wrap_Mode,
 }
 
@@ -67,8 +67,8 @@ Keying_Id :: union {
 }
 
 Key :: struct {
-	hash, parent_hash: u64,
 	keying_id:         Keying_Id,
+	hash, parent_hash: u64,
 }
 
 Clip :: struct {
@@ -189,10 +189,9 @@ _add_widget_to_tree :: proc(widget: ^Widget) {
 }
 
 _generate_widget_hash :: proc(widget: ^Widget) {
-	if key, ok := widget.key.keying_id.(string); ok {
-		widget.key.hash = hash.fnv64(transmute([]u8)key)
-	}
-	if key, ok := widget.key.keying_id.(int); ok {
+	switch key in widget.key.keying_id {
+	case string: widget.key.hash = hash.fnv64(transmute([]u8)key)
+	case int:
 		e := (transmute([size_of(int)]u8)key)
 		widget.key.hash = hash.fnv64(e[:])
 	}
@@ -255,29 +254,4 @@ end_ui :: proc(ctx: ^Core_Context) {
 	_build_stacks(ctx)
 	_sizing_pass(ctx)
 	_positioning_pass(ctx)
-
-	clear(&ctx.persistant_data)
-
-	if !ctx.mouse.can_lock_hover {
-		ctx.mouse.hovered = 0
-	}
-	if !ctx.mouse.active_is_locked {
-		ctx.mouse.active = 0
-	}
-
-	for n in ctx.pre {
-		_write_persistant_data(ctx, n)
-		if _is_point_in_rect(n.rect, ctx.mouse.position, n.style.border) && .Pointer_Passthrough not_in n.event_flags && !ctx.mouse.hover_is_locked {
-			ctx.mouse.hovered = n.key.hash
-			ctx.mouse.can_lock_active = .Lock_Active in n.event_flags
-			ctx.mouse.can_lock_hover = .Lock_Hover in n.event_flags
-		}
-	}
-
-
-	ctx.mouse.events = {}
-	ctx.keyboard.events = {}
-	_resolve_events(ctx)
-	ctx.mouse.mapped_events = {}
-	ctx.keyboard.mapped_events = {}
 }
