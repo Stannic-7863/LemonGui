@@ -151,7 +151,6 @@ get_widget_mouse_events :: proc(ctx: ^Core_Context, widget: ^Widget, button: Mou
 }
 
 is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style) -> bool {
-
 	border_radius := border_style.radius.zywx
 
 	half_size := rect.size / 2
@@ -172,7 +171,14 @@ is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style)
 
 // INTERNALS
 
-_get_override_transform_value :: proc(transform: [Axis]Override_Transform, widget_size: Vec2f32, parent_size: Vec2f32, axis: Axis) -> (offset_value: f32) {
+_get_override_transform_value :: proc(
+	transform: [Axis]Override_Transform,
+	widget_size: Vec2f32,
+	parent_size: Vec2f32,
+	axis: Axis,
+) -> (
+	offset_value: f32,
+) #no_bounds_check {
 	switch kind in transform[axis] {
 	case Percent_Self: offset_value = widget_size[axis] * kind.value
 	case Percent: offset_value = parent_size[axis] * kind.value
@@ -181,7 +187,7 @@ _get_override_transform_value :: proc(transform: [Axis]Override_Transform, widge
 	return offset_value
 }
 
-_get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 {
+_get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 #no_bounds_check {
 	if widget.rect.size[axis] > widget.resolved.content_size[axis] {
 		return 0
 	}
@@ -202,10 +208,10 @@ _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 
 }
 
 _get_other_axis :: proc(axis: Axis) -> Axis {
-	return (Axis(int(axis) ~ int(max(Axis))))
+	return .X if axis == .Y else .Y
 }
 
-_get_axis_padding :: proc(axis: Axis, padding: [Axis]Vec2f32) -> f32 {
+_get_axis_padding :: proc(axis: Axis, padding: [Axis]Vec2f32) -> f32 #no_bounds_check {
 	return padding[axis].x + padding[axis].y
 }
 

@@ -117,7 +117,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	ctx.keyboard.mapped_events = {}
 }
 
-_resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
+_resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 	#reverse for widget in ctx.post_r {
 		switch &widget_kind in widget.kind {
 		case Layout:
@@ -418,7 +418,7 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, measured_words: ^[dy
 	}
 }
 
-_position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Layout) {
+_position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Layout) #no_bounds_check {
 	total_size: [Axis]f32
 	axis := layout.direction
 	other_axis := _get_other_axis(axis)
@@ -465,7 +465,6 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 	clip_other_axis := _get_clip_value(ctx, widget, other_axis)
 
 	for child := widget.first; child != nil; child = child.next {
-
 		offset_axis := _get_override_transform_value(child.override.offset, child.rect.size, widget.rect.size, axis)
 		offset_other_axis := _get_override_transform_value(child.override.offset, child.rect.size, widget.rect.size, other_axis)
 

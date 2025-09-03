@@ -51,7 +51,7 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 			i,
 			cu.layout(cu.sizing(cu.grow(), cu.percent(0.5))),
 			event_flags = {.Lock_Hover},
-			style = cu.style(ELEVATED_SURFACE_COLOR, border = cu.border(BORDER_COLOR, 50000, cu.axis_vec2f32(1, 1))),
+			style = cu.style(ELEVATED_SURFACE_COLOR, border = cu.border(BORDER_COLOR, {5, 10, 20, 30}, cu.axis_vec2f32(1, 1))),
 		)
 		if cu.is_widget_hovered(ctx, w) {
 			w.style.color = WARNING_COLOR
