@@ -66,33 +66,20 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	grow_3 := cu.create_widget(
 		ctx,
 		"child 3",
-		cu.layout(cu.sizing(cu.grow(), cu.grow())),
-		clip = cu.clip(cu.clip_none(), cu.clip_auto(5)),
+		cu.layout(cu.sizing(cu.grow(), cu.grow()), direction = .Y),
 		style = cu.style(SURFACE_COLOR, cu.axis_vec2f32(16, 16)),
 	)
 
 	cu.push_parent(ctx, grow_3)
 
-	cu.push_parent(
-		ctx,
-		cu.create_widget(
-			ctx,
-			"idk",
-			cu.layout(cu.sizing(cu.grow(), cu.fit()), child_gap = 8, direction = .Y),
-			style = cu.style(padding = cu.axis_vec2f32(8, 8), border = cu.border(BORDER_COLOR, 0, cu.axis_vec2f32(2, 2))),
-		),
-	)
+
 	cu.create_widget(
 		ctx,
 		"text",
-		cu.text(
-			"A QUICK BROWN FOX JUMPS OVER THE LAZY DOG",
-			{color = TEXT_PRIMARY_COLOR, font = font, font_size = 16, letter_spacing = 2, line_spacing = 0},
-			.None,
-		),
+		cu.text("A QUICK BROWN FOX JUMPS OVER THE LAZY DOG", {color = TEXT_PRIMARY_COLOR, font = font, font_size = 16, letter_spacing = 2, line_spacing = 0}),
+		style = cu.style({}, cu.axis_vec2f32(16, 16), cu.border(BORDER_COLOR, 0, cu.axis_vec2f32(2, 2))),
 	)
 
-	cu.pop_parent(ctx)
 	body := cu.create_widget(ctx, "body", cu.layout(cu.sizing(cu.grow(), cu.fit())), style = cu.style(ERROR_COLOR, cu.axis_vec2f32(8, 8)))
 
 	cu.push_parent(ctx, body)
@@ -124,7 +111,7 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	cu.create_widget(
 		ctx,
 		"slider value label",
-		cu.text(fmt.tprintf("%v", value), cu.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, font)),
+		cu.text(fmt.tprintf("%v", value), cu.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, font), .None),
 		cu.override(
 			cu.flags({.No_Size_Propagation}, {.No_Size_Propagation, .No_Positioning}),
 			cu.offset(cu.percent(thumb_along), cu.fixed(thumb.resolved.position.y + thumb.resolved.size.x + 8)),

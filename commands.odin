@@ -100,7 +100,7 @@ _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 		widget.rect.position.x += widget.style.padding[.X][0]
 		widget.rect.position.y += widget.style.padding[.Y][0]
 		command_text.style = text.style
-		command_text.lines = ctx.text_lines[text.start:text.end]
+		command_text.lines = ctx.lines[text.start:text.end]
 		_add_render_command(ctx, widget, command_text, z_index)
 		widget.rect.position.x -= widget.style.padding[.X][0]
 		widget.rect.position.y -= widget.style.padding[.Y][0]

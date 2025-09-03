@@ -108,7 +108,7 @@ Core_Context :: struct {
 	temp, post_r, pre, clips:   [dynamic]^Widget,
 	growable:                   [dynamic]Growable,
 	widgets:                    [dynamic]Widget,
-	text_lines:                 [dynamic]string,
+	lines:                      [dynamic]string,
 	render_commands:            [dynamic]Render_Command,
 	persistant_data:            map[u64]Persistant_Data,
 	measure_text_proc:          proc(text: string, style: Text_Style) -> f32,
@@ -122,6 +122,7 @@ Persistant_Data :: struct {
 	content_size:       Vec2f32,
 	auto_clip_value:    [Axis]f32,
 	text_minimum_width: f32,
+	text_maximum_width: f32,
 }
 
 init_context :: proc(size: int) -> Core_Context {
@@ -213,6 +214,7 @@ _read_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 
 	if text, ok := &widget.kind.(Text); ok {
 		text.minimum_width = data.text_minimum_width
+		text.maximum_width = data.text_maximum_width
 	}
 }
 
@@ -220,6 +222,7 @@ _write_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	text, ok := widget.kind.(Text)
 	ctx.persistant_data[widget.key.hash] = Persistant_Data {
 		text_minimum_width = text.minimum_width,
+		text_maximum_width = text.maximum_width,
 		rect               = widget.rect,
 		auto_clip_value    = widget.clip.value,
 		content_size       = widget.resolved.content_size,
@@ -242,7 +245,7 @@ pop_parent :: proc(ctx: ^Core_Context) {
 
 begin_ui :: proc(ctx: ^Core_Context) {
 	ctx.active_parent = nil
-	clear(&ctx.text_lines)
+	clear(&ctx.lines)
 	clear(&ctx.widgets)
 	clear(&ctx.render_commands)
 	clear(&ctx.temp)
