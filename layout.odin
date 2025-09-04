@@ -1,6 +1,5 @@
 package core_ui
 
-import "core:crypto/_fiat/field_curve25519"
 import "core:sort"
 import "core:unicode/utf8"
 

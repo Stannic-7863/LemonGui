@@ -1,6 +1,5 @@
 package core_ui
 
-import "core:fmt"
 import "core:math/linalg"
 
 clip :: proc "contextless" (x_kind: Clip_Kind, x_value: f32, x_scale: f32, y_kind: Clip_Kind, y_value: f32, y_scale: f32) -> Clip {
@@ -253,9 +252,8 @@ _build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
 	resize(&ctx.temp, required_length)
 	resize(&ctx.post_r, required_length)
 
-	fmt.println(required_length)
-
 	ctx.temp[0] = get_widget(ctx, 0)
+
 	temp_cursor: int
 	buffer_cursor: int
 
