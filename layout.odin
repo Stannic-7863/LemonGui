@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:crypto/_fiat/field_curve25519"
 import "core:sort"
 import "core:unicode/utf8"
 
@@ -54,10 +55,9 @@ Override_Flag :: enum u8 {
 Override_Flags :: bit_set[Override_Flag]
 
 Override :: struct {
-	offset:  [Axis]Override_Transform,
-	expand:  [Axis]Override_Transform,
-	z_index: int,
-	flags:   [Axis]Override_Flags,
+	offset: [Axis]Override_Transform,
+	expand: [Axis]Override_Transform,
+	flags:  [Axis]Override_Flags,
 }
 
 Growable :: struct {
@@ -96,15 +96,17 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 			_position_layout_childs(ctx, child, layout)
 		}
 
-		_clamp_border_radius(child)
-		_emit_render_commands(ctx, child, &z_index_offset)
+		child_style := get_style(ctx, child.style)
+		_clamp_border_radius(child, child_style)
+		_emit_render_commands(ctx, child, &z_index_offset, child_style)
 		_write_persistant_data(ctx, child)
 
-		if is_point_in_rect(child.rect, ctx.mouse.position, child.style.border) &&
+		if is_point_in_rect(child.rect, ctx.mouse.position, child_style.border) &&
 		   .Pointer_Passthrough not_in child.event_flags &&
 		   !ctx.mouse.hover_is_locked {
 
-			if _has_clip(child) {
+			child_clip := get_clip(ctx, child.clip)
+			if child_clip.kind[.X] != .None || child_clip.kind[.Y] != .None {
 				ctx.mouse.hovered_clip = child.key.hash
 			}
 
@@ -126,6 +128,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 	#reverse for widget in ctx.post_r {
+		widget_style := get_style(ctx, widget.style)
 		switch &widget_kind in widget.kind {
 		case Layout:
 			#partial switch kind in widget_kind.sizing[axis] {
@@ -133,7 +136,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 				if widget_kind.direction == axis {
 					widget_kind.accumulating_min[axis] += _get_child_gap(widget)
 				}
-				widget_kind.accumulating_min[axis] += _get_axis_padding(axis, widget.style.padding)
+				widget_kind.accumulating_min[axis] += _get_axis_padding(axis, widget_style.padding)
 				widget_kind.accumulating_min[axis] = max(widget_kind.accumulating_min[axis], kind.min)
 				widget_kind.accumulating_min[axis] = min(widget_kind.accumulating_min[axis], kind.max)
 			case Grow:
@@ -141,7 +144,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 				if widget_kind.direction == axis {
 					widget_kind.accumulating_min[axis] += _get_child_gap(widget)
 				}
-				widget_kind.accumulating_min[axis] += _get_axis_padding(axis, widget.style.padding)
+				widget_kind.accumulating_min[axis] += _get_axis_padding(axis, widget_style.padding)
 			case Fixed: widget_kind.accumulating_min[axis] = kind.value
 			case Ratio: widget_kind.accumulating_min[axis] = kind.value * widget.resolved.size[_get_other_axis(axis)]
 			}
@@ -153,8 +156,11 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 
 		if widget.parent == -1 {continue}
 		parent := get_widget(ctx, widget.parent)
+		parent_clip := get_clip(ctx, parent.clip)
 
-		if .No_Size_Propagation not_in widget.override.flags[axis] && parent.clip.kind[axis] == .None {
+		widget_override := get_override(ctx, widget.override)
+
+		if .No_Size_Propagation not_in widget_override.flags[axis] && parent_clip.kind[axis] == .None {
 			parent_kind := &parent.kind.(Layout)
 			if parent_kind.direction == axis {
 				parent_kind.accumulating_min[axis] += widget.rect.size[axis]
@@ -171,8 +177,10 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 		if !is_layout {continue}
 		if widget.first == -1 {continue}
 
+		widget_style := get_style(ctx, widget.style)
+
 		total_child_gap := _get_child_gap(widget)
-		total_padding := _get_axis_padding(axis, widget.style.padding)
+		total_padding := _get_axis_padding(axis, widget_style.padding)
 
 		if layout.direction == axis {
 			clear(&ctx.growable)
@@ -183,22 +191,23 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 			for child_index := widget.first; child_index != -1; {
 				child := get_widget(ctx, child_index)
 				child_index = child.next
+				child_override := get_override(ctx, child.override)
 				switch child_kind in child.kind {
 				case Layout: #partial switch kind in child_kind.sizing[axis] {
 					case Grow:
-						contribute := .No_Size_Propagation not_in child.override.flags[axis]
+						contribute := .No_Size_Propagation not_in child_override.flags[axis]
 						child.rect.size[axis] = min(child.rect.size[axis], kind.max)
 						append(&ctx.growable, Growable{&child.rect.size[axis], child.rect.size[axis], kind.max, false, contribute})
 					case Percent: child.rect.size[axis] = (widget.rect.size[axis] - total_child_gap - total_padding) * kind.value
 					}
 				case Text: if axis == .X {
-						contribute := .No_Size_Propagation not_in child.override.flags[axis]
+						contribute := .No_Size_Propagation not_in child_override.flags[axis]
 						child.rect.size[axis] = min(child_kind.maximum_width, child_kind.preferred_max)
 						append(&ctx.growable, Growable{&child.rect.size[axis], child_kind.minimum_width, child.rect.size[axis], true, contribute})
 					}
 				}
 
-				if .No_Size_Propagation not_in child.override.flags[axis] {
+				if .No_Size_Propagation not_in child_override.flags[axis] {
 					available -= child.rect.size[axis]
 				}
 			}
@@ -320,6 +329,8 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				_get_measured_words(ctx, type)
 				defer clear(&ctx.measured_words)
 
+				widget_style := get_style(ctx, widget.style)
+
 				maximum_width: f32
 				minimum_width: f32
 				new_line_index: int
@@ -327,7 +338,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				accumulated_height: f32
 
 				space_width := ctx.measure_text_proc(" ", type.style)
-				padding := _get_axis_padding(.X, widget.style.padding)
+				padding := _get_axis_padding(.X, widget_style.padding)
 				start := len(ctx.lines)
 
 				for word, index in ctx.measured_words {
@@ -360,7 +371,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				widget.rect.size.y =
 					f32(type.end - type.start) * (type.style.font_size + type.style.line_spacing) +
 					accumulated_height +
-					_get_axis_padding(.Y, widget.style.padding)
+					_get_axis_padding(.Y, widget_style.padding)
 				type.minimum_width = minimum_width + padding
 				type.maximum_width = maximum_width + padding
 			case .None:
@@ -434,43 +445,48 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 	axis := layout.direction
 	other_axis := _get_other_axis(axis)
 
+	widget_style := get_style(ctx, widget.style)
+
 	for child_index := widget.first; child_index != -1; {
 		child := get_widget(ctx, child_index)
 		child_index = child.next
-		expand_axis := _get_override_transform_value(child.override.expand, child.rect.size, widget.rect.size, axis)
-		expand_other_axis := _get_override_transform_value(child.override.expand, child.rect.size, widget.rect.size, other_axis)
+
+		child_override := get_override(ctx, child.override)
+
+		expand_axis := _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, axis)
+		expand_other_axis := _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, other_axis)
 
 		child.rect.size[axis] += expand_axis
 		child.rect.size[other_axis] += expand_other_axis
 
 		ignore_flags := Override_Flags{.No_Positioning, .No_Clip_Offset, .No_Positioning_Relative}
 
-		if ignore_flags & child.override.flags[axis] == {} {
+		if ignore_flags & child_override.flags[axis] == {} {
 			total_size[axis] += child.rect.size[axis]
 		} else {
 			total_size[axis] -= layout.child_gap
 		}
-		if ignore_flags & child.override.flags[other_axis] == {} {
+		if ignore_flags & child_override.flags[other_axis] == {} {
 			total_size[other_axis] = max(total_size[other_axis], child.rect.size[other_axis])
 		}
 	}
 
-	total_size[axis] += _get_child_gap(widget)
 
-	widget.resolved.content_size[axis] = total_size[axis] + _get_axis_padding(axis, widget.style.padding)
-	widget.resolved.content_size[other_axis] = total_size[other_axis] + _get_axis_padding(other_axis, widget.style.padding)
+	total_size[axis] += _get_child_gap(widget)
+	widget.resolved.content_size[axis] = total_size[axis] + _get_axis_padding(axis, widget_style.padding)
+	widget.resolved.content_size[other_axis] = total_size[other_axis] + _get_axis_padding(other_axis, widget_style.padding)
 
 	increment: Vec2f32
 
 	switch layout.alignment[axis] {
-	case .Negative: increment[axis] = widget.rect.position[axis] + widget.style.padding[axis][0]
-	case .Positive: increment[axis] = widget.rect.position[axis] + widget.rect.size[axis] - widget.style.padding[axis][1] - total_size[axis]
+	case .Negative: increment[axis] = widget.rect.position[axis] + widget_style.padding[axis][0]
+	case .Positive: increment[axis] = widget.rect.position[axis] + widget.rect.size[axis] - widget_style.padding[axis][1] - total_size[axis]
 	case .Center: increment[axis] = widget.rect.position[axis] + (widget.rect.size[axis] - total_size[axis]) / 2
 	}
 
 	switch layout.alignment[other_axis] {
-	case .Negative: increment[other_axis] = widget.rect.position[other_axis] + widget.style.padding[other_axis][0]
-	case .Positive: increment[other_axis] = widget.rect.position[other_axis] + widget.rect.size[other_axis] - widget.style.padding[other_axis][1]
+	case .Negative: increment[other_axis] = widget.rect.position[other_axis] + widget_style.padding[other_axis][0]
+	case .Positive: increment[other_axis] = widget.rect.position[other_axis] + widget.rect.size[other_axis] - widget_style.padding[other_axis][1]
 	case .Center: increment[other_axis] = widget.rect.position[other_axis] + widget.rect.size[other_axis] / 2
 	}
 
@@ -480,28 +496,31 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 	for child_index := widget.first; child_index != -1; {
 		child := get_widget(ctx, child_index)
 		child_index = child.next
-		offset_axis := _get_override_transform_value(child.override.offset, child.rect.size, widget.rect.size, axis)
-		offset_other_axis := _get_override_transform_value(child.override.offset, child.rect.size, widget.rect.size, other_axis)
+
+		child_override := get_override(ctx, child.override)
+
+		offset_axis := _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, axis)
+		offset_other_axis := _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, other_axis)
 
 		ignore_flags := Override_Flags{.No_Positioning, .No_Positioning_Relative}
 
-		if ignore_flags & child.override.flags[axis] == {} {
+		if ignore_flags & child_override.flags[axis] == {} {
 			child.rect.position[axis] = increment[axis]
 			increment[axis] += child.rect.size[axis] + layout.child_gap + offset_axis
 		} else {
-			if .No_Positioning_Relative in child.override.flags[axis] {
+			if .No_Positioning_Relative in child_override.flags[axis] {
 				child.rect.position[axis] = widget.rect.position[axis]
 			}
 		}
 
-		if ignore_flags & child.override.flags[other_axis] == {} {
+		if ignore_flags & child_override.flags[other_axis] == {} {
 			switch layout.alignment[other_axis] {
 			case .Negative: child.rect.position[other_axis] = increment[other_axis]
 			case .Positive: child.rect.position[other_axis] = increment[other_axis] - child.rect.size[other_axis]
 			case .Center: child.rect.position[other_axis] = increment[other_axis] - child.rect.size[other_axis] / 2
 			}
 		} else {
-			if .No_Positioning_Relative in child.override.flags[other_axis] {
+			if .No_Positioning_Relative in child_override.flags[other_axis] {
 				child.rect.position[other_axis] = widget.rect.position[other_axis]
 			}
 		}
@@ -509,11 +528,11 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 		child.rect.position[axis] += offset_axis
 		child.rect.position[other_axis] += offset_other_axis
 
-		if .No_Clip_Offset not_in child.override.flags[axis] {
+		if .No_Clip_Offset not_in child_override.flags[axis] {
 			child.rect.position[axis] += clip_axis
 		}
 
-		if .No_Clip_Offset not_in child.override.flags[other_axis] {
+		if .No_Clip_Offset not_in child_override.flags[other_axis] {
 			child.rect.position[other_axis] += clip_other_axis
 		}
 	}

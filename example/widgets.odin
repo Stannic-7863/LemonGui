@@ -30,7 +30,8 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	cu.push_parent(ctx, grow_1)
 
 	bar_size := (grow_1.resolved.size.y / grow_1.resolved.content_size.y) * grow_1.resolved.size.y
-	bar_progress := grow_1.clip.value[.Y] / grow_1.resolved.content_size.y
+	clip := cu.get_clip(ctx, grow_1.clip)
+	bar_progress := clip.value[.Y] / grow_1.resolved.content_size.y
 	scrool := cu.create_widget(
 		ctx,
 		"scroll",
@@ -39,7 +40,6 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 			cu.flags({.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset}, {.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset}),
 			cu.offset(cu.fixed(grow_1.resolved.size.x - 10), cu.percent(-bar_progress)),
 			cu.expand(),
-			10,
 		),
 		event_flags = {.Pointer_Passthrough},
 		style = cu.style(SUCCESS_COLOR),
@@ -54,9 +54,9 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 			style = cu.style(ELEVATED_SURFACE_COLOR, border = cu.border(BORDER_COLOR, {5, 10, 20, 30}, cu.axis_vec2f32(1, 1))),
 		)
 		if cu.is_widget_hovered(ctx, w) {
-			w.style.color = WARNING_COLOR
-			w.override.z_index = 50
-			w.style.border.thickness = cu.axis_vec2f32(1, 1)
+			widget_style := cu.get_style(ctx, w.style)
+			widget_style.color = WARNING_COLOR
+			widget_style.border.thickness = cu.axis_vec2f32(1, 1)
 		}
 	}
 
@@ -121,7 +121,8 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	)
 
 	if cu.is_widget_active(ctx, thumb) {
-		thumb.style.color = WARNING_COLOR
+		thumb_style := cu.get_style(ctx, thumb.style)
+		thumb_style.color = WARNING_COLOR
 		local_position_x := ctx.mouse.position.x - thumb_rail.resolved.position.x
 		local_position_x /= thumb_rail.resolved.size.x
 		value = f32(minimum) + f32(maximum - minimum) * local_position_x

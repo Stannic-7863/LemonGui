@@ -90,34 +90,38 @@ Resolved :: struct {
 }
 
 Widget :: struct {
-	style:                           Rect_Style,
 	kind:                            Widget_Kind,
-	override:                        Override,
 	key:                             Key,
 	resolved:                        Resolved,
-	clip:                            Clip,
 	rect:                            Rect,
 	image:                           rawptr,
 	custom_data:                     rawptr,
+	z_index:                         int,
+	override:                        i32,
+	clip:                            i32,
+	style:                           i32,
 	total_children, index:           i32,
 	first, last, prev, next, parent: i32,
 	event_flags:                     Event_Flags,
 }
 
 Core_Context :: struct {
-	active_parent:            i32,
-	active_clip:              ^Widget,
-	temp, post_r, pre, clips: [dynamic]^Widget,
-	growable:                 [dynamic]Growable,
-	widgets:                  [dynamic]Widget,
-	lines:                    [dynamic]string,
-	render_commands:          [dynamic]Render_Command,
-	measured_words:           [dynamic]Measured_Word,
-	persistant_data:          map[Hash]Persistant_Data,
-	measure_text_proc:        proc(text: string, style: Text_Style) -> f32,
-	mouse:                    Mouse_Context,
-	keyboard:                 Keyboard_Context,
-	window_size:              Vec2f32,
+	active_parent:               i32,
+	active_clip:                 ^Widget,
+	overrides:                   [dynamic]Override,
+	clips:                       [dynamic]Clip,
+	styles:                      [dynamic]Rect_Style,
+	temp, post_r, pre, clippers: [dynamic]^Widget,
+	growable:                    [dynamic]Growable,
+	widgets:                     [dynamic]Widget,
+	lines:                       [dynamic]string,
+	render_commands:             [dynamic]Render_Command,
+	measured_words:              [dynamic]Measured_Word,
+	persistant_data:             map[Hash]Persistant_Data,
+	measure_text_proc:           proc(text: string, style: Text_Style) -> f32,
+	mouse:                       Mouse_Context,
+	keyboard:                    Keyboard_Context,
+	window_size:                 Vec2f32,
 }
 
 Persistant_Data :: struct {
@@ -149,13 +153,11 @@ create_widget :: proc(
 	image: rawptr = nil,
 	style: Rect_Style = {},
 ) -> ^Widget {
-	widget := _get_new_widget(ctx)
+	widget := _get_new_widget(ctx, style, clip, override)
 
 	widget.kind = kind
-	widget.clip = clip
-	widget.style = style
 	widget.image = image
-	widget.override = override
+
 	widget.event_flags = event_flags
 	widget.key.keying_id = id
 	widget.parent = ctx.active_parent
@@ -166,11 +168,34 @@ create_widget :: proc(
 	return widget
 }
 
-_get_new_widget :: proc(ctx: ^Core_Context) -> ^Widget {
+_get_new_widget :: proc(ctx: ^Core_Context, style: Rect_Style, clip: Clip, override: Override) -> ^Widget {
+
+	clip_index: i32
+	style_index: i32
+	override_index: i32
+
+	if clip != {} {
+		clip_index = cast(i32)len(ctx.clips)
+		append(&ctx.clips, clip)
+	}
+	if style != {} {
+		style_index = cast(i32)len(ctx.styles)
+		append(&ctx.styles, style)
+	}
+	if override != {} {
+		override_index = cast(i32)len(ctx.overrides)
+		append(&ctx.overrides, override)
+	}
+
 	widget_index := cast(i32)len(ctx.widgets)
 	append(&ctx.widgets, Widget{})
+
 	widget := &ctx.widgets[widget_index]
 	widget^ = {}
+
+	widget.clip = clip_index
+	widget.style = style_index
+	widget.override = override_index
 	widget.index = widget_index
 	widget.parent = -1
 	widget.first = -1
@@ -196,7 +221,7 @@ _add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
 		}
 
 		parent.last = widget.index
-		widget.override.z_index += parent.override.z_index
+		widget.z_index += parent.z_index
 		widget.key.parent_hash = parent.key.hash
 	}
 }
@@ -219,8 +244,9 @@ _read_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	widget.resolved.content_size = data.content_size
 
 	for axis in Axis {
-		if widget.clip.kind[axis] == .Auto {
-			widget.clip.value[axis] = data.auto_clip_value[axis]
+		widget_clip := get_clip(ctx, widget.clip)
+		if widget_clip.kind[axis] == .Auto {
+			widget_clip.value[axis] = data.auto_clip_value[axis]
 		}
 	}
 
@@ -232,11 +258,12 @@ _read_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 
 _write_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	text, ok := widget.kind.(Text)
+	widget_clip := get_clip(ctx, widget.clip)
 	ctx.persistant_data[widget.key.hash] = Persistant_Data {
 		text_minimum_width = text.minimum_width,
 		text_maximum_width = text.maximum_width,
 		rect               = widget.rect,
-		auto_clip_value    = widget.clip.value,
+		auto_clip_value    = widget_clip.value,
 		content_size       = widget.resolved.content_size,
 	}
 }
@@ -259,6 +286,15 @@ begin_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.lines)
 	clear(&ctx.widgets)
 	clear(&ctx.render_commands)
+
+	clear(&ctx.styles)
+	clear(&ctx.clips)
+	clear(&ctx.overrides)
+
+	append(&ctx.styles, Rect_Style{})
+	append(&ctx.clips, Clip{})
+	append(&ctx.overrides, Override{})
+
 	clear(&ctx.temp)
 	clear(&ctx.pre)
 	clear(&ctx.post_r)

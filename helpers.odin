@@ -19,13 +19,8 @@ clip_auto :: proc "contextless" (scale: f32) -> (Clip_Kind, f32, f32) {
 	return .Auto, 0, scale
 }
 
-override :: proc "contextless" (
-	flags: [Axis]Override_Flags,
-	offset: [Axis]Override_Transform,
-	expand: [Axis]Override_Transform,
-	z_index: int = 0,
-) -> Override {
-	return {flags = flags, offset = offset, expand = expand, z_index = z_index}
+override :: proc "contextless" (flags: [Axis]Override_Flags, offset: [Axis]Override_Transform, expand: [Axis]Override_Transform) -> Override {
+	return {flags = flags, offset = offset, expand = expand}
 }
 
 flags :: proc "contextless" (x: Override_Flags = {}, y: Override_Flags = {}) -> [Axis]Override_Flags {
@@ -170,8 +165,20 @@ is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style)
 	return false
 }
 
+get_override :: proc(ctx: ^Core_Context, index: i32) -> ^Override {
+	return &ctx.overrides[index]
+}
+
+get_clip :: proc(ctx: ^Core_Context, index: i32) -> ^Clip {
+	return &ctx.clips[index]
+}
+
 get_widget :: proc(ctx: ^Core_Context, index: i32) -> ^Widget {
 	return &ctx.widgets[index]
+}
+
+get_style :: proc(ctx: ^Core_Context, index: i32) -> ^Rect_Style {
+	return &ctx.styles[index]
 }
 
 // INTERNALS
@@ -196,18 +203,19 @@ _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 
 	if widget.rect.size[axis] > widget.resolved.content_size[axis] {
 		return 0
 	}
-	switch widget.clip.kind[axis] {
+	widget_clip := get_clip(ctx, widget.clip)
+	switch widget_clip.kind[axis] {
 	case .None: return 0
-	case .Custom: return widget.clip.value[axis] * widget.clip.scale[axis]
+	case .Custom: return widget_clip.value[axis] * widget_clip.scale[axis]
 	case .Auto:
 		if ctx.mouse.hovered_clip == widget.key.hash {
-			widget.clip.value[axis] += ctx.mouse.scroll * widget.clip.scale[axis]
+			widget_clip.value[axis] += ctx.mouse.scroll * widget_clip.scale[axis]
 		}
 
-		widget.clip.value[axis] = min(0, widget.clip.value[axis])
-		widget.clip.value[axis] = max(widget.clip.value[axis], -(widget.resolved.content_size[axis] - widget.rect.size[axis]))
+		widget_clip.value[axis] = min(0, widget_clip.value[axis])
+		widget_clip.value[axis] = max(widget_clip.value[axis], -(widget.resolved.content_size[axis] - widget.rect.size[axis]))
 
-		return widget.clip.value[axis]
+		return widget_clip.value[axis]
 	}
 	return 0
 }
@@ -232,13 +240,9 @@ _get_layout :: proc(widget: ^Widget) -> (Layout, bool) {
 	unreachable()
 }
 
-_has_clip :: proc(widget: ^Widget) -> bool {
-	return widget.clip.kind[.X] != .None || widget.clip.kind[.Y] != .None
-}
-
-_clamp_border_radius :: proc(widget: ^Widget) {
+_clamp_border_radius :: proc(widget: ^Widget, widget_style: ^Rect_Style) {
 	comp := min(widget.rect.size.x, widget.rect.size.y)
-	for &r in widget.style.border.radius {
+	for &r in widget_style.border.radius {
 		r = min(comp / 2, r)
 	}
 }
