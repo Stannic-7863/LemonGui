@@ -1,7 +1,5 @@
 package core_ui
 
-import "base:intrinsics"
-import "core:fmt"
 import "core:sort"
 import "core:unicode/utf8"
 
@@ -97,16 +95,24 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		if is_layout {
 			_position_layout_childs(ctx, child, layout)
 		}
+
 		_clamp_border_radius(child)
 		_emit_render_commands(ctx, child, &z_index_offset)
 		_write_persistant_data(ctx, child)
+
 		if is_point_in_rect(child.rect, ctx.mouse.position, child.style.border) &&
 		   .Pointer_Passthrough not_in child.event_flags &&
 		   !ctx.mouse.hover_is_locked {
+
+			if _has_clip(child) {
+				ctx.mouse.hovered_clip = child.key.hash
+			}
+
 			ctx.mouse.hovered = child.key.hash
 			ctx.mouse.can_lock_active = .Lock_Active in child.event_flags
 			ctx.mouse.can_lock_hover = .Lock_Hover in child.event_flags
 		}
+
 	}
 
 	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
@@ -145,8 +151,8 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 			}
 		}
 
-		parent := widget.parent
-		if parent == nil {continue}
+		if widget.parent == -1 {continue}
+		parent := get_widget(ctx, widget.parent)
 
 		if .No_Size_Propagation not_in widget.override.flags[axis] && parent.clip.kind[axis] == .None {
 			parent_kind := &parent.kind.(Layout)
@@ -163,7 +169,7 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 	for widget in ctx.pre {
 		layout, is_layout := _get_layout(widget)
 		if !is_layout {continue}
-		if widget.first == nil {continue}
+		if widget.first == -1 {continue}
 
 		total_child_gap := _get_child_gap(widget)
 		total_padding := _get_axis_padding(axis, widget.style.padding)
@@ -174,7 +180,9 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 
 			available := widget.rect.size[axis] - (total_child_gap + total_padding)
 
-			for child := widget.first; child != nil; child = child.next {
+			for child_index := widget.first; child_index != -1; {
+				child := get_widget(ctx, child_index)
+				child_index = child.next
 				switch child_kind in child.kind {
 				case Layout: #partial switch kind in child_kind.sizing[axis] {
 					case Grow:
@@ -203,7 +211,9 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 				_resolve_shrink(ctx, abs(available))
 			}
 		} else {
-			for child := widget.first; child != nil; child = child.next {
+			for child_index := widget.first; child_index != -1; {
+				child := get_widget(ctx, child_index)
+				child_index = child.next
 				switch child_kind in child.kind {
 				case Layout: #partial switch kind in child_kind.sizing[axis] {
 					case Grow:
@@ -302,14 +312,13 @@ _resolve_shrink :: proc(ctx: ^Core_Context, available: f32) {
 }
 
 _resolve_word_wrap :: proc(ctx: ^Core_Context) {
-	measured_words := make([dynamic]Measured_Word, context.temp_allocator)
 	for widget in ctx.pre {
 		switch &type in widget.kind {
 		case Layout: continue
 		case Text: switch type.wrap_mode {
 			case .Words:
-				_get_measured_words(ctx, type, &measured_words)
-				defer clear(&measured_words)
+				_get_measured_words(ctx, type)
+				defer clear(&ctx.measured_words)
 
 				maximum_width: f32
 				minimum_width: f32
@@ -321,13 +330,13 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				padding := _get_axis_padding(.X, widget.style.padding)
 				start := len(ctx.lines)
 
-				for word, index in measured_words {
+				for word, index in ctx.measured_words {
 					maximum_width += space_width * f32(word.spaces) + word.width
 					if word.string == "\n" {
 						accumulated_width = 0
 						append(&ctx.lines, type.text[new_line_index:word.start])
 						new_line_index = word.start
-						if index == len(measured_words) - 1 {
+						if index == len(ctx.measured_words) - 1 {
 							accumulated_height += (type.style.font_size + type.style.line_spacing)
 						}
 						continue
@@ -366,7 +375,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 	}
 }
 
-_get_measured_words :: proc(ctx: ^Core_Context, text: Text, measured_words: ^[dynamic]Measured_Word) {
+_get_measured_words :: proc(ctx: ^Core_Context, text: Text) {
 	word_start_byte_index, spaces_before_word, byte_index: int
 
 	for byte_index < len(text.text) {
@@ -376,11 +385,11 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, measured_words: ^[dy
 			if byte_index > word_start_byte_index {
 				word := text.text[word_start_byte_index:byte_index]
 				width := ctx.measure_text_proc(word, text.style)
-				append(measured_words, Measured_Word{string = word, width = width, start = word_start_byte_index})
+				append(&ctx.measured_words, Measured_Word{string = word, width = width, start = word_start_byte_index})
 			}
 			byte_index += 1
 			word_start_byte_index = byte_index
-			append(measured_words, Measured_Word{string = "\n", spaces = spaces_before_word, start = word_start_byte_index})
+			append(&ctx.measured_words, Measured_Word{string = "\n", spaces = spaces_before_word, start = word_start_byte_index})
 			spaces_before_word = 0
 			continue
 		}
@@ -408,7 +417,7 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, measured_words: ^[dy
 
 		word := text.text[word_start_byte_index:byte_index]
 		width := ctx.measure_text_proc(word, text.style)
-		append(measured_words, Measured_Word{string = word, width = width, spaces = spaces_before_word, start = word_start_byte_index})
+		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before_word, start = word_start_byte_index})
 		word_start_byte_index = byte_index
 		spaces_before_word = 0
 	}
@@ -416,7 +425,7 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, measured_words: ^[dy
 	if word_start_byte_index < len(text.text) {
 		word := text.text[word_start_byte_index:]
 		width := ctx.measure_text_proc(word, text.style)
-		append(measured_words, Measured_Word{string = word, width = width, spaces = spaces_before_word, start = word_start_byte_index})
+		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before_word, start = word_start_byte_index})
 	}
 }
 
@@ -425,7 +434,9 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 	axis := layout.direction
 	other_axis := _get_other_axis(axis)
 
-	for child := widget.first; child != nil; child = child.next {
+	for child_index := widget.first; child_index != -1; {
+		child := get_widget(ctx, child_index)
+		child_index = child.next
 		expand_axis := _get_override_transform_value(child.override.expand, child.rect.size, widget.rect.size, axis)
 		expand_other_axis := _get_override_transform_value(child.override.expand, child.rect.size, widget.rect.size, other_axis)
 
@@ -466,7 +477,9 @@ _position_layout_childs :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Lay
 	clip_axis := _get_clip_value(ctx, widget, axis)
 	clip_other_axis := _get_clip_value(ctx, widget, other_axis)
 
-	for child := widget.first; child != nil; child = child.next {
+	for child_index := widget.first; child_index != -1; {
+		child := get_widget(ctx, child_index)
+		child_index = child.next
 		offset_axis := _get_override_transform_value(child.override.offset, child.rect.size, widget.rect.size, axis)
 		offset_other_axis := _get_override_transform_value(child.override.offset, child.rect.size, widget.rect.size, other_axis)
 

@@ -6,6 +6,8 @@ Vec2f32 :: [2]f32
 Vec4f32 :: [4]f32
 Color :: [4]f32
 
+Hash :: distinct u64
+
 Rect :: struct {
 	position, size: Vec2f32,
 }
@@ -45,14 +47,14 @@ Text_Style :: struct {
 }
 
 Rect_Style :: struct {
+	border:  Border_Style,
 	color:   Vec4f32,
 	padding: [Axis]Vec2f32,
-	border:  Border_Style,
 }
 
 Border_Style :: struct {
-	thickness: [Axis]Vec2f32,
 	color:     [4]Color,
+	thickness: [Axis]Vec2f32,
 	radius:    Vec4f32,
 }
 
@@ -68,13 +70,13 @@ Keying_Id :: union {
 
 Key :: struct {
 	keying_id:         Keying_Id,
-	hash, parent_hash: u64,
+	hash, parent_hash: Hash,
 }
 
 Clip :: struct {
-	kind:  [Axis]Clip_Kind,
 	value: [Axis]f32,
 	scale: [Axis]f32,
+	kind:  [Axis]Clip_Kind,
 }
 
 Clip_Kind :: enum u8 {
@@ -95,26 +97,27 @@ Widget :: struct {
 	resolved:                        Resolved,
 	clip:                            Clip,
 	rect:                            Rect,
-	id:                              u64,
-	total_children:                  int,
 	image:                           rawptr,
-	custom:                          rawptr,
-	first, last, prev, next, parent: ^Widget,
+	custom_data:                     rawptr,
+	total_children, index:           i32,
+	first, last, prev, next, parent: i32,
 	event_flags:                     Event_Flags,
 }
 
 Core_Context :: struct {
-	active_parent, active_clip: ^Widget,
-	temp, post_r, pre, clips:   [dynamic]^Widget,
-	growable:                   [dynamic]Growable,
-	widgets:                    [dynamic]Widget,
-	lines:                      [dynamic]string,
-	render_commands:            [dynamic]Render_Command,
-	persistant_data:            map[u64]Persistant_Data,
-	measure_text_proc:          proc(text: string, style: Text_Style) -> f32,
-	mouse:                      Mouse_Context,
-	keyboard:                   Keyboard_Context,
-	window_size:                Vec2f32,
+	active_parent:            i32,
+	active_clip:              ^Widget,
+	temp, post_r, pre, clips: [dynamic]^Widget,
+	growable:                 [dynamic]Growable,
+	widgets:                  [dynamic]Widget,
+	lines:                    [dynamic]string,
+	render_commands:          [dynamic]Render_Command,
+	measured_words:           [dynamic]Measured_Word,
+	persistant_data:          map[Hash]Persistant_Data,
+	measure_text_proc:        proc(text: string, style: Text_Style) -> f32,
+	mouse:                    Mouse_Context,
+	keyboard:                 Keyboard_Context,
+	window_size:              Vec2f32,
 }
 
 Persistant_Data :: struct {
@@ -128,7 +131,7 @@ Persistant_Data :: struct {
 init_context :: proc(size: int) -> Core_Context {
 	ctx: Core_Context
 	ctx.widgets = make([dynamic]Widget, 0, size)
-	ctx.persistant_data = make(map[u64]Persistant_Data)
+	ctx.persistant_data = make(map[Hash]Persistant_Data)
 	return ctx
 }
 
@@ -157,44 +160,53 @@ create_widget :: proc(
 	widget.key.keying_id = id
 	widget.parent = ctx.active_parent
 
-	_add_widget_to_tree(widget)
+	_add_widget_to_tree(ctx, widget)
 	_generate_widget_hash(widget)
 	_read_persistant_data(ctx, widget)
 	return widget
 }
 
 _get_new_widget :: proc(ctx: ^Core_Context) -> ^Widget {
+	widget_index := cast(i32)len(ctx.widgets)
 	append(&ctx.widgets, Widget{})
-	widget := &ctx.widgets[len(ctx.widgets) - 1]
+	widget := &ctx.widgets[widget_index]
 	widget^ = {}
+	widget.index = widget_index
+	widget.parent = -1
+	widget.first = -1
+	widget.last = -1
+	widget.next = -1
+	widget.prev = -1
 	return widget
 }
 
-_add_widget_to_tree :: proc(widget: ^Widget) {
-	if widget.parent != nil {
-		widget.parent.total_children += 1
-		if widget.parent.first == nil {
-			widget.parent.first = widget
+_add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
+	if widget.parent != -1 {
+		parent := get_widget(ctx, widget.parent)
+		parent.total_children += 1
+		if parent.first == -1 {
+			parent.first = widget.index
 		}
 
-		widget.prev = widget.parent.last
+		widget.prev = parent.last
 
-		if widget.parent.last != nil {
-			widget.parent.last.next = widget
+		if parent.last != -1 {
+			last := get_widget(ctx, parent.last)
+			last.next = widget.index
 		}
 
-		widget.parent.last = widget
-		widget.override.z_index += widget.parent.override.z_index
-		widget.key.parent_hash = widget.parent.key.hash
+		parent.last = widget.index
+		widget.override.z_index += parent.override.z_index
+		widget.key.parent_hash = parent.key.hash
 	}
 }
 
 _generate_widget_hash :: proc(widget: ^Widget) {
 	switch key in widget.key.keying_id {
-	case string: widget.key.hash = hash.fnv64(transmute([]u8)key)
+	case string: widget.key.hash = cast(Hash)hash.fnv64(transmute([]u8)key)
 	case int:
 		e := (transmute([size_of(int)]u8)key)
-		widget.key.hash = hash.fnv64(e[:])
+		widget.key.hash = cast(Hash)hash.fnv64(e[:])
 	}
 	widget.key.hash ~= (widget.key.hash >> 2 ~ widget.key.parent_hash << 6)
 }
@@ -231,20 +243,19 @@ _write_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 
 push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
 	if text, ok := widget.kind.(Text); !ok {
-		ctx.active_parent = widget
+		ctx.active_parent = widget.index
 		return true
 	}
 	return false
 }
 
 pop_parent :: proc(ctx: ^Core_Context) {
-	if ctx.active_parent.parent != nil {
-		ctx.active_parent = ctx.active_parent.parent
-	}
+	current_parent := get_widget(ctx, ctx.active_parent)
+	ctx.active_parent = current_parent.parent
 }
 
 begin_ui :: proc(ctx: ^Core_Context) {
-	ctx.active_parent = nil
+	ctx.active_parent = -1
 	clear(&ctx.lines)
 	clear(&ctx.widgets)
 	clear(&ctx.render_commands)

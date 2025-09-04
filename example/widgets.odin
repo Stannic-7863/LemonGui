@@ -67,6 +67,7 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 		ctx,
 		"child 3",
 		cu.layout(cu.sizing(cu.grow(), cu.grow()), direction = .Y),
+		clip = cu.clip(cu.clip_none(), cu.clip_auto(5)),
 		style = cu.style(SURFACE_COLOR, cu.axis_vec2f32(16, 16)),
 	)
 

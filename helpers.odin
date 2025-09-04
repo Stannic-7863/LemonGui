@@ -1,7 +1,7 @@
 package core_ui
 
+import "core:fmt"
 import "core:math/linalg"
-import "core:text/regex/compiler"
 
 clip :: proc "contextless" (x_kind: Clip_Kind, x_value: f32, x_scale: f32, y_kind: Clip_Kind, y_value: f32, y_scale: f32) -> Clip {
 	return Clip{value = {.X = x_value, .Y = y_value}, kind = {.X = x_kind, .Y = y_kind}, scale = {.X = x_scale, .Y = y_scale}}
@@ -170,6 +170,10 @@ is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style)
 	return false
 }
 
+get_widget :: proc(ctx: ^Core_Context, index: i32) -> ^Widget {
+	return &ctx.widgets[index]
+}
+
 // INTERNALS
 
 _get_override_transform_value :: proc(
@@ -196,7 +200,7 @@ _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 
 	case .None: return 0
 	case .Custom: return widget.clip.value[axis] * widget.clip.scale[axis]
 	case .Auto:
-		if ctx.mouse.hovered == widget.key.hash {
+		if ctx.mouse.hovered_clip == widget.key.hash {
 			widget.clip.value[axis] += ctx.mouse.scroll * widget.clip.scale[axis]
 		}
 
@@ -228,6 +232,10 @@ _get_layout :: proc(widget: ^Widget) -> (Layout, bool) {
 	unreachable()
 }
 
+_has_clip :: proc(widget: ^Widget) -> bool {
+	return widget.clip.kind[.X] != .None || widget.clip.kind[.Y] != .None
+}
+
 _clamp_border_radius :: proc(widget: ^Widget) {
 	comp := min(widget.rect.size.x, widget.rect.size.y)
 	for &r in widget.style.border.radius {
@@ -236,13 +244,14 @@ _clamp_border_radius :: proc(widget: ^Widget) {
 }
 
 _build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
-
 	required_length := len(ctx.widgets)
 	resize(&ctx.pre, required_length)
 	resize(&ctx.temp, required_length)
 	resize(&ctx.post_r, required_length)
 
-	ctx.temp[0] = &ctx.widgets[0]
+	fmt.println(required_length)
+
+	ctx.temp[0] = get_widget(ctx, 0)
 	temp_cursor: int
 	buffer_cursor: int
 
@@ -253,9 +262,11 @@ _build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
 		ctx.post_r[buffer_cursor] = widget
 		buffer_cursor += 1
 
-		for child_widget := widget.first; child_widget != nil; child_widget = child_widget.next {
+		for child_index := widget.first; child_index != -1; {
+			child := get_widget(ctx, child_index)
+			child_index = child.next
 			temp_cursor += 1
-			ctx.temp[temp_cursor] = child_widget
+			ctx.temp[temp_cursor] = child
 		}
 	}
 
@@ -270,11 +281,11 @@ _build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
 		ctx.pre[buffer_cursor] = widget
 		buffer_cursor += 1
 
-		for child_widget := widget.last; child_widget != nil; child_widget = child_widget.prev {
+		for child_index := widget.last; child_index != -1; {
+			child := get_widget(ctx, child_index)
+			child_index = child.prev
 			temp_cursor += 1
-			ctx.temp[temp_cursor] = child_widget
+			ctx.temp[temp_cursor] = child
 		}
 	}
-
-	clear(&ctx.temp)
 }

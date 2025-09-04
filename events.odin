@@ -160,6 +160,7 @@ Event_Flag :: enum u8 {
 	Lock_Active,
 	Lock_Hover,
 	Focusable,
+	Occlude_Clip,
 }
 
 Event_Flags :: bit_set[Event_Flag]
@@ -176,8 +177,9 @@ Mouse_Context :: struct {
 	delta:                Vec2f32,
 	scroll_v:             Vec2f32,
 	scroll:               f32,
-	hovered:              u64,
-	active:               u64,
+	hovered:              Hash,
+	hovered_clip:         Hash,
+	active:               Hash,
 	can_lock_active:      bool,
 	can_lock_hover:       bool,
 	active_is_locked:     bool,
@@ -191,7 +193,7 @@ Keyboard_Context :: struct {
 	events:               [Keyboard_Key]bit_set[Widget_Key_Event],
 	double_click_timeout: time.Duration,
 	long_down_timeout:    time.Duration,
-	focused:              u64,
+	focused:              Hash,
 	pressed_char:         []rune,
 }
 

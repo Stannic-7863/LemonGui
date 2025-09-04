@@ -14,7 +14,7 @@ Render_Command :: struct {
 	kind:              Render_Command_Kind,
 	rect:              Rect,
 	z_index:           int,
-	emitter_id:        u64,
+	emitter_hash:      Hash,
 	emitter_string_id: Keying_Id,
 }
 
@@ -49,13 +49,15 @@ Command_Custom :: struct {
 
 _emit_render_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
 
-	if widget.clip.kind[.X] != .None || widget.clip.kind[.Y] != .None {
+	if _has_clip(widget) {
 		if ctx.active_clip != nil {
 			append(&ctx.clips, ctx.active_clip)
 		}
 
-		ctx.active_clip = widget
-		_emit_clip_start_command(ctx, widget, z_index)
+		if widget.first != -1 {
+			ctx.active_clip = widget
+			_emit_clip_start_command(ctx, widget, z_index)
+		}
 	}
 
 	_emit_rect_command(ctx, widget, z_index)
@@ -64,14 +66,16 @@ _emit_render_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int
 	_emit_text_command(ctx, widget, z_index)
 	_emit_widget_border_command(ctx, widget, z_index)
 
-	if widget.next == nil && widget.first == nil {
-		for parent := widget.parent; parent != nil; parent = parent.parent {
+	if widget.next == -1 && widget.first == -1 {
+		for parent_index := widget.parent; parent_index != -1; {
+			parent := get_widget(ctx, parent_index)
+			parent_index = parent.parent
 			if parent == ctx.active_clip {
 				_emit_clip_end_command(ctx, parent, z_index)
 				ctx.active_clip, _ = pop_safe(&ctx.clips)
 				break
 			}
-			if parent.next != nil {
+			if parent.next != -1 {
 				break
 			}
 		}
@@ -121,8 +125,8 @@ _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) 
 }
 
 _emit_custom_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int) {
-	if widget.custom != nil {
-		_add_render_command(ctx, widget, Command_Custom{data = widget.custom}, z_index)
+	if widget.custom_data != nil {
+		_add_render_command(ctx, widget, Command_Custom{data = widget.custom_data}, z_index)
 	}
 }
 
@@ -133,7 +137,7 @@ _add_render_command :: proc(ctx: ^Core_Context, widget: ^Widget, kind: Render_Co
 			kind = kind,
 			z_index = z_index^ + widget.override.z_index,
 			rect = widget.rect,
-			emitter_id = widget.id,
+			emitter_hash = widget.key.hash,
 			emitter_string_id = widget.key.keying_id,
 		},
 	)
