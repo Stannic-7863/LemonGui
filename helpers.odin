@@ -164,19 +164,19 @@ is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style)
 	return false
 }
 
-get_override :: proc(ctx: ^Core_Context, index: i32) -> ^Override {
+get_override :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Override #no_bounds_check {
 	return &ctx.overrides[index]
 }
 
-get_clip :: proc(ctx: ^Core_Context, index: i32) -> ^Clip {
+get_clip :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Clip #no_bounds_check {
 	return &ctx.clips[index]
 }
 
-get_widget :: proc(ctx: ^Core_Context, index: i32) -> ^Widget {
+get_widget :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Widget #no_bounds_check {
 	return &ctx.widgets[index]
 }
 
-get_style :: proc(ctx: ^Core_Context, index: i32) -> ^Rect_Style {
+get_style :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Rect_Style #no_bounds_check {
 	return &ctx.styles[index]
 }
 
