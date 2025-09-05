@@ -180,6 +180,33 @@ get_style :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Rect_Style #
 	return &ctx.styles[index]
 }
 
+sort_render_commands :: proc(commands: []Render_Command) #no_bounds_check {
+	commands := commands
+	length := len(commands)
+	if length < 2 {
+		return
+	}
+
+	p := commands[length / 2]
+	i, j := 0, length - 1
+
+	loop: for {
+		for (commands[i].z_index - p.z_index) < 0 {i += 1}
+		for (p.z_index - commands[j].z_index) < 0 {j -= 1}
+
+		if i >= j {
+			break loop
+		}
+
+		commands[i], commands[j] = commands[j], commands[i]
+		i += 1
+		j -= 1
+	}
+
+	sort_render_commands(commands[0:i])
+	sort_render_commands(commands[i:length])
+}
+
 // INTERNALS
 
 _get_override_transform_value :: proc(

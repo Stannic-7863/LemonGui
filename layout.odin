@@ -1,6 +1,5 @@
 package core_ui
 
-import "core:sort"
 import "core:unicode/utf8"
 
 Axis :: enum {
@@ -117,7 +116,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 	}
 
-	sort.quick_sort_proc(ctx.render_commands[:], proc(a, b: Render_Command) -> int {return a.z_index - b.z_index})
+	sort_render_commands(ctx.render_commands[:])
 
 	ctx.mouse.events = {}
 	ctx.keyboard.events = {}
@@ -387,56 +386,56 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 }
 
 _get_measured_words :: proc(ctx: ^Core_Context, text: Text) {
-	word_start_byte_index, spaces_before_word, byte_index: int
+	word_start := 0
+	spaces_before := 0
+	data := transmute([]u8)text.text
+	byte_index := 0
 
-	for byte_index < len(text.text) {
-		r := utf8.rune_at(text.text, byte_index)
+	for byte_index < len(data) {
+		r, size := utf8.decode_rune_in_bytes(data[byte_index:])
 
 		if r == '\n' {
-			if byte_index > word_start_byte_index {
-				word := text.text[word_start_byte_index:byte_index]
+			if byte_index > word_start {
+				word := text.text[word_start:byte_index]
 				width := ctx.measure_text_proc(word, text.style)
-				append(&ctx.measured_words, Measured_Word{string = word, width = width, start = word_start_byte_index})
+				append(&ctx.measured_words, Measured_Word{string = word, width = width, start = word_start})
 			}
-			byte_index += 1
-			word_start_byte_index = byte_index
-			append(&ctx.measured_words, Measured_Word{string = "\n", spaces = spaces_before_word, start = word_start_byte_index})
-			spaces_before_word = 0
+			byte_index += size
+			word_start = byte_index
+			append(&ctx.measured_words, Measured_Word{string = "\n", spaces = spaces_before, start = word_start})
+			spaces_before = 0
 			continue
 		}
 
 		if r == ' ' {
-			for byte_index < len(text.text) {
-				r2 := utf8.rune_at(text.text, byte_index)
-				if r2 != ' ' {
-					break
-				}
-				spaces_before_word += 1
-				byte_index += 1
+			for byte_index < len(data) {
+				r2, size2 := utf8.decode_rune_in_bytes(data[byte_index:])
+				if r2 != ' ' {break}
+				spaces_before += 1
+				byte_index += size2
 			}
-			word_start_byte_index = byte_index
+			word_start = byte_index
 			continue
 		}
 
-		for byte_index < len(text.text) {
-			r2 := utf8.rune_at(text.text, byte_index)
-			if r2 == ' ' || r2 == '\n' {
-				break
-			}
-			byte_index += 1
+		start := byte_index
+		for byte_index < len(data) {
+			r2, size2 := utf8.decode_rune_in_bytes(data[byte_index:])
+			if r2 == ' ' || r2 == '\n' {break}
+			byte_index += size2
 		}
 
-		word := text.text[word_start_byte_index:byte_index]
+		word := text.text[start:byte_index]
 		width := ctx.measure_text_proc(word, text.style)
-		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before_word, start = word_start_byte_index})
-		word_start_byte_index = byte_index
-		spaces_before_word = 0
+		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before, start = start})
+		word_start = byte_index
+		spaces_before = 0
 	}
 
-	if word_start_byte_index < len(text.text) {
-		word := text.text[word_start_byte_index:]
+	if word_start < len(data) {
+		word := text.text[word_start:]
 		width := ctx.measure_text_proc(word, text.style)
-		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before_word, start = word_start_byte_index})
+		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before, start = word_start})
 	}
 }
 
