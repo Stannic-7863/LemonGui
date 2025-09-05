@@ -207,7 +207,7 @@ _get_new_widget :: proc(ctx: ^Core_Context, style: Rect_Style, clip: Clip, overr
 
 _add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	if widget.parent != -1 {
-		parent := get_widget(ctx, widget.parent)
+		parent := &ctx.widgets[widget.parent]
 		parent.total_children += 1
 		if parent.first == -1 {
 			parent.first = widget.index
@@ -216,7 +216,7 @@ _add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
 		widget.prev = parent.last
 
 		if parent.last != -1 {
-			last := get_widget(ctx, parent.last)
+			last := &ctx.widgets[parent.last]
 			last.next = widget.index
 		}
 
@@ -244,7 +244,7 @@ _read_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	widget.resolved.content_size = data.content_size
 
 	for axis in Axis {
-		widget_clip := get_clip(ctx, widget.clip)
+		widget_clip := &ctx.clips[widget.clip]
 		if widget_clip.kind[axis] == .Auto {
 			widget_clip.value[axis] = data.auto_clip_value[axis]
 		}
@@ -258,12 +258,12 @@ _read_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 
 _write_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	text, ok := widget.kind.(Text)
-	widget_clip := get_clip(ctx, widget.clip)
+	widget_clip_value := ctx.clips[widget.clip].value
 	ctx.persistant_data[widget.key.hash] = Persistant_Data {
 		text_minimum_width = text.minimum_width,
 		text_maximum_width = text.maximum_width,
 		rect               = widget.rect,
-		auto_clip_value    = widget_clip.value,
+		auto_clip_value    = widget_clip_value,
 		content_size       = widget.resolved.content_size,
 	}
 }
@@ -277,8 +277,7 @@ push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
 }
 
 pop_parent :: proc(ctx: ^Core_Context) {
-	current_parent := get_widget(ctx, ctx.active_parent)
-	ctx.active_parent = current_parent.parent
+	ctx.active_parent = ctx.widgets[ctx.active_parent].parent
 }
 
 begin_ui :: proc(ctx: ^Core_Context) {

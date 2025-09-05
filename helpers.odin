@@ -202,7 +202,7 @@ _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 
 	if widget.rect.size[axis] > widget.resolved.content_size[axis] {
 		return 0
 	}
-	widget_clip := get_clip(ctx, widget.clip)
+	widget_clip := &ctx.clips[widget.clip]
 	switch widget_clip.kind[axis] {
 	case .None: return 0
 	case .Custom: return widget_clip.value[axis] * widget_clip.scale[axis]
@@ -252,7 +252,7 @@ _build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
 	resize(&ctx.temp, required_length)
 	resize(&ctx.post_r, required_length)
 
-	ctx.temp[0] = get_widget(ctx, 0)
+	ctx.temp[0] = &ctx.widgets[0]
 
 	temp_cursor: int
 	buffer_cursor: int
@@ -265,7 +265,7 @@ _build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
 		buffer_cursor += 1
 
 		for child_index := widget.first; child_index != -1; {
-			child := get_widget(ctx, child_index)
+			child := &ctx.widgets[child_index]
 			child_index = child.next
 			temp_cursor += 1
 			ctx.temp[temp_cursor] = child
@@ -284,7 +284,7 @@ _build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
 		buffer_cursor += 1
 
 		for child_index := widget.last; child_index != -1; {
-			child := get_widget(ctx, child_index)
+			child := &ctx.widgets[child_index]
 			child_index = child.prev
 			temp_cursor += 1
 			ctx.temp[temp_cursor] = child

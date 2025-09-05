@@ -48,7 +48,7 @@ Command_Custom :: struct {
 }
 
 _emit_render_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int, widget_style: ^Rect_Style) {
-	widget_clip := get_clip(ctx, widget.clip)
+	widget_clip := ctx.clips[widget.clip]
 	if widget_clip.kind[.X] != .None || widget_clip.kind[.Y] != .None {
 		if ctx.active_clip != nil {
 			append(&ctx.clippers, ctx.active_clip)
@@ -69,7 +69,7 @@ _emit_render_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int
 
 	if widget.next == -1 && widget.first == -1 {
 		for parent_index := widget.parent; parent_index != -1; {
-			parent := get_widget(ctx, parent_index)
+			parent := &ctx.widgets[parent_index]
 			parent_index = parent.parent
 			if parent == ctx.active_clip {
 				_emit_clip_end_command(ctx, parent, z_index)
