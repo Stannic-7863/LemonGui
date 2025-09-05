@@ -231,14 +231,6 @@ _get_child_gap :: proc(widget: ^Widget) -> f32 {
 	return max(0, f32(widget.total_children - 1)) * widget.kind.(Layout).child_gap
 }
 
-_get_layout :: proc(widget: ^Widget) -> (Layout, bool) {
-	switch kind in widget.kind {
-	case Layout: return kind, true
-	case Text: return {}, false
-	}
-	unreachable()
-}
-
 _clamp_border_radius :: proc(widget: ^Widget, widget_style: ^Rect_Style) {
 	comp := min(widget.rect.size.x, widget.rect.size.y)
 	for &r in widget_style.border.radius {
