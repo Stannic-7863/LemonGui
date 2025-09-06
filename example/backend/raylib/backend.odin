@@ -34,7 +34,7 @@ render :: proc(ctx: ui.Core_Context) {
 			}
 		case ui.Command_Image:
 			image := cast(^rl.Texture)command_kind.data
-			rl.DrawTextureEx(image^, command.rect.position, 0, command.rect.size.x / cast(f32)image.width, cast(rl.Color)rl.WHITE)
+			rl.DrawTextureEx(image^, command.rect.position, 0, command.rect.size.x / cast(f32)image.width, color_to_rl(command_kind.tint))
 		case ui.Command_Custom:
 		}
 	}
