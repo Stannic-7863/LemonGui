@@ -96,7 +96,7 @@ text_style :: proc "contextless" (
 	}
 }
 
-style :: proc "contextless" (color: Color = 0, padding: [Axis]Vec2f32 = {}, border: Border_Style = {}) -> Rect_Style {
+style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, padding: [Axis]Vec2f32 = {}, border: Border_Style = {}) -> Widget_Style {
 	return {color = color, border = border, padding = padding}
 }
 
@@ -176,7 +176,7 @@ get_widget :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Widget #no_
 	return &ctx.widgets[index]
 }
 
-get_style :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Rect_Style #no_bounds_check {
+get_style :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Widget_Style #no_bounds_check {
 	return &ctx.styles[index]
 }
 
@@ -258,7 +258,7 @@ _get_child_gap :: proc(widget: ^Widget) -> f32 {
 	return max(0, f32(widget.total_children - 1)) * widget.kind.(Layout).child_gap
 }
 
-_clamp_border_radius :: proc(widget: ^Widget, widget_style: ^Rect_Style) {
+_clamp_border_radius :: proc(widget: ^Widget, widget_style: ^Widget_Style) {
 	comp := min(widget.rect.size.x, widget.rect.size.y)
 	for &r in widget_style.border.radius {
 		r = min(comp / 2, r)

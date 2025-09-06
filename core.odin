@@ -4,7 +4,7 @@ import "core:hash"
 
 Vec2f32 :: [2]f32
 Vec4f32 :: [4]f32
-Color :: [4]f32
+Color :: Vec4f32
 
 Hash :: distinct u64
 
@@ -46,10 +46,11 @@ Text_Style :: struct {
 	line_spacing:   f32,
 }
 
-Rect_Style :: struct {
-	border:  Border_Style,
-	color:   Vec4f32,
-	padding: [Axis]Vec2f32,
+Widget_Style :: struct {
+	border:     Border_Style,
+	color:      Color,
+	image_tint: Color,
+	padding:    [Axis]Vec2f32,
 }
 
 Border_Style :: struct {
@@ -110,7 +111,7 @@ Core_Context :: struct {
 	active_clip:                 ^Widget,
 	overrides:                   [dynamic]Override,
 	clips:                       [dynamic]Clip,
-	styles:                      [dynamic]Rect_Style,
+	styles:                      [dynamic]Widget_Style,
 	temp, post_r, pre, clippers: [dynamic]^Widget,
 	growable:                    [dynamic]Growable,
 	widgets:                     [dynamic]Widget,
@@ -151,7 +152,7 @@ create_widget :: proc(
 	event_flags: Event_Flags = {},
 	clip: Clip = {},
 	image: rawptr = nil,
-	style: Rect_Style = {},
+	style: Widget_Style = {},
 ) -> ^Widget {
 	widget := _get_new_widget(ctx, style, clip, override)
 
@@ -168,7 +169,7 @@ create_widget :: proc(
 	return widget
 }
 
-_get_new_widget :: proc(ctx: ^Core_Context, style: Rect_Style, clip: Clip, override: Override) -> ^Widget {
+_get_new_widget :: proc(ctx: ^Core_Context, style: Widget_Style, clip: Clip, override: Override) -> ^Widget {
 
 	clip_index: i32
 	style_index: i32
@@ -290,7 +291,7 @@ begin_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.clips)
 	clear(&ctx.overrides)
 
-	append(&ctx.styles, Rect_Style{})
+	append(&ctx.styles, Widget_Style{})
 	append(&ctx.clips, Clip{})
 	append(&ctx.overrides, Override{})
 
