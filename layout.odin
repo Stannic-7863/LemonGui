@@ -149,6 +149,9 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 			}
 			widget.rect.size[axis] = max(widget_kind.accumulating_min[axis], widget.rect.size[axis])
 		case Text: if axis == .X {
+				if widget_kind.minimum_width == 0 {
+					widget_kind.minimum_width = ctx.measure_text_proc(widget_kind.text, widget_kind.style)
+				}
 				widget.rect.size[axis] = max(widget_kind.minimum_width, min(widget_kind.maximum_width, widget_kind.preferred_min))
 			}
 		}

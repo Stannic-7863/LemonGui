@@ -108,8 +108,8 @@ axis_vec2f32 :: proc "contextless" (x: Vec2f32 = 0, y: Vec2f32 = 0) -> [Axis]Vec
 	return {.X = x, .Y = y}
 }
 
-axis_vec4f32 :: proc "contextless" (padding: Vec4f32) -> [Axis]Vec2f32 {
-	return {.X = {padding[3], padding[1]}, .Y = {padding[0], padding[2]}}
+axis_vec4f32 :: proc "contextless" (vec4: Vec4f32) -> [Axis]Vec2f32 {
+	return {.X = {vec4[3], vec4[1]}, .Y = {vec4[0], vec4[2]}}
 }
 
 // EVENTS
