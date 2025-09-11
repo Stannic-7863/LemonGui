@@ -169,7 +169,12 @@ create_widget :: proc(
 	return widget
 }
 
-_get_new_widget :: proc(ctx: ^Core_Context, style: Widget_Style, clip: Clip, override: Override) -> ^Widget {
+_get_new_widget :: proc(
+	ctx: ^Core_Context,
+	style: Widget_Style,
+	clip: Clip,
+	override: Override,
+) -> ^Widget {
 
 	clip_index: i32
 	style_index: i32
@@ -229,7 +234,8 @@ _add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
 
 _generate_widget_hash :: proc(widget: ^Widget) {
 	switch key in widget.key.keying_id {
-	case string: widget.key.hash = cast(Hash)hash.fnv64(transmute([]u8)key)
+	case string:
+		widget.key.hash = cast(Hash)hash.fnv64(transmute([]u8)key)
 	case int:
 		e := (transmute([size_of(int)]u8)key)
 		widget.key.hash = cast(Hash)hash.fnv64(e[:])

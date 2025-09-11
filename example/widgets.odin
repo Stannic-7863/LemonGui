@@ -9,7 +9,13 @@ Image :: struct {
 	data: rawptr,
 }
 
-build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, font: rawptr, width, height: f32) {
+build_ui :: proc(
+	ctx: ^cu.Core_Context,
+	tick_image: Image,
+	aaloo_image: Image,
+	font: rawptr,
+	width, height: f32,
+) {
 	root := cu.create_widget(
 		ctx,
 		"Root",
@@ -24,7 +30,7 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 		cu.layout(cu.sizing(cu.grow(), cu.grow()), child_gap = 8, direction = .Y),
 		event_flags = {.Lock_Active, .Lock_Hover},
 		clip = cu.clip(cu.clip_none(), cu.clip_auto(50)),
-		style = cu.style(SURFACE_COLOR, cu.axis_vec2f32(8, 8)),
+		style = cu.style(SURFACE_COLOR, {}, cu.axis_vec2f32(8, 8)),
 	)
 
 	cu.push_parent(ctx, grow_1)
@@ -37,7 +43,10 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 		"scroll",
 		cu.layout(cu.sizing(cu.fixed(10), cu.fixed(bar_size))),
 		cu.override(
-			cu.flags({.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset}, {.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset}),
+			cu.flags(
+				{.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset},
+				{.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset},
+			),
 			cu.offset(cu.fixed(grow_1.resolved.size.x - 10), cu.percent(-bar_progress)),
 			cu.expand(),
 		),
@@ -51,7 +60,10 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 			i,
 			cu.layout(cu.sizing(cu.grow(), cu.percent(0.5))),
 			event_flags = {.Lock_Hover},
-			style = cu.style(ELEVATED_SURFACE_COLOR, border = cu.border(BORDER_COLOR, {5, 10, 20, 30}, cu.axis_vec2f32(1, 1))),
+			style = cu.style(
+				ELEVATED_SURFACE_COLOR,
+				border = cu.border(BORDER_COLOR, {5, 10, 20, 30}, cu.axis_vec2f32(1, 1)),
+			),
 		)
 		if cu.is_widget_hovered(ctx, w) {
 			widget_style := cu.get_style(ctx, w.style)
@@ -62,13 +74,18 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 
 	cu.pop_parent(ctx)
 
-	grow_2 := cu.create_widget(ctx, "child 2", cu.layout(cu.sizing(cu.grow(), cu.grow())), style = cu.style(SURFACE_COLOR))
+	grow_2 := cu.create_widget(
+		ctx,
+		"child 2",
+		cu.layout(cu.sizing(cu.grow(), cu.grow())),
+		style = cu.style(SURFACE_COLOR),
+	)
 	grow_3 := cu.create_widget(
 		ctx,
 		"child 3",
 		cu.layout(cu.sizing(cu.grow(), cu.grow()), direction = .Y),
 		clip = cu.clip(cu.clip_none(), cu.clip_auto(5)),
-		style = cu.style(SURFACE_COLOR, cu.axis_vec2f32(16, 16)),
+		style = cu.style(SURFACE_COLOR, {}, cu.axis_vec2f32(16, 16)),
 	)
 
 	cu.push_parent(ctx, grow_3)
@@ -77,18 +94,41 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	cu.create_widget(
 		ctx,
 		"text",
-		cu.text("A QUICK BROWN FOX JUMPS OVER THE LAZY DOG", {color = TEXT_PRIMARY_COLOR, font = font, font_size = 16, letter_spacing = 2, line_spacing = 0}),
-		style = cu.style({}, cu.axis_vec2f32(16, 16), cu.border(BORDER_COLOR, 0, cu.axis_vec2f32(2, 2))),
+		cu.text(
+			"A QUICK BROWN FOX JUMPS OVER THE LAZY DOG",
+			{
+				color = TEXT_PRIMARY_COLOR,
+				font = font,
+				font_size = 16,
+				letter_spacing = 2,
+				line_spacing = 0,
+			},
+		),
+		style = cu.style(
+			{},
+			{},
+			cu.axis_vec2f32(16, 16),
+			cu.border(BORDER_COLOR, 0, cu.axis_vec2f32(2, 2)),
+		),
 	)
 
-	body := cu.create_widget(ctx, "body", cu.layout(cu.sizing(cu.grow(), cu.fit())), style = cu.style(ERROR_COLOR, cu.axis_vec2f32(8, 8)))
+	body := cu.create_widget(
+		ctx,
+		"body",
+		cu.layout(cu.sizing(cu.grow(), cu.fit())),
+		style = cu.style(ERROR_COLOR, {}, cu.axis_vec2f32(8, 8)),
+	)
 
 	cu.push_parent(ctx, body)
 
 	thumb_rail := cu.create_widget(
 		ctx,
 		"grow fixed",
-		cu.layout(cu.sizing(cu.grow(), cu.fixed(8)), cu.alignment(.Center, .Center), direction = .Y),
+		cu.layout(
+			cu.sizing(cu.grow(), cu.fixed(8)),
+			cu.alignment(.Center, .Center),
+			direction = .Y,
+		),
 		style = cu.style(ELEVATED_SURFACE_COLOR),
 	)
 
@@ -104,7 +144,11 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 		ctx,
 		"slider thumb",
 		cu.layout(cu.sizing(cu.fixed(12), cu.fixed(12))),
-		override = cu.override(cu.flags({.No_Size_Propagation}, {.No_Size_Propagation}), cu.offset(cu.Percent{thumb_along}), cu.expand()),
+		override = cu.override(
+			cu.flags({.No_Size_Propagation}, {.No_Size_Propagation}),
+			cu.offset(cu.Percent{thumb_along}),
+			cu.expand(),
+		),
 		event_flags = {.Lock_Active, .Lock_Hover},
 		style = cu.style(SUCCESS_COLOR),
 	)
@@ -112,10 +156,17 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 	cu.create_widget(
 		ctx,
 		"slider value label",
-		cu.text(fmt.tprintf("%v", value), cu.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, font), .None),
+		cu.text(
+			fmt.tprintf("%v", value),
+			cu.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, font),
+			.None,
+		),
 		cu.override(
 			cu.flags({.No_Size_Propagation}, {.No_Size_Propagation, .No_Positioning}),
-			cu.offset(cu.percent(thumb_along), cu.fixed(thumb.resolved.position.y + thumb.resolved.size.x + 8)),
+			cu.offset(
+				cu.percent(thumb_along),
+				cu.fixed(thumb.resolved.position.y + thumb.resolved.size.x + 8),
+			),
 			cu.expand(),
 		),
 	)
