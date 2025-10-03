@@ -44,7 +44,7 @@ main :: proc() {
 	rl.InitWindow(0, 0, "Window")
 	defer rl.CloseWindow()
 
-	font := rl.GetFontDefault() //rl.LoadFontEx("./assets/OpenSans-Regular.ttf", 64, nil, 0)
+	font := rl.GetFontDefault()
 	tick_rl := rl.LoadTexture("./assets/tick.png")
 	aaloo_rl := rl.LoadTexture("./assets/DA TRULY BIG AALOO.jpg")
 	defer rl.UnloadFont(font)

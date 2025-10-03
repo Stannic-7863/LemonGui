@@ -204,9 +204,12 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 	for mouse_events, mouse_button in ctx.mouse.mapped_events {
 		for mouse_event in mouse_events {
 			switch mouse_event {
-			case .Pressed: _handle_mouse_pressed(ctx, mouse_button, mouse_event)
-			case .Down: _handle_mouse_down(ctx, mouse_button, mouse_event)
-			case .Released: _handle_mouse_released(ctx, mouse_button, mouse_event)
+			case .Pressed:
+				_handle_mouse_pressed(ctx, mouse_button, mouse_event)
+			case .Down:
+				_handle_mouse_down(ctx, mouse_button, mouse_event)
+			case .Released:
+				_handle_mouse_released(ctx, mouse_button, mouse_event)
 			}
 		}
 	}
@@ -214,9 +217,12 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 	for keyboard_events, keyboard_key in ctx.keyboard.mapped_events {
 		for keyboard_event in keyboard_events {
 			switch keyboard_event {
-			case .Pressed: _handle_keyboard_pressed(ctx, keyboard_key, keyboard_event)
-			case .Released: _handle_keyboard_released(ctx, keyboard_key, keyboard_event)
-			case .Down: _handle_keyboard_down(ctx, keyboard_key, keyboard_event)
+			case .Pressed:
+				_handle_keyboard_pressed(ctx, keyboard_key, keyboard_event)
+			case .Released:
+				_handle_keyboard_released(ctx, keyboard_key, keyboard_event)
+			case .Down:
+				_handle_keyboard_down(ctx, keyboard_key, keyboard_event)
 			}
 		}
 	}

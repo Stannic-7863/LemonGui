@@ -1,21 +1,35 @@
 package core_ui
 
+import "core:fmt"
 import "core:math/linalg"
 
-clip :: proc "contextless" (x_kind: Clip_Kind, x_value: f32, x_scale: f32, y_kind: Clip_Kind, y_value: f32, y_scale: f32) -> Clip {
-	return Clip{value = {.X = x_value, .Y = y_value}, kind = {.X = x_kind, .Y = y_kind}, scale = {.X = x_scale, .Y = y_scale}}
+clip :: proc "contextless" (
+	x_kind: Clip_Kind,
+	x_value, x_scale, x_min, x_max: f32,
+	y_kind: Clip_Kind,
+	y_value, y_scale, y_min, y_max: f32,
+	hash: Hash = 0,
+) -> Clip {
+	return Clip {
+		value = {.X = x_value, .Y = y_value},
+		kind = {.X = x_kind, .Y = y_kind},
+		scale = {.X = x_scale, .Y = y_scale},
+		min = {.X = x_min, .Y = y_min},
+		max = {.X = x_max, .Y = y_max},
+		hash = hash,
+	}
 }
 
-clip_none :: proc "contextless" () -> (Clip_Kind, f32, f32) {
-	return .None, 0, 0
+clip_none :: proc "contextless" () -> (Clip_Kind, f32, f32, f32, f32) {
+	return .None, 0, 0, 0, 0
 }
 
-clip_custom :: proc "contextless" (value: f32, scale: f32) -> (Clip_Kind, f32, f32) {
-	return .Custom, value, scale
+clip_custom :: proc "contextless" (value: f32, scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> (Clip_Kind, f32, f32, f32, f32) {
+	return .Custom, value, scale, min, max
 }
 
-clip_auto :: proc "contextless" (scale: f32) -> (Clip_Kind, f32, f32) {
-	return .Auto, 0, scale
+clip_auto :: proc "contextless" (scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> (Clip_Kind, f32, f32, f32, f32) {
+	return .Auto, 0, scale, min, max
 }
 
 override :: proc "contextless" (flags: [Axis]Override_Flags, offset: [Axis]Override_Transform, expand: [Axis]Override_Transform) -> Override {
@@ -34,14 +48,8 @@ offset :: proc "contextless" (x: Override_Transform = nil, y: Override_Transform
 	return {.X = x, .Y = y}
 }
 
-text :: proc "contextless" (
-	text: string,
-	style: Text_Style = {},
-	wrap_mode: Text_Wrap_Mode = .Words,
-	preferred_min: f32 = 0,
-	preferred_max: f32 = max(f32),
-) -> Text {
-	return Text{text = text, style = style, preferred_min = preferred_min, preferred_max = preferred_max, wrap_mode = wrap_mode}
+text :: proc "contextless" (text: string, wrap_mode: Text_Wrap_Mode = .Words, preferred_min: f32 = 0, preferred_max: f32 = max(f32)) -> Text {
+	return Text{text = text, preferred_min = preferred_min, preferred_max = preferred_max, wrap_mode = wrap_mode}
 }
 
 layout :: proc "contextless" (sizing: [Axis]Sizing, alignment: [Axis]Alignment = {}, child_gap: f32 = 0, direction: Axis = .X) -> Layout {
@@ -96,7 +104,7 @@ text_style :: proc "contextless" (
 	}
 }
 
-style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, padding: [Axis]Vec2f32 = {}, border: Border_Style = {}) -> Widget_Style {
+style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, padding: [Axis]Vec2f32 = {}, border: Border_Style = {}) -> Style {
 	return {color = color, border = border, padding = padding}
 }
 
@@ -164,20 +172,53 @@ is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style)
 	return false
 }
 
-get_override :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Override #no_bounds_check {
-	return &ctx.overrides[index]
+create_clip :: proc(ctx: ^Core_Context, clip: Clip) -> Clip_Index {
+	clip_index := Clip_Index(len(ctx.clips))
+	clip := clip
+
+	if clip.hash != 0 {
+		persistant_clip := ctx.persistant_clip[clip.hash]
+		for clip_kind, axis in clip.kind {
+			if clip_kind == .Auto {
+				clip.value[axis] = persistant_clip[axis]
+			}
+		}
+	}
+
+	append(&ctx.clips, clip)
+	return clip_index
 }
 
-get_clip :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Clip #no_bounds_check {
+create_style :: proc(ctx: ^Core_Context, style: Style) -> Style_Index {
+	append(&ctx.styles, style)
+	return Style_Index(len(ctx.styles) - 1)
+}
+
+create_override :: proc(ctx: ^Core_Context, override: Override) -> Override_Index {
+	override_index := Override_Index(len(ctx.overrides))
+	append(&ctx.overrides, override)
+	return override_index
+}
+
+get_clip :: #force_inline proc(ctx: ^Core_Context, index: Clip_Index) -> ^Clip #no_bounds_check {
 	return &ctx.clips[index]
 }
 
-get_widget :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Widget #no_bounds_check {
+get_style :: #force_inline proc(ctx: ^Core_Context, index: Style_Index) -> ^Style #no_bounds_check {
+	return &ctx.styles[index]
+}
+
+get_widget :: #force_inline proc(ctx: ^Core_Context, index: Widget_Index) -> ^Widget #no_bounds_check {
 	return &ctx.widgets[index]
 }
 
-get_style :: #force_inline proc(ctx: ^Core_Context, index: i32) -> ^Widget_Style #no_bounds_check {
-	return &ctx.styles[index]
+get_override :: #force_inline proc(ctx: ^Core_Context, index: Override_Index) -> ^Override #no_bounds_check {
+	return &ctx.overrides[index]
+}
+
+copy_style :: proc(ctx: ^Core_Context, style: Style_Index) -> Style_Index {
+	append(&ctx.styles, ctx.styles[style])
+	return Style_Index(len(ctx.styles) - 1)
 }
 
 sort_render_commands :: proc(commands: []Render_Command) #no_bounds_check {
@@ -218,32 +259,22 @@ _get_override_transform_value :: proc(
 	offset_value: f32,
 ) #no_bounds_check {
 	switch kind in transform[axis] {
-	case Percent_Self: offset_value = widget_size[axis] * kind.value
-	case Percent: offset_value = parent_size[axis] * kind.value
-	case Fixed: offset_value = kind.value
+	case Percent_Self:
+		offset_value = widget_size[axis] * kind.value
+	case Percent:
+		offset_value = parent_size[axis] * kind.value
+	case Fixed:
+		offset_value = kind.value
 	}
 	return offset_value
 }
 
 _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 #no_bounds_check {
-	if widget.rect.size[axis] > widget.resolved.content_size[axis] {
+	if widget.rect.size[axis] > widget.resolved.content_size[axis] || widget.clip == 0 {
 		return 0
 	}
-	widget_clip := &ctx.clips[widget.clip]
-	switch widget_clip.kind[axis] {
-	case .None: return 0
-	case .Custom: return widget_clip.value[axis] * widget_clip.scale[axis]
-	case .Auto:
-		if ctx.mouse.hovered_clip == widget.key.hash {
-			widget_clip.value[axis] += ctx.mouse.scroll * widget_clip.scale[axis]
-		}
-
-		widget_clip.value[axis] = min(0, widget_clip.value[axis])
-		widget_clip.value[axis] = max(widget_clip.value[axis], -(widget.resolved.content_size[axis] - widget.rect.size[axis]))
-
-		return widget_clip.value[axis]
-	}
-	return 0
+	clip := &ctx.clips[widget.clip]
+	return clip.value[axis]
 }
 
 _get_other_axis :: proc(axis: Axis) -> Axis {
@@ -258,9 +289,9 @@ _get_child_gap :: proc(widget: ^Widget) -> f32 {
 	return max(0, f32(widget.total_children - 1)) * widget.kind.(Layout).child_gap
 }
 
-_clamp_border_radius :: proc(widget: ^Widget, widget_style: ^Widget_Style) {
+_clamp_border_radius :: proc(widget: ^Widget, style: ^Style) {
 	comp := min(widget.rect.size.x, widget.rect.size.y)
-	for &r in widget_style.border.radius {
+	for &r in style.border.radius {
 		r = min(comp / 2, r)
 	}
 }
