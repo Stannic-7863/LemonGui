@@ -89,6 +89,21 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 	z_index_offset: int
 
+	root := &ctx.widgets[0]
+	root_override := &ctx.overrides[root.override]
+
+	root_offset_x := _get_override_transform_value(root_override.offset, root.rect.size, 0, .X)
+	root_offset_y := _get_override_transform_value(root_override.offset, root.rect.size, 0, .Y)
+
+	root_expand_x := _get_override_transform_value(root_override.expand, root.rect.size, 0, .X)
+	root_expand_y := _get_override_transform_value(root_override.expand, root.rect.size, 0, .Y)
+
+	root_clip_x := _get_clip_value(ctx, root, .X)
+	root_clip_y := _get_clip_value(ctx, root, .Y)
+
+	root.rect.position += {root_offset_x + root_clip_x, root_offset_y + root_clip_y}
+	root.rect.size += {root_expand_x, root_expand_y}
+
 	for widget in ctx.pre {
 		layout, is_layout := widget.kind.(Layout)
 		if is_layout {
