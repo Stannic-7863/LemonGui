@@ -1,9 +1,7 @@
 package main
 
 import cu "../"
-import "core:crypto/_fiat/field_scalar25519"
 import "core:fmt"
-import rl "vendor:raylib"
 
 Image :: struct {
 	w, h: f32,
@@ -47,6 +45,8 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 		cu.layout(cu.sizing(cu.grow(), cu.grow()), child_gap = 8, direction = .Y),
 		event_flags = {.Lock_Active, .Lock_Hover},
 	)
+
+
 	grow_1.clip = cu.create_clip(ctx, cu.clip(cu.clip_none(), cu.clip_auto(50, 0, (grow_1.resolved.content_size.y - grow_1.resolved.size.y)), 1))
 	grow_1.style = style_basic
 	cu.push_parent(ctx, grow_1)
@@ -70,6 +70,7 @@ build_ui :: proc(ctx: ^cu.Core_Context, tick_image: Image, aaloo_image: Image, f
 
 	for i in 0 ..< 5 {
 		w := cu.create_widget(ctx, i, cu.layout(cu.sizing(cu.grow(), cu.percent(0.5))), event_flags = {.Lock_Hover}, style = style_elevated)
+		if i == 0 do fmt.println(cu.get_widget_mouse_events(ctx, w, .Left))
 		if cu.is_widget_hovered(ctx, w) {
 			style_index := cu.copy_style(ctx, w.style)
 			style := cu.get_style(ctx, style_index)

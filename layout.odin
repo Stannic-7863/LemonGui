@@ -84,7 +84,9 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	clear(&ctx.persistant_data)
 	clear(&ctx.persistant_clip)
 
-	if !ctx.mouse.can_lock_hover {ctx.mouse.hovered = 0}
+	prev_hovered, prev_active := ctx.mouse.hovered, ctx.mouse.active
+
+	if !ctx.mouse.hover_is_locked {ctx.mouse.hovered = 0}
 	if !ctx.mouse.active_is_locked {ctx.mouse.active = 0}
 
 	z_index_offset: int
@@ -147,12 +149,13 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		}
 
 	}
-
 	sort_render_commands(ctx.render_commands[:])
-
-	ctx.mouse.events = {}
-	ctx.keyboard.events = {}
 	_resolve_events(ctx)
+
+	if ctx.mouse.active == 0 && ctx.mouse.mapped_events != {} {
+		ctx.mouse.active = prev_active
+	}
+
 	ctx.mouse.mapped_events = {}
 	ctx.keyboard.mapped_events = {}
 }
