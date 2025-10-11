@@ -424,8 +424,8 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				append(&ctx.lines, type.text)
 				type.start = len(ctx.lines) - 1
 				type.end = len(ctx.lines)
-				widget.rect.size.y = style.text.font_size
 				padding := style.padding[.X].x + style.padding[.X].y
+				widget.rect.size.y = style.text.font_size + style.padding[.Y].x + style.padding[.Y].y
 				type.maximum_width = ctx.measure_text_proc(type.text, style.text) + padding
 				type.minimum_width = type.maximum_width + padding
 			}
