@@ -1,9 +1,6 @@
 package main
 
 import "base:runtime"
-import "core:fmt"
-import "core:prof/spall"
-import "core:reflect"
 import "core:time"
 
 import rl "vendor:raylib"

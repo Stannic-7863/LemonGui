@@ -1,6 +1,7 @@
 package core_ui
 
 import "core:hash"
+import "core:time"
 
 Widget_Index :: distinct i32
 Style_Index :: distinct i32
@@ -111,6 +112,7 @@ Widget :: struct {
 	override:                               Override_Index,
 	first, last, prev, next, parent, index: Widget_Index,
 	event_flags:                            Event_Flags,
+	animate_props:                          Animate_Props,
 }
 
 Core_Context :: struct {
@@ -125,24 +127,31 @@ Core_Context :: struct {
 	lines:                       [dynamic]string,
 	render_commands:             [dynamic]Render_Command,
 	measured_words:              [dynamic]Measured_Word,
-	persistant_data:             map[Hash]Persistant_Data,
-	persistant_clip:             map[Hash][Axis]f32,
+	persistant:                  Persistant_Data,
 	measure_text_proc:           proc(text: string, style: Text_Style) -> f32,
 	mouse:                       Mouse_Context,
 	keyboard:                    Keyboard_Context,
 	window_size:                 Vec2f32,
+	frame_start_time:            time.Time,
+	frametime:                   f32,
 }
 
 Persistant_Data :: struct {
+	widget:  map[Hash]Widget_Persistant_Data,
+	animate: map[Hash]Animate_Persistant_Data,
+	clip:    map[Hash][Axis]f32,
+}
+
+Widget_Persistant_Data :: struct {
 	rect:               Rect,
 	content_size:       Vec2f32,
-	auto_clip_value:    [Axis]f32,
 	text_minimum_width: f32,
 	text_maximum_width: f32,
 }
 
 init_context :: proc(size: int) -> Core_Context {
 	ctx: Core_Context
+	ctx.frame_start_time = time.now()
 	return ctx
 }
 
@@ -154,6 +163,7 @@ create_widget :: proc(
 	id: Keying_Id,
 	kind: Widget_Kind = {},
 	event_flags: Event_Flags = {},
+	animate_props: Animate_Props = {},
 	image: rawptr = nil,
 	override: Override_Index = 0,
 	clip: Clip_Index = 0,
@@ -167,12 +177,13 @@ create_widget :: proc(
 	widget.style = style
 	widget.override = override
 
-	widget.event_flags = event_flags
 	widget.key.keying_id = id
+	widget.event_flags = event_flags
+	widget.animate_props = animate_props
 
 	_add_widget_to_tree(ctx, widget)
 	_generate_widget_hash(widget)
-	_read_persistant_data(ctx, widget)
+	_read_widget_persistant_data(ctx, widget)
 	return widget
 }
 
@@ -224,8 +235,8 @@ _generate_widget_hash :: proc(widget: ^Widget) {
 	widget.key.hash ~= (widget.key.hash >> 2 ~ widget.key.parent_hash << 6)
 }
 
-_read_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	data := ctx.persistant_data[widget.key.hash]
+_read_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
+	data := ctx.persistant.widget[widget.key.hash]
 
 	widget.resolved.position = data.rect.position
 	widget.resolved.size = data.rect.size
@@ -237,9 +248,9 @@ _read_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	}
 }
 
-_write_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
+_write_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	text, ok := widget.kind.(Text)
-	ctx.persistant_data[widget.key.hash] = Persistant_Data {
+	ctx.persistant.widget[widget.key.hash] = Widget_Persistant_Data {
 		text_minimum_width = text.minimum_width,
 		text_maximum_width = text.maximum_width,
 		rect               = widget.rect,
@@ -276,6 +287,8 @@ begin_ui :: proc(ctx: ^Core_Context) {
 	clear(&ctx.temp)
 	clear(&ctx.pre)
 	clear(&ctx.post_r)
+	ctx.frametime = f32(time.diff(ctx.frame_start_time, time.now())) / f32(time.Second)
+	ctx.frame_start_time = time.now()
 }
 
 end_ui :: proc(ctx: ^Core_Context) {

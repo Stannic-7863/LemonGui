@@ -1,7 +1,7 @@
 package core_ui
 
-import "core:math"
 import "core:math/linalg"
+
 Render_Command_Kind :: union {
 	Command_Rect,
 	Command_Border,

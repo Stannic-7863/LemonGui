@@ -1,6 +1,5 @@
 package core_ui
 
-import "core:fmt"
 import "core:math/linalg"
 
 clip :: proc "contextless" (
@@ -177,7 +176,7 @@ create_clip :: proc(ctx: ^Core_Context, clip: Clip) -> Clip_Index {
 	clip := clip
 
 	if clip.hash != 0 {
-		persistant_clip := ctx.persistant_clip[clip.hash]
+		persistant_clip := ctx.persistant.clip[clip.hash]
 		for clip_kind, axis in clip.kind {
 			if clip_kind == .Auto {
 				clip.value[axis] = persistant_clip[axis]

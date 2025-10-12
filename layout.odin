@@ -81,8 +81,8 @@ _sizing_pass :: proc(ctx: ^Core_Context) {
 }
 
 _positioning_pass :: proc(ctx: ^Core_Context) {
-	clear(&ctx.persistant_data)
-	clear(&ctx.persistant_clip)
+	clear(&ctx.persistant.widget)
+	clear(&ctx.persistant.clip)
 
 	prev_hovered, prev_active := ctx.mouse.hovered, ctx.mouse.active
 
@@ -115,8 +115,9 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		widget_style := &ctx.styles[widget.style]
 
 		_clamp_border_radius(widget, widget_style)
+		_resolve_widget_animation(ctx, widget)
 		_emit_render_commands(ctx, widget, &z_index_offset, widget_style)
-		_write_persistant_data(ctx, widget)
+		_write_widget_persistant_data(ctx, widget)
 
 		if is_point_in_rect(widget.rect, ctx.mouse.position, widget_style.border) &&
 		   .Pointer_Passthrough not_in widget.event_flags &&
@@ -145,10 +146,10 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		}
 
 		if (clip.kind[.X] == .Auto || clip.kind[.Y] == .Auto) && clip.hash != 0 {
-			ctx.persistant_clip[clip.hash] = clip.value
+			ctx.persistant.clip[clip.hash] = clip.value
 		}
-
 	}
+
 	sort_render_commands(ctx.render_commands[:])
 	_resolve_events(ctx)
 
