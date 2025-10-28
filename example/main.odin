@@ -1,8 +1,7 @@
 package main
 
-import "core:crypto/_aes/hw_intel"
-import "core:fmt"
 import "core:time"
+import "vendor:sdl3/ttf"
 
 import sdl_backend "backend/sdl_gpu"
 import sdl "vendor:sdl3"
@@ -39,12 +38,17 @@ main :: proc() {
 	ctp := &ctx
 	defer ui.deinit_context(&ctx)
 
-	ctx.measure_text_proc = sdl_backend.measure_text
+	ctx.measure_text_width = sdl_backend.measure_text_width
+	ctx.measure_text_height = sdl_backend.measure_text_height
 
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
 
-	sdl_backend.init_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 100)
+	sdl_backend.init_font(&backend_ctx)
+	jetbrainsfont := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 100)
+	opensans := sdl_backend.add_font(&backend_ctx, "./assets/OpenSans-Regular.ttf", 100)
+	nastaliq := sdl_backend.add_font(&backend_ctx, "./assets/NotoNastaliqUrdu-Regular.ttf", 100)
+	noto_cjk := sdl_backend.add_font(&backend_ctx, "./assets/NotoSansCJK-Regular.ttc", 100)
 
 	for handle_events() {
 
@@ -58,31 +62,83 @@ main :: proc() {
 
 		basic_background_style := ui.create_style(
 			ctp,
-			ui.style(BACKGROUND_COLOR, padding = ui.axis_vec2f32(16, 16), border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(2, 2))),
+			ui.style(BACKGROUND_COLOR, padding = ui.axis_vec2f32(16, 16), border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(4, 4))),
 		)
 		elevated_background_style := ui.create_style(
 			ctp,
-			ui.style(ELEVATED_SURFACE_COLOR, padding = ui.axis_vec2f32(16, 16), border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(2, 2))),
+			ui.style(ELEVATED_SURFACE_COLOR, padding = ui.axis_vec2f32(16, 16), border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(4, 4))),
+		)
+
+		basic_text_style_jetbrains := ui.create_style(
+			ctp,
+			ui.style(
+				BACKGROUND_COLOR,
+				padding = ui.axis_vec2f32(16, 16),
+				border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(2, 2)),
+				text = ui.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, jetbrainsfont),
+			),
+		)
+
+		basic_text_style_opensans := ui.create_style(
+			ctp,
+			ui.style(
+				BACKGROUND_COLOR,
+				padding = ui.axis_vec2f32(16, 16),
+				border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(2, 2)),
+				text = ui.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, opensans),
+			),
+		)
+		basic_text_style_nastaliq := ui.create_style(
+			ctp,
+			ui.style(
+				BACKGROUND_COLOR,
+				padding = ui.axis_vec2f32(16, 16),
+				border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(2, 2)),
+				text = ui.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, nastaliq),
+			),
+		)
+		basic_text_style_noto_cjk := ui.create_style(
+			ctp,
+			ui.style(
+				BACKGROUND_COLOR,
+				padding = ui.axis_vec2f32(16, 16),
+				border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(2, 2)),
+				text = ui.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, noto_cjk),
+			),
 		)
 
 		root := ui.create_widget(
 			ctp,
 			"root",
 			ui.layout(ui.sizing(ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)), child_gap = 8),
-			style = basic_background_style,
+			style = ui.create_style(ctp, {color = BACKGROUND_COLOR, padding = ui.axis_vec2f32(16, 16)}),
 		)
 
 		ui.push_parent(ctp, root)
 
 		ui.push_parent(
 			ctp,
-			ui.create_widget(ctp, "child 1", ui.layout(ui.sizing(ui.grow(), ui.grow()), child_gap = 8), style = elevated_background_style),
+			ui.create_widget(
+				ctp,
+				"child 1",
+				ui.layout(ui.sizing(ui.grow(), ui.grow()), child_gap = 8, direction = .Y),
+				style = elevated_background_style,
+			),
+		)
+		ui.create_widget(ctp, "text", ui.text("A quick brown fox jumps over the lazy dog", .Words), style = basic_text_style_opensans)
+		ui.create_widget(ctp, "text2", ui.text("静かな森に風が優しく吹いている。", .Words), style = basic_text_style_noto_cjk)
+		ui.create_widget(
+			ctp,
+			"text3",
+			ui.text(
+				"پاکستان کی سرزمین قدرتی وسائل سے مالا مال ہے، جہاں کے پہاڑ، دریا، اور میدان ایک حسین نظارہ پیش کرتے ہیں اور لوگ اپنی مہمان نوازی اور محبت سے دنیا بھر میں جانے جاتے ہیں۔",
+				.Words,
+			),
+			style = basic_text_style_nastaliq,
 		)
 		ui.create_widget(ctp, "child 1", ui.layout(ui.sizing(ui.grow(), ui.grow())), style = basic_background_style)
 		ui.create_widget(ctp, "child 2", ui.layout(ui.sizing(ui.grow(), ui.grow())), style = basic_background_style)
 		ui.pop_parent(ctp)
-		ui.create_widget(ctp, "child 2", ui.layout(ui.sizing(ui.grow(), ui.grow())), style = elevated_background_style)
-		ui.create_widget(ctp, "child 3", ui.layout(ui.sizing(ui.grow(), ui.grow())), style = elevated_background_style)
 		ui.pop_parent(ctp)
 
 		ui.end_ui(ctp)

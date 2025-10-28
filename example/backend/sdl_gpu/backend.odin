@@ -11,6 +11,11 @@ import sdl "vendor:sdl3"
 Vec2f32 :: [2]f32
 Vec4f32 :: [4]f32
 
+Gpu_Batch :: struct {
+	commands: []Gpu_Render_Command,
+	texture:  ^sdl.GPUTexture,
+}
+
 Gpu_Render_Command :: struct {
 	radius:       Vec4f32,
 	position:     Vec2f32,
@@ -22,8 +27,8 @@ Gpu_Render_Command :: struct {
 }
 
 Text :: struct {
-	pos, uv: Vec2f32,
-	color:   Vec4f32,
+	uv:    [4]Vec2f32,
+	color: Vec4f32,
 }
 
 Border :: struct {
@@ -46,16 +51,18 @@ Backend_Context :: struct {
 	gpu:                 ^sdl.GPUDevice,
 	window:              ^sdl.Window,
 	pipeline:            ^sdl.GPUGraphicsPipeline,
-	font:                ^ttf.Font,
 	font_engine:         ^ttf.TextEngine,
+	font_sampler:        ^sdl.GPUSampler,
 	rects_buf:           Gpu_Dynamic_Buffer,
 	borders_buf:         Gpu_Dynamic_Buffer,
 	text_buf:            Gpu_Dynamic_Buffer,
 	render_commands_buf: Gpu_Dynamic_Buffer,
+	fonts:               [dynamic]^ttf.Font,
 	texts:               [dynamic]Text,
 	rects:               [dynamic]Rect,
 	borders:             [dynamic]Border,
 	render_commands:     [dynamic]Gpu_Render_Command,
+	batch:               [dynamic]Gpu_Batch,
 }
 
 init :: proc(window_title: cstring, vert_path, frag_path: string) -> Backend_Context {
@@ -67,7 +74,7 @@ init :: proc(window_title: cstring, vert_path, frag_path: string) -> Backend_Con
 	assert(sdl.ClaimWindowForGPUDevice(gpu, window))
 
 	vert_shader := load_shader(gpu, vert_path, .VERTEX, {.SPIRV}, 1, 0, 4)
-	frag_shader := load_shader(gpu, frag_path, .FRAGMENT, {.SPIRV}, 0, 0, 0)
+	frag_shader := load_shader(gpu, frag_path, .FRAGMENT, {.SPIRV}, 0, 1, 0)
 
 	pipeline := sdl.CreateGPUGraphicsPipeline(
 		gpu,
@@ -108,19 +115,32 @@ init :: proc(window_title: cstring, vert_path, frag_path: string) -> Backend_Con
 	backend_ctx.render_commands_buf = init_gpu_dynamic_buffer(&backend_ctx)
 
 	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .VSYNC))
-
 	return backend_ctx
 }
 
-init_font :: proc(backend_ctx: ^Backend_Context, font_path: cstring, size: f32) {
+init_font :: proc(backend_ctx: ^Backend_Context) {
 	assert(ttf.Init())
-	font := ttf.OpenFont(font_path, size)
-	assert(font != nil)
-
 	engine := ttf.CreateGPUTextEngine(backend_ctx.gpu)
 
-	backend_ctx.font = font
+	backend_ctx.font_sampler = sdl.CreateGPUSampler(
+		backend_ctx.gpu,
+		{
+			address_mode_u = .REPEAT,
+			address_mode_v = .REPEAT,
+			address_mode_w = .REPEAT,
+			mag_filter = .LINEAR,
+			min_filter = .LINEAR,
+			mipmap_mode = .LINEAR,
+		},
+	)
 	backend_ctx.font_engine = engine
+}
+
+add_font :: proc(backend_ctx: ^Backend_Context, path: cstring, size: f32) -> ^ttf.Font {
+	font := ttf.OpenFont(path, size)
+	assert(font != nil)
+	append(&backend_ctx.fonts, font)
+	return font
 }
 
 init_gpu_dynamic_buffer :: proc(backend_ctx: ^Backend_Context) -> Gpu_Dynamic_Buffer {
@@ -128,7 +148,6 @@ init_gpu_dynamic_buffer :: proc(backend_ctx: ^Backend_Context) -> Gpu_Dynamic_Bu
 	transfer_buffer := sdl.CreateGPUTransferBuffer(backend_ctx.gpu, {size = 64, usage = .UPLOAD})
 
 	dyn_buf: Gpu_Dynamic_Buffer
-
 	dyn_buf.byte_size = 64
 	dyn_buf.prev_byte_size = 64
 	dyn_buf.data = data_buffer
@@ -165,6 +184,8 @@ render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
 	clear(&backend_ctx.rects)
 	clear(&backend_ctx.borders)
 	clear(&backend_ctx.render_commands)
+	clear(&backend_ctx.texts)
+	clear(&backend_ctx.batch)
 
 	feed_backend(backend_ctx, core_ctx)
 
@@ -198,7 +219,17 @@ render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
 		backend_ctx.render_commands_buf.data,
 	}
 	sdl.BindGPUVertexStorageBuffers(render_pass, 0, raw_data(storage_bufs), u32(len(storage_bufs)))
-	sdl.DrawGPUPrimitives(render_pass, 6, u32(len(backend_ctx.render_commands)), 0, 0)
+	instance_offset: u32
+	for batch_data in backend_ctx.batch {
+		sdl.BindGPUFragmentSamplers(
+			render_pass,
+			0,
+			&sdl.GPUTextureSamplerBinding{texture = batch_data.texture, sampler = backend_ctx.font_sampler},
+			1,
+		)
+		sdl.DrawGPUPrimitives(render_pass, 6, u32(len(batch_data.commands)), 0, instance_offset)
+		instance_offset += u32(len(batch_data.commands))
+	}
 	sdl.EndGPURenderPass(render_pass)
 
 	assert(sdl.SubmitGPUCommandBuffer(command_buf))
@@ -227,16 +258,20 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 
 	grc: ^Gpu_Render_Command
 
-	for cmd, index in core_ctx.render_commands {
+	batch_start: int
+	active_atlast_texture: ^sdl.GPUTexture
+
+	for cmd, cmd_index in core_ctx.render_commands {
 		if start_hash != cmd.emitter_hash {
 			start_hash = cmd.emitter_hash
-			start_index = index
+			start_index = cmd_index
 			append(&backend_ctx.render_commands, Gpu_Render_Command{})
 			grc = &backend_ctx.render_commands[len(backend_ctx.render_commands) - 1]
 			grc.position = cmd.rect.position
 			grc.size = cmd.rect.size
 			grc.border_index = -1
 			grc.rect_index = -1
+			grc.text_index = -1
 		}
 
 		switch cmd_kind in cmd.kind {
@@ -249,10 +284,81 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 			append(&backend_ctx.borders, Border{color = cmd_kind.style.color / 255, thickness = transmute(Vec4f32)cmd_kind.style.thickness})
 		case ui.Command_Clip_Start:
 		case ui.Command_Clip_End:
-		case ui.Command_Text:
 		case ui.Command_Image:
 		case ui.Command_Custom:
+		case ui.Command_Text:
+			// Text command is emitted at the end of the cluster from an emitter.
+			// So a new gpu render commands can be issued from here and will cause no problem
+			line_offset: f32
+			text_height := measure_text_height(cmd_kind.style)
+			for line in cmd_kind.lines {
+				ttf.SetFontSize(cast(^ttf.Font)cmd_kind.style.font, cmd_kind.style.font_size)
+
+				text := ttf.CreateText(backend_ctx.font_engine, cast(^ttf.Font)cmd_kind.style.font, cast(cstring)raw_data(line), len(line))
+				draw_data := ttf.GetGPUTextDrawData(text)
+
+				for seq := draw_data; seq != nil; seq = seq.next {
+					for idx: i32 = 0; idx < seq.num_indices; idx += 6 {
+						i0 := seq.indices[idx + 0]
+						i1 := seq.indices[idx + 1]
+						i2 := seq.indices[idx + 2]
+						i3 := seq.indices[idx + 5]
+
+						v0 := seq.xy[i0]
+						v1 := seq.xy[i1]
+						v2 := seq.xy[i2]
+						v3 := seq.xy[i3]
+
+						uv0 := seq.uv[i0]
+						uv1 := seq.uv[i1]
+						uv2 := seq.uv[i2]
+						uv3 := seq.uv[i3]
+
+						x_min := min(min(v0.x, v1.x), min(v2.x, v3.x))
+						y_min := min(min(v0.y, v1.y), min(v2.y, v3.y))
+						x_max := max(max(v0.x, v1.x), max(v2.x, v3.x))
+						y_max := max(max(v0.y, v1.y), max(v2.y, v3.y))
+
+						width := x_max - x_min
+						height := y_max - y_min
+
+						position := cmd.rect.position + {x_min, -y_min + line_offset}
+
+						text_command: Text = {
+							uv    = {uv0.xy, uv1.xy, uv2.xy, uv3.xy},
+							color = cmd_kind.style.color / 255,
+						}
+
+						index := len(backend_ctx.texts)
+						append(&backend_ctx.texts, text_command)
+
+						render_command: Gpu_Render_Command
+						render_command.rect_index = -1
+						render_command.border_index = -1
+						render_command.position = position
+						render_command.size = {width, -height}
+						render_command.text_index = i32(index)
+						append(&backend_ctx.render_commands, render_command)
+
+						if active_atlast_texture == nil {
+							active_atlast_texture = draw_data.atlas_texture
+						}
+
+						if draw_data.next != nil && draw_data.next.atlas_texture != active_atlast_texture {
+							append(&backend_ctx.batch, Gpu_Batch{backend_ctx.render_commands[batch_start:index], active_atlast_texture})
+							active_atlast_texture = draw_data.atlas_texture
+							batch_start = index
+						}
+					}
+				}
+				line_offset += text_height + cmd_kind.style.line_spacing
+				ttf.DestroyText(text)
+			}
 		}
+	}
+
+	if batch_start < len(backend_ctx.render_commands) {
+		append(&backend_ctx.batch, Gpu_Batch{backend_ctx.render_commands[batch_start:len(backend_ctx.render_commands)], active_atlast_texture})
 	}
 }
 
@@ -288,6 +394,18 @@ load_shader :: proc(
 	return shader
 }
 
-measure_text :: proc(text: string, style: ui.Text_Style) -> f32 {
-	return 2 // Pinnacle of engineering
+measure_text_width :: proc(text: string, style: ui.Text_Style) -> f32 {
+	font := cast(^ttf.Font)(style.font)
+	ttf.SetFontSize(font, style.font_size)
+
+	w, h: i32
+	ttf.GetStringSize(font, cast(cstring)raw_data(text), len(text), &w, &h)
+
+	return f32(w)
+}
+
+measure_text_height :: proc(style: ui.Text_Style) -> f32 {
+	font := cast(^ttf.Font)(style.font)
+	ttf.SetFontSize(font, style.font_size)
+	return f32(ttf.GetFontHeight(font))
 }

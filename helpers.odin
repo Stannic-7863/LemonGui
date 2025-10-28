@@ -103,8 +103,14 @@ text_style :: proc "contextless" (
 	}
 }
 
-style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, padding: [Axis]Vec2f32 = {}, border: Border_Style = {}) -> Style {
-	return {color = color, border = border, padding = padding}
+style :: proc "contextless" (
+	color: Color = 0,
+	image_tint: Color = 255,
+	padding: [Axis]Vec2f32 = {},
+	border: Border_Style = {},
+	text: Text_Style = {},
+) -> Style {
+	return {color = color, border = border, padding = padding, text = text}
 }
 
 border :: proc "contextless" (color: [4]Color = 0, radius: Vec4f32 = 0, thickness: [Axis]Vec2f32 = {}) -> Border_Style {

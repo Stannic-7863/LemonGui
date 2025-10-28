@@ -189,7 +189,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 		case Text:
 			if axis == .X {
 				if widget_kind.minimum_width == 0 {
-					widget_kind.minimum_width = ctx.measure_text_proc(widget_kind.text, widget_style.text)
+					widget_kind.minimum_width = ctx.measure_text_width(widget_kind.text, widget_style.text)
 					widget_kind.maximum_width = widget_kind.minimum_width
 				}
 				widget.rect.size[axis] = max(widget_kind.minimum_width, min(widget_kind.maximum_width, widget_kind.preferred_min))
@@ -384,8 +384,9 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				new_line_index: int
 				accumulated_width: f32
 				accumulated_height: f32
+				text_height := ctx.measure_text_height(style.text)
 
-				space_width := ctx.measure_text_proc(" ", style.text)
+				space_width := ctx.measure_text_width(" ", style.text)
 				padding := style.padding[.X].x + style.padding[.X].y
 				start := len(ctx.lines)
 
@@ -396,7 +397,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 						append(&ctx.lines, type.text[new_line_index:word.start])
 						new_line_index = word.start
 						if index == len(ctx.measured_words) - 1 {
-							accumulated_height += (style.text.font_size + style.text.line_spacing)
+							accumulated_height += (text_height + style.text.line_spacing)
 						}
 						continue
 					}
@@ -417,7 +418,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				type.start = start
 				type.end = len(ctx.lines)
 				widget.rect.size.y =
-					f32(type.end - type.start) * (style.text.font_size + style.text.line_spacing) +
+					f32(type.end - type.start) * (text_height + style.text.line_spacing) +
 					accumulated_height +
 					style.padding[.Y].x +
 					style.padding[.Y].y
@@ -429,8 +430,9 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				type.start = len(ctx.lines) - 1
 				type.end = len(ctx.lines)
 				padding := style.padding[.X].x + style.padding[.X].y
-				widget.rect.size.y = style.text.font_size + style.padding[.Y].x + style.padding[.Y].y
-				type.maximum_width = ctx.measure_text_proc(type.text, style.text) + padding
+				text_height := ctx.measure_text_height(style.text)
+				widget.rect.size.y = text_height + style.padding[.Y].x + style.padding[.Y].y
+				type.maximum_width = ctx.measure_text_width(type.text, style.text) + padding
 				type.minimum_width = type.maximum_width + padding
 			}
 		}
@@ -449,7 +451,7 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, style: Text_Style) {
 		if r == '\n' {
 			if byte_index > word_start {
 				word := text.text[word_start:byte_index]
-				width := ctx.measure_text_proc(word, style)
+				width := ctx.measure_text_width(word, style)
 				append(&ctx.measured_words, Measured_Word{string = word, width = width, start = word_start})
 			}
 			byte_index += size
@@ -478,7 +480,7 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, style: Text_Style) {
 		}
 
 		word := text.text[start:byte_index]
-		width := ctx.measure_text_proc(word, style)
+		width := ctx.measure_text_width(word, style)
 		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before, start = start})
 		word_start = byte_index
 		spaces_before = 0
@@ -486,7 +488,7 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, style: Text_Style) {
 
 	if word_start < len(data) {
 		word := text.text[word_start:]
-		width := ctx.measure_text_proc(word, style)
+		width := ctx.measure_text_width(word, style)
 		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before, start = word_start})
 	}
 }
