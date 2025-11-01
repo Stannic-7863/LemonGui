@@ -60,9 +60,9 @@ _emit_render_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int
 		if widget.first != -1 {
 			ctx.active_clip = widget
 			emitted = true
+			_emit_clip_start_command(ctx, widget, z_index, style)
 			_emit_rect_command(ctx, widget, z_index, style)
 			_emit_widget_border_command(ctx, widget, z_index, style)
-			_emit_clip_start_command(ctx, widget, z_index, style)
 			_emit_image_command(ctx, widget, z_index, style)
 			_emit_custom_command(ctx, widget, z_index, style)
 			_emit_text_command(ctx, widget, z_index, style)

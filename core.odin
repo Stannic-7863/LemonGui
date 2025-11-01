@@ -157,6 +157,21 @@ init_context :: proc(size: int) -> Core_Context {
 }
 
 deinit_context :: proc(ctx: ^Core_Context) {
+	delete(ctx.pre)
+	delete(ctx.temp)
+	delete(ctx.lines)
+	delete(ctx.clips)
+	delete(ctx.styles)
+	delete(ctx.post_r)
+	delete(ctx.widgets)
+	delete(ctx.clippers)
+	delete(ctx.growable)
+	delete(ctx.overrides)
+	delete(ctx.measured_words)
+	delete(ctx.render_commands)
+	delete(ctx.persistant.clip)
+	delete(ctx.persistant.widget)
+	delete(ctx.persistant.animate)
 }
 
 create_widget :: proc(
