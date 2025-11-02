@@ -156,20 +156,24 @@ Widget_Key_Event :: enum u8 {
 }
 
 Event_Flag :: enum u8 {
-	Pointer_Passthrough,
+	Disable_Active,
+	Disable_Hover,
 	Lock_Active,
 	Lock_Hover,
-	Focusable,
-	Occlude_Clip,
+	// Focusable, NOTE: Impl later
+	// Occlude_Clip,
 }
 
 Event_Flags :: bit_set[Event_Flag]
+
+Mouse_Events :: [Mouse_Button]bit_set[Widget_Key_Event]
+Keyboard_Events :: [Keyboard_Key]bit_set[Widget_Key_Event]
 
 Mouse_Context :: struct {
 	last_click:           [Mouse_Button]time.Time,
 	down_start:           [Mouse_Button]time.Time,
 	mapped_events:        [Mouse_Button]bit_set[Key_Event],
-	events:               [Mouse_Button]bit_set[Widget_Key_Event],
+	events:               Mouse_Events,
 	double_click_timeout: time.Duration,
 	long_down_timeout:    time.Duration,
 	old_position:         Vec2f32,
@@ -184,13 +188,14 @@ Mouse_Context :: struct {
 	can_lock_hover:       bool,
 	active_is_locked:     bool,
 	hover_is_locked:      bool,
+	active_disabled:      bool,
 }
 
 Keyboard_Context :: struct {
 	last_click:           [Keyboard_Key]time.Time,
 	down_start:           [Keyboard_Key]time.Time,
 	mapped_events:        [Keyboard_Key]bit_set[Key_Event],
-	events:               [Keyboard_Key]bit_set[Widget_Key_Event],
+	events:               Keyboard_Events,
 	double_click_timeout: time.Duration,
 	long_down_timeout:    time.Duration,
 	focused:              Hash,
@@ -230,7 +235,7 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 }
 
 _handle_mouse_event_locking :: proc(ctx: ^Core_Context) {
-	if !ctx.mouse.active_is_locked {
+	if !ctx.mouse.active_is_locked && !ctx.mouse.active_disabled {
 		ctx.mouse.active = ctx.mouse.hovered
 		ctx.mouse.active_is_locked = ctx.mouse.can_lock_active
 	}

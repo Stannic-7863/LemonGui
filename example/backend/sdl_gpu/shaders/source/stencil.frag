@@ -4,8 +4,6 @@ layout(location = 0) in vec2 size;
 layout(location = 1) in vec2 uv;
 layout(location = 2) in vec4 radius;
 
-layout(location = 0) out vec4 out_color;
-
 float sdf_rounded_rect(vec2 p, vec2 half_size, float radius) {
   vec2 q = abs(p) - half_size + radius;
   return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
@@ -26,8 +24,6 @@ void main() {
       sdf_rounded_rect(sample_location, size / 2, selected_border_radius);
 
   float alpha = 1 - smoothstep(0, 1.0, sdf);
-
-  out_color = vec4(1, 1, 1, 1) * alpha;
 
   if (!(alpha > 0.0)) {
     discard;

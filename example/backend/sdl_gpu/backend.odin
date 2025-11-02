@@ -68,6 +68,7 @@ Backend_Context :: struct {
 	font_engine:         ^ttf.TextEngine,
 	font_sampler:        ^sdl.GPUSampler,
 	stencil_texture:     ^sdl.GPUTexture,
+	dummy_texture:       ^sdl.GPUTexture,
 	stencil_pipeline:    ^sdl.GPUGraphicsPipeline,
 	rects_buf:           Gpu_Dynamic_Buffer,
 	borders_buf:         Gpu_Dynamic_Buffer,
@@ -96,52 +97,48 @@ init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, ste
 	stencil_vert_shader := load_shader(gpu, stencil_vert_path, .VERTEX, {.SPIRV}, 1, 0, 0)
 	stencil_frag_shader := load_shader(gpu, stencil_frag_path, .FRAGMENT, {.SPIRV}, 0, 0, 0)
 
+	masker_stencil_op: sdl.GPUStencilOpState = {
+		compare_op    = .EQUAL,
+		depth_fail_op = .KEEP,
+		fail_op       = .KEEP,
+		pass_op       = .INCREMENT_AND_WRAP,
+	}
+
+	maskee_stencil_op: sdl.GPUStencilOpState = {
+		compare_op    = .LESS_OR_EQUAL,
+		depth_fail_op = .KEEP,
+		fail_op       = .KEEP,
+		pass_op       = .DECREMENT_AND_CLAMP,
+	}
+
+	depth_stencil_state: sdl.GPUDepthStencilState = {
+		compare_mask        = 0xFF,
+		write_mask          = 0xFF,
+		enable_stencil_test = true,
+		back_stencil_state  = masker_stencil_op,
+		front_stencil_state = masker_stencil_op,
+	}
+
 	stencil_pipeline := sdl.CreateGPUGraphicsPipeline(
 		gpu,
 		{
 			vertex_shader = stencil_vert_shader,
 			fragment_shader = stencil_frag_shader,
-			target_info = {
-				depth_stencil_format = .D32_FLOAT_S8_UINT,
-				has_depth_stencil_target = true,
-				num_color_targets = 1,
-				color_target_descriptions = &sdl.GPUColorTargetDescription {
-					format = sdl.GetGPUSwapchainTextureFormat(gpu, window),
-					blend_state = {
-						src_alpha_blendfactor = .ONE,
-						dst_alpha_blendfactor = .ONE_MINUS_SRC_ALPHA,
-						alpha_blend_op = .ADD,
-						src_color_blendfactor = .SRC_ALPHA,
-						dst_color_blendfactor = .ONE_MINUS_SRC_ALPHA,
-						color_blend_op = .ADD,
-						enable_blend = true,
-						enable_color_write_mask = true,
-						color_write_mask = ~{},
-					},
-				},
-			},
-			depth_stencil_state = {
-				compare_mask = 0xFF,
-				write_mask = 0xFF,
-				enable_stencil_test = true,
-				back_stencil_state = {compare_op = .EQUAL, depth_fail_op = .KEEP, fail_op = .KEEP, pass_op = .INCREMENT_AND_WRAP},
-				front_stencil_state = {compare_op = .EQUAL, depth_fail_op = .KEEP, fail_op = .KEEP, pass_op = .INCREMENT_AND_WRAP},
-			},
+			depth_stencil_state = depth_stencil_state,
+			target_info = {depth_stencil_format = .D32_FLOAT_S8_UINT, has_depth_stencil_target = true},
 		},
 	)
+
+	depth_stencil_state.back_stencil_state = maskee_stencil_op
+	depth_stencil_state.front_stencil_state = maskee_stencil_op
+	depth_stencil_state.write_mask = 0x00
 
 	pipeline := sdl.CreateGPUGraphicsPipeline(
 		gpu,
 		{
 			fragment_shader = frag_shader,
 			vertex_shader = vert_shader,
-			depth_stencil_state = {
-				compare_mask = 0xFF,
-				write_mask = 0x00,
-				enable_stencil_test = true,
-				back_stencil_state = {compare_op = .LESS_OR_EQUAL, depth_fail_op = .KEEP, fail_op = .KEEP, pass_op = .KEEP},
-				front_stencil_state = {compare_op = .LESS_OR_EQUAL, depth_fail_op = .KEEP, fail_op = .KEEP, pass_op = .KEEP},
-			},
+			depth_stencil_state = depth_stencil_state,
 			target_info = {
 				depth_stencil_format = .D32_FLOAT_S8_UINT,
 				has_depth_stencil_target = true,
@@ -201,6 +198,10 @@ init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, ste
 	backend_ctx.rects_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.borders_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.render_commands_buf = init_gpu_dynamic_buffer(&backend_ctx)
+	backend_ctx.dummy_texture = sdl.CreateGPUTexture(
+		gpu,
+		{height = 1, width = 1, format = .R8G8B8A8_UNORM, usage = {.SAMPLER}, layer_count_or_depth = 1, num_levels = 1},
+	)
 
 	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .VSYNC))
 	return backend_ctx
@@ -257,6 +258,7 @@ de_init :: proc(backend_ctx: ^Backend_Context) {
 	de_init_gpu_dynamic_buffer(backend_ctx, &backend_ctx.borders_buf)
 	de_init_gpu_dynamic_buffer(backend_ctx, &backend_ctx.render_commands_buf)
 
+	sdl.ReleaseGPUTexture(backend_ctx.gpu, backend_ctx.dummy_texture)
 	sdl.ReleaseGPUTexture(backend_ctx.gpu, backend_ctx.stencil_texture)
 	sdl.ReleaseGPUGraphicsPipeline(backend_ctx.gpu, backend_ctx.stencil_pipeline)
 	sdl.ReleaseGPUGraphicsPipeline(backend_ctx.gpu, backend_ctx.pipeline)
@@ -361,7 +363,7 @@ render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
 		clear_stencil    = 0,
 	}
 
-	stencil_render_pass := sdl.BeginGPURenderPass(command_buf, &swapchain_target, 1, &stencil_target)
+	stencil_render_pass := sdl.BeginGPURenderPass(command_buf, nil, 0, &stencil_target)
 	stencil_pass(backend_ctx, core_ctx, stencil_render_pass, command_buf, projection_mat)
 	sdl.EndGPURenderPass(stencil_render_pass)
 
@@ -408,20 +410,28 @@ geometry_pass :: proc(
 		backend_ctx.render_commands_buf.data,
 	}
 
-
 	sdl.BindGPUGraphicsPipeline(render_pass, backend_ctx.pipeline)
 	sdl.PushGPUVertexUniformData(command_buf, 0, projection, size_of(projection^))
 	sdl.BindGPUVertexStorageBuffers(render_pass, 0, raw_data(storage_bufs), u32(len(storage_bufs)))
 
+	sdl.BindGPUFragmentSamplers(
+		render_pass,
+		0,
+		&sdl.GPUTextureSamplerBinding{texture = backend_ctx.dummy_texture, sampler = backend_ctx.font_sampler},
+		1,
+	)
+
 	instance_offset: u32
 	for batch_data, index in backend_ctx.batch {
 		commands := backend_ctx.render_commands[batch_data.start:batch_data.end]
-		sdl.BindGPUFragmentSamplers(
-			render_pass,
-			0,
-			&sdl.GPUTextureSamplerBinding{texture = batch_data.texture, sampler = backend_ctx.font_sampler},
-			1,
-		)
+		if batch_data.texture != nil {
+			sdl.BindGPUFragmentSamplers(
+				render_pass,
+				0,
+				&sdl.GPUTextureSamplerBinding{texture = batch_data.texture, sampler = backend_ctx.font_sampler},
+				1,
+			)
+		}
 		sdl.SetGPUStencilReference(render_pass, batch_data.clip_ref)
 		sdl.DrawGPUPrimitives(render_pass, 6, u32(len(commands)), 0, instance_offset)
 		instance_offset += u32(len(commands))

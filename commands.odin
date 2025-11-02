@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:fmt"
 import "core:math/linalg"
 
 Render_Command_Kind :: union {

@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:fmt"
 import "core:math/linalg"
 
 clip :: proc "contextless" (
@@ -147,7 +148,7 @@ is_widget_active :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
 	return widget.key.hash == ctx.mouse.active
 }
 
-get_widget_mouse_events_all :: proc(ctx: ^Core_Context, widget: ^Widget) -> [Mouse_Button]bit_set[Widget_Key_Event] {
+get_widget_mouse_events_all :: proc(ctx: ^Core_Context, widget: ^Widget) -> Mouse_Events {
 	if is_widget_active(ctx, widget) {
 		return ctx.mouse.events
 	}

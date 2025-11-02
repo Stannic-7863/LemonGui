@@ -86,6 +86,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 	prev_hovered, prev_active := ctx.mouse.hovered, ctx.mouse.active
 
+	ctx.mouse.active_disabled = false
 	if !ctx.mouse.hover_is_locked {ctx.mouse.hovered = 0}
 	if !ctx.mouse.active_is_locked {ctx.mouse.active = 0}
 
@@ -113,14 +114,15 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		}
 
 		widget_style := &ctx.styles[widget.style]
-
+		prev_border_radius := widget_style.border.radius
 		_clamp_border_radius(widget, widget_style)
 		_resolve_widget_animation(ctx, widget)
 		_emit_render_commands(ctx, widget, &z_index_offset, widget_style)
 		_write_widget_persistant_data(ctx, widget)
+		widget_style.border.radius = prev_border_radius
 
 		if is_point_in_rect(widget.rect, ctx.mouse.position, widget_style.border) &&
-		   .Pointer_Passthrough not_in widget.event_flags &&
+		   .Disable_Hover not_in widget.event_flags &&
 		   !ctx.mouse.hover_is_locked {
 
 			widget_clip := ctx.clips[widget.clip]
@@ -131,6 +133,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 			ctx.mouse.hovered = widget.key.hash
 			ctx.mouse.can_lock_active = .Lock_Active in widget.event_flags
 			ctx.mouse.can_lock_hover = .Lock_Hover in widget.event_flags
+			ctx.mouse.active_disabled = .Disable_Active in widget.event_flags
 		}
 	}
 
@@ -168,10 +171,10 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 		case Layout:
 			#partial switch kind in widget_kind.sizing[axis] {
 			case Fit:
-				if widget_kind.direction == axis {
-					widget_kind.accumulating_min[axis] += widget_style.padding[axis].x + widget_style.padding[axis].y
-				}
 				widget_kind.accumulating_min[axis] += widget_style.padding[axis].x + widget_style.padding[axis].y
+				if widget_kind.direction == axis {
+					widget_kind.accumulating_min[axis] += max(0, f32(widget.total_children - 1)) * widget_kind.child_gap
+				}
 				widget_kind.accumulating_min[axis] = max(widget_kind.accumulating_min[axis], kind.min)
 				widget_kind.accumulating_min[axis] = min(widget_kind.accumulating_min[axis], kind.max)
 			case Grow:
@@ -429,11 +432,11 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				append(&ctx.lines, type.text)
 				type.start = len(ctx.lines) - 1
 				type.end = len(ctx.lines)
-				padding := style.padding[.X].x + style.padding[.X].y
-				text_height := ctx.measure_text_height(style.text)
-				widget.rect.size.y = text_height + style.padding[.Y].x + style.padding[.Y].y
-				type.maximum_width = ctx.measure_text_width(type.text, style.text) + padding
-				type.minimum_width = type.maximum_width + padding
+				padding_x := style.padding[.X].x + style.padding[.X].y
+				padding_y := style.padding[.Y].x + style.padding[.Y].y
+				widget.rect.size.y = ctx.measure_text_height(style.text) + padding_y
+				type.maximum_width = ctx.measure_text_width(type.text, style.text) + padding_x
+				type.minimum_width = type.maximum_width
 			}
 		}
 	}

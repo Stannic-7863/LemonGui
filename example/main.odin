@@ -1,7 +1,5 @@
 package main
 
-import "core:fmt"
-import "core:mem"
 import "core:time"
 import "vendor:sdl3/ttf"
 
@@ -9,50 +7,28 @@ import sdl_backend "backend/sdl_gpu"
 import sdl "vendor:sdl3"
 
 import ui "../"
+import widgets "widgets"
 
-PRIMARY_COLOR :: ui.Color{104, 157, 106, 255} // regular6 (#689d6a)
-ON_PRIMARY_COLOR :: ui.Color{235, 219, 178, 255} // foreground (#ebdbb2)
+PRIMARY_COLOR :: ui.Color{110, 197, 190, 255} // #6EC5BE
+ON_PRIMARY_COLOR :: ui.Color{235, 219, 178, 255} // #ebdbb2
 
-BACKGROUND_COLOR :: ui.Color{30, 33, 34, 255} // background (#1e2122)
-SURFACE_COLOR :: ui.Color{40, 40, 40, 255} // regular0 (#282828)
-ELEVATED_SURFACE_COLOR :: ui.Color{68, 61, 55, 255} // gruv shadow tone
+BACKGROUND_COLOR :: ui.Color{15, 20, 25, 255} // #0f1419
+SURFACE_COLOR :: ui.Color{27, 31, 35, 255} // #1b1f23
+ELEVATED_SURFACE_COLOR :: ui.Color{35, 40, 45, 255} // #23282d
 
-TEXT_PRIMARY_COLOR :: ui.Color{235, 219, 178, 255} // foreground (#ebdbb2)
-TEXT_SECONDARY_COLOR :: ui.Color{168, 153, 132, 255} // regular7 (#a89984)
-TEXT_DISABLED_COLOR :: ui.Color{146, 131, 116, 255} // bright0 (#928374)
+TEXT_PRIMARY_COLOR :: ui.Color{235, 242, 249, 255} // #ebf2f9
+TEXT_SECONDARY_COLOR :: ui.Color{156, 163, 170, 255} // #9ca3aa
+TEXT_DISABLED_COLOR :: ui.Color{98, 104, 110, 255} // #62686e
 
-SUCCESS_COLOR :: ui.Color{152, 151, 26, 255} // regular2 (#98971a)
-WARNING_COLOR :: ui.Color{215, 153, 33, 255} // regular3 (#d79921)
-ERROR_COLOR :: ui.Color{204, 36, 29, 255} // regular1 (#cc241d)
-INFO_COLOR :: ui.Color{69, 133, 136, 255} // regular4 (#458588)
+SUCCESS_COLOR :: ui.Color{87, 217, 106, 255} // #57d96a
+WARNING_COLOR :: ui.Color{255, 177, 85, 255} // #ffb155
+ERROR_COLOR :: ui.Color{255, 92, 92, 255} // #ff5c5c
+INFO_COLOR :: ui.Color{117, 203, 253, 255} // #75cbfd
 
-BORDER_COLOR :: ui.Color{168, 153, 132, 255} // regular7 (#a89984)
-DIVIDER_COLOR :: ui.Color{235, 219, 178, 255} // foreground (#ebdbb2)
-
-Event_Mapping :: struct {
-	mouse_position: [2]f32,
-	mouse_scroll:   [2]f32,
-}
+BORDER_COLOR :: ui.Color{68, 74, 80, 255} // #444a50
+DIVIDER_COLOR :: ui.Color{35, 40, 45, 255} // #23282d
 
 main :: proc() {
-
-	when ODIN_DEBUG {
-		track: mem.Tracking_Allocator
-		mem.tracking_allocator_init(&track, context.allocator)
-		context.allocator = mem.tracking_allocator(&track)
-
-		defer {
-			if len(track.allocation_map) > 0 {
-				fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-				for _, entry in track.allocation_map {
-					fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-				}
-			}
-			mem.tracking_allocator_destroy(&track)
-		}
-	}
-
-
 	backend_ctx := sdl_backend.init(
 		"Window",
 		"./backend/sdl_gpu/shaders/compiled/main.vert.sprv",
@@ -73,149 +49,128 @@ main :: proc() {
 
 	sdl_backend.init_font(&backend_ctx)
 	jetbrainsfont := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 100)
-	opensans := sdl_backend.add_font(&backend_ctx, "./assets/OpenSans-Regular.ttf", 100)
-	nastaliq := sdl_backend.add_font(&backend_ctx, "./assets/NotoNastaliqUrdu-Regular.ttf", 100)
-	noto_cjk := sdl_backend.add_font(&backend_ctx, "./assets/NotoSansCJK-Regular.ttc", 100)
+
+	widgets.theme.font = jetbrainsfont
+	widgets.theme.font_size = 15
+	widgets.theme.container_child_gap = 8
 
 	defer sdl_backend.de_init(&backend_ctx)
 	defer sdl_backend.de_init_font(&backend_ctx)
 
-	for mappings in handle_events() {
 
-		w_width, w_height: i32
-		sdl.GetWindowSize(backend_ctx.window, &w_width, &w_height)
+	main_container_offset: ui.Vec2f32
+	slider_value: f32
+	toggle_bool: bool
+	switch_bool: bool
+	progress: f32
 
-
-		ctx.window_size.x = f32(w_width)
-		ctx.window_size.y = f32(w_height)
-		ctx.mouse.scroll_v = mappings.mouse_scroll
-		ctx.mouse.scroll = mappings.mouse_scroll.y
-		ctx.mouse.old_position = ctx.mouse.position
-		ctx.mouse.position = mappings.mouse_position
-
+	for handle_events(ctp, &backend_ctx) {
+		defer free_all(context.temp_allocator)
 		ui.begin_ui(ctp)
+		ui.push_parent(ctp, ui.create_widget(ctp, "real root", ui.layout(ui.sizing(ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)))))
+		widgets.build_themes(ctp)
 
-		basic_background_style := ui.create_style(
-			ctp,
-			ui.style(BACKGROUND_COLOR, padding = ui.axis_vec2f32(16, 16), border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(4, 4))),
-		)
-		elevated_background_style := ui.create_style(
-			ctp,
-			ui.style(ELEVATED_SURFACE_COLOR, padding = ui.axis_vec2f32(16, 16), border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(4, 4))),
-		)
+		progress += ctx.frametime / 5
 
-		basic_text_style_jetbrains := ui.create_style(
-			ctp,
-			ui.style(
-				BACKGROUND_COLOR,
-				padding = ui.axis_vec2f32(16, 16),
-				border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(2, 2)),
-				text = ui.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, jetbrainsfont),
-			),
-		)
+		if progress > 1 do progress = 0
 
-		basic_text_style_opensans := ui.create_style(
-			ctp,
-			ui.style(
-				BACKGROUND_COLOR,
-				padding = ui.axis_vec2f32(16, 16),
-				border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(1, 1)),
-				text = ui.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, opensans),
-			),
-		)
-		basic_text_style_nastaliq := ui.create_style(
-			ctp,
-			ui.style(
-				BACKGROUND_COLOR,
-				padding = ui.axis_vec2f32(16, 16),
-				border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(2, 2)),
-				text = ui.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, nastaliq),
-			),
-		)
-		basic_text_style_noto_cjk := ui.create_style(
-			ctp,
-			ui.style(
-				BACKGROUND_COLOR,
-				padding = ui.axis_vec2f32(16, 16),
-				border = ui.border(BORDER_COLOR, 12, ui.axis_vec2f32(2, 2)),
-				text = ui.text_style(TEXT_PRIMARY_COLOR, 20, 1, 0, noto_cjk),
-			),
-		)
-
-		root := ui.create_widget(
-			ctp,
-			"root",
-			ui.layout(ui.sizing(ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)), child_gap = 8),
-			style = ui.create_style(ctp, {color = BACKGROUND_COLOR, padding = ui.axis_vec2f32(16, 16)}),
-		)
-
-		ui.push_parent(ctp, root)
-
-		ui.push_parent(
-			ctp,
-			ui.create_widget(
+		{
+			main_container_index, main_container_events := widgets.begin_container(ctp, "main container", .Y, {.Lock_Active, .Lock_Hover})
+			main_container := ui.get_widget(ctp, main_container_index)
+			main_container.override = ui.create_override(
 				ctp,
-				"child 1",
-				ui.layout(ui.sizing(ui.grow(), ui.grow()), child_gap = 8, direction = .Y),
-				style = elevated_background_style,
-			),
-		)
-		ui.create_widget(ctp, "text", ui.text("A quick brown fox jumps over the lazy dog", .Words), style = basic_text_style_opensans)
-		ui.create_widget(ctp, "text2", ui.text("静かな森に風が優しく吹いている。", .Words), style = basic_text_style_noto_cjk)
-		ui.create_widget(
-			ctp,
-			"text3",
-			ui.text(
-				"پاکستان کی سرزمین قدرتی وسائل سے مالا مال ہے، جہاں کے پہاڑ، دریا، اور میدان ایک حسین نظارہ پیش کرتے ہیں اور لوگ اپنی مہمان نوازی اور محبت سے دنیا بھر میں جانے جاتے ہیں۔",
-				.Words,
-			),
-			style = basic_text_style_nastaliq,
-		)
-		clipper := ui.create_widget(ctp, "clipper", ui.layout(ui.sizing(ui.grow(), ui.grow()), child_gap = 8), style = basic_background_style)
-		clipper.clip = ui.create_clip(ctp, ui.clip(ui.clip_none(), ui.clip_auto(50), hash = clipper.key.hash))
+				ui.override({}, ui.offset(ui.fixed(main_container_offset.x), ui.fixed(main_container_offset.y)), {}),
+			)
+			if .Down in main_container_events[.Left] {
+				main_container_offset += ctx.mouse.delta
+			}
 
-		ui.push_parent(ctp, clipper)
-		clipper_2 := ui.create_widget(ctp, "clipper_2", ui.layout(ui.sizing(ui.grow(), ui.grow()), child_gap = 8), style = elevated_background_style)
-		clipper_2.clip = ui.create_clip(ctp, ui.clip(ui.clip_none(), ui.clip_auto(50), hash = clipper_2.key.hash))
-		ui.push_parent(ctp, clipper_2)
-		ui.create_widget(ctp, "child", ui.layout(ui.sizing(ui.grow(), ui.grow())), style = basic_background_style)
-		ui.pop_parent(ctp)
+			{
+				widgets.button(ctp, "Button 1", "Test button")
+				widgets.button(ctp, "Button 2", "Test button hmmmm")
+				widgets.slider(ctp, "slider", "test slider", &slider_value, 5, 5000, 1, .X)
+				widgets.toggle(ctp, "toggle", "Toggle^2", &toggle_bool)
+				widgets.ui_switch(ctp, "switch", "Switch", &switch_bool)
+				widgets.progress_bar(ctp, "progress bar", "progress", progress)
+			}
+			widgets.end_container(ctp)
+		}
 
-		ui.create_widget(ctp, "child2", ui.layout(ui.sizing(ui.grow(), ui.grow())), style = elevated_background_style)
-		ui.create_widget(ctp, "child3", ui.layout(ui.sizing(ui.grow(), ui.grow())), style = elevated_background_style)
 		ui.pop_parent(ctp)
-		ui.pop_parent(ctp)
-		ui.pop_parent(ctp)
-
 		ui.end_ui(ctp)
 
 		sdl_backend.render(&backend_ctx, &ctx)
-
 	}
 }
 
-handle_events :: proc() -> (Event_Mapping, bool) {
+handle_events :: proc(ctx: ^ui.Core_Context, backend_ctx: ^sdl_backend.Backend_Context) -> bool {
 	event: sdl.Event
-	mappings: Event_Mapping
+
+	@(static) event_ctx: struct {
+		is_left_down, is_right_down, is_middle_down: bool,
+	}
 
 	for sdl.PollEvent(&event) {
 		#partial switch event.type {
 		case .KEY_DOWN:
 			if event.key.scancode == .ESCAPE {
-				return {}, false
+				return false
 			}
 		case .QUIT:
-			return {}, false
+			return false
 		case .MOUSE_WHEEL:
-			mappings.mouse_scroll.x = event.wheel.x
-			mappings.mouse_scroll.y = event.wheel.y
+			ctx.mouse.scroll_v.x = event.wheel.x
+			ctx.mouse.scroll_v.y = event.wheel.y
+			ctx.mouse.scroll = ctx.mouse.scroll_v.y
+		case .MOUSE_BUTTON_DOWN:
+			if event.button.button == sdl.BUTTON_LEFT {
+				event_ctx.is_left_down = true
+				ctx.mouse.mapped_events[.Left] += {.Pressed}
+			}
+			if event.button.button == sdl.BUTTON_RIGHT {
+				event_ctx.is_right_down = true
+				ctx.mouse.mapped_events[.Right] += {.Pressed}
+			}
+			if event.button.button == sdl.BUTTON_MIDDLE {
+				event_ctx.is_middle_down = true
+				ctx.mouse.mapped_events[.Middle] += {.Pressed}
+			}
+		case .MOUSE_BUTTON_UP:
+			if event.button.button == sdl.BUTTON_LEFT {
+				event_ctx.is_left_down = false
+				ctx.mouse.mapped_events[.Left] += {.Released}
+			}
+			if event.button.button == sdl.BUTTON_RIGHT {
+				event_ctx.is_right_down = false
+				ctx.mouse.mapped_events[.Right] += {.Released}
+			}
+			if event.button.button == sdl.BUTTON_MIDDLE {
+				event_ctx.is_middle_down = false
+				ctx.mouse.mapped_events[.Middle] += {.Released}
+			}
 		}
 	}
 
-	mouse_x, mouse_y: f32
-	_ = sdl.GetMouseState(&mouse_x, &mouse_y)
+	if event_ctx.is_left_down {
+		ctx.mouse.mapped_events[.Left] += {.Down}
+	}
+	if event_ctx.is_right_down {
+		ctx.mouse.mapped_events[.Right] += {.Down}
+	}
+	if event_ctx.is_middle_down {
+		ctx.mouse.mapped_events[.Middle] += {.Down}
+	}
 
-	mappings.mouse_position = {mouse_x, mouse_y}
+	ctx.mouse.old_position = ctx.mouse.position
+	w_width, w_height: i32
 
-	return mappings, true
+	_ = sdl.GetMouseState(&ctx.mouse.position.x, &ctx.mouse.position.y)
+	_ = sdl.GetWindowSize(backend_ctx.window, &w_width, &w_height)
+
+	ctx.mouse.delta = ctx.mouse.position - ctx.mouse.old_position
+
+	ctx.window_size.x = f32(w_width)
+	ctx.window_size.y = f32(w_height)
+
+	return true
 }
