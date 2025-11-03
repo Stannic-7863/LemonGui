@@ -43,11 +43,15 @@ Theme :: struct {
 	container_padding:          Element_Axis_Vec2f32,
 	container_border_thickness: Element_Axis_Vec2f32,
 	font:                       rawptr,
+	control_size:               ui.Vec2f32,
+	bar_minimum_width:          f32,
+	bar_height:                 f32,
 	container_child_gap:        f32,
 	font_size:                  f32,
 	_label_style:               Element_Style,
 	_container_style:           Element_Style,
 	_container_filled_style:    Element_Style,
+	_control_style:             Element_Style,
 }
 
 theme := Theme {
@@ -179,6 +183,35 @@ build_themes :: proc(ctx: ^ui.Core_Context) {
 	)
 }
 
+control :: proc(
+	ctx: ^ui.Core_Context,
+	id: ui.Keying_Id,
+	flags: ui.Event_Flags,
+	override: ui.Override = {},
+	on: bool = false,
+) -> (
+	is_hovered: bool,
+	is_active: bool,
+) {
+	control_widget := ui.create_widget(
+		ctx,
+		"slider knob",
+		ui.layout(ui.sizing(ui.fixed(theme.control_size.x), ui.fixed(theme.control_size.y))),
+		flags,
+		override = ui.create_override(ctx, override),
+		style = theme._container_style.default if !on else theme._container_style.active,
+	)
+	if ui.is_widget_hovered(ctx, control_widget) {
+		is_hovered = true
+		control_widget.style = theme._container_style.hovered
+	}
+	if ui.is_widget_active(ctx, control_widget) {
+		is_active = true
+		control_widget.style = theme._container_style.active
+	}
+	return
+}
+
 spacing :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, direction: ui.Axis) {
 	switch direction {
 	case .X:
@@ -193,10 +226,10 @@ bar :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, progress: f32, direction: u
 	flags := ui.flags(x = {.No_Size_Propagation, .No_Positioning_Relative}, y = {.No_Size_Propagation, .No_Positioning_Relative})
 	switch direction {
 	case .X:
-		bar = ui.create_widget(ctx, "progress bar", ui.layout(ui.sizing(ui.fixed(0), ui.fixed(8))), {.Disable_Hover})
+		bar = ui.create_widget(ctx, "progress bar", ui.layout(ui.sizing(ui.fixed(0), ui.fixed(theme.bar_height))), {.Disable_Hover})
 		bar.override = ui.create_override(ctx, {expand = ui.expand(x = ui.percent(progress)), flags = flags})
 	case .Y:
-		bar = ui.create_widget(ctx, "progress bar", ui.layout(ui.sizing(ui.fixed(8), ui.fixed(0))), {.Disable_Hover})
+		bar = ui.create_widget(ctx, "progress bar", ui.layout(ui.sizing(ui.fixed(theme.bar_height), ui.fixed(0))), {.Disable_Hover})
 		bar.override = ui.create_override(ctx, {expand = ui.expand(y = ui.percent(progress)), flags = flags})
 	}
 	bar.style = theme._container_filled_style.active
@@ -258,7 +291,8 @@ slider :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, value: ^$
 		{
 			ui_label(ctx, "slider min label", fmt.tprintf("%v", minimum))
 
-			railing_sizing := ui.sizing(ui.grow(min = 64), ui.fixed(8)) if direction == .X else ui.sizing(ui.fixed(8), ui.grow(min = 64))
+			railing_sizing :=
+				ui.sizing(ui.grow(theme.bar_minimum_width), ui.fixed(theme.bar_height)) if direction == .X else ui.sizing(ui.fixed(theme.bar_height), ui.grow(theme.bar_minimum_width))
 
 			railing := ui.create_widget(
 				ctx,
@@ -277,25 +311,13 @@ slider :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, value: ^$
 			offset_value -= 0.5
 
 			knob_offset := ui.offset(ui.percent(offset_value)) if direction == .X else ui.offset(y = ui.percent(offset_value))
-			knob := ui.create_widget(
-				ctx,
-				"slider knob",
-				ui.layout(ui.sizing(ui.fixed(16), ui.fixed(16))),
-				{.Lock_Active, .Lock_Hover},
-				override = ui.create_override(ctx, {offset = knob_offset}),
-				style = theme._container_style.default,
-			)
 
-			if ui.is_widget_hovered(ctx, knob) {
-				knob.style = theme._container_style.hovered
-			}
-			if ui.is_widget_active(ctx, knob) {
-				knob.style = theme._container_style.active
-				control_parameter :=
-					(ctx.mouse.position[direction] - railing.resolved.position[direction]) /
-					(railing.resolved.position[direction] + railing.resolved.size[direction] - railing.resolved.position[direction])
+			_, knob_active := control(ctx, "slider knob", {.Lock_Active, .Lock_Hover}, {offset = knob_offset})
+
+			if knob_active {
+				pos_rel, pos_min := ctx.mouse.position[direction], railing.resolved.position[direction]
+				control_parameter := (pos_rel - pos_min) / (railing.resolved.size[direction])
 				control_parameter -= 1
-
 
 				value^ = T(f32(maximum - minimum) * control_parameter + f32(maximum))
 			}
@@ -316,8 +338,8 @@ toggle :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, toggle_bo
 	_, events := begin_container(ctx, id, .X, {}, ui.alignment(.Center, .Center), no_theme_active = true)
 
 	ui_label(ctx, "toggle label", label)
-	t := ui.create_widget(ctx, "toggle toggle", ui.layout(ui.sizing(ui.fixed(16), ui.fixed(16))), {.Disable_Hover})
-	t.style = theme._container_style.default if !toggle_bool^ else theme._container_filled_style.active
+
+	control(ctx, "toggle control", {.Disable_Hover}, on = toggle_bool^)
 
 	if .Clicked in events[.Left] {
 		toggle_bool^ = !toggle_bool^
@@ -334,12 +356,17 @@ ui_switch :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, switch
 	s_holder := ui.create_widget(
 		ctx,
 		"switch holder",
-		ui.layout(ui.sizing(ui.fixed(28), ui.fixed(16)), ui.alignment(.Positive, .Center)),
+		ui.layout(ui.sizing(ui.fixed(theme.control_size.x * 2), ui.fixed(theme.control_size.y)), ui.alignment(.Positive, .Center)),
 		{.Disable_Hover},
 		style = theme._container_style.default,
 	)
 	ui.push_parent(ctx, s_holder)
-	s := ui.create_widget(ctx, "toggle toggle", ui.layout(ui.sizing(ui.fixed(16), ui.fixed(16))), {.Disable_Hover})
+	s := ui.create_widget(
+		ctx,
+		"toggle toggle",
+		ui.layout(ui.sizing(ui.fixed(theme.control_size.x), ui.fixed(theme.control_size.y))),
+		{.Disable_Hover},
+	)
 	s.style = theme._container_style.default if !switch_bool^ else theme._container_style.active
 
 	if switch_bool^ {
@@ -366,7 +393,8 @@ progress_bar :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, pro
 	railing_style_ptr := ui.get_style(ctx, railing_style)
 	railing_style_ptr.padding = {}
 
-	railing_sizing := ui.sizing(ui.grow(64), ui.fixed(8)) if direction == .X else ui.sizing(ui.fixed(8), ui.grow(64))
+	railing_sizing :=
+		ui.sizing(ui.grow(theme.bar_minimum_width), ui.fixed(theme.bar_height)) if direction == .X else ui.sizing(ui.fixed(theme.bar_height), ui.grow(theme.bar_minimum_width))
 
 	ui.push_parent(
 		ctx,

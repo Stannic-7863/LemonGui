@@ -509,6 +509,10 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 			for line in cmd_kind.lines {
 				defer line_offset += text_height + cmd_kind.style.line_spacing
 
+				if line_offset + cmd.rect.position.y + text_height < 0 || (line_offset + cmd.rect.position.y) > f32(backend_ctx.window_size.y) {
+					continue
+				}
+
 				ttf.SetFontSize(cast(^ttf.Font)cmd_kind.style.font, cmd_kind.style.font_size)
 				text := ttf.CreateText(backend_ctx.font_engine, cast(^ttf.Font)cmd_kind.style.font, cast(cstring)raw_data(line), len(line))
 				defer ttf.DestroyText(text)
