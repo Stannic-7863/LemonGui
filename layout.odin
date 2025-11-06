@@ -90,6 +90,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	if !ctx.mouse.hover_is_locked {ctx.mouse.hovered = 0}
 	if !ctx.mouse.active_is_locked {ctx.mouse.active = 0}
 
+	hovered_z_index: int = -1
 	z_index_offset: int
 
 	root := &ctx.widgets[0]
@@ -123,8 +124,10 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 		if is_point_in_rect(widget.rect, ctx.mouse.position, widget_style.border) &&
 		   .Disable_Hover not_in widget.event_flags &&
-		   !ctx.mouse.hover_is_locked {
+		   !ctx.mouse.hover_is_locked &&
+		   widget.z_index >= hovered_z_index {
 
+			hovered_z_index = widget.z_index
 			widget_clip := ctx.clips[widget.clip]
 			if widget_clip.kind[.X] != .None || widget_clip.kind[.Y] != .None {
 				ctx.mouse.hovered_clip = widget_clip.hash

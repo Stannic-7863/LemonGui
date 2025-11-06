@@ -287,7 +287,7 @@ pop_parent :: proc(ctx: ^Core_Context) {
 	ctx.active_parent = ctx.widgets[ctx.active_parent].parent
 }
 
-begin_ui :: proc(ctx: ^Core_Context) {
+begin :: proc(ctx: ^Core_Context) {
 	ctx.active_parent = -1
 	clear(&ctx.lines)
 	clear(&ctx.widgets)
@@ -308,7 +308,7 @@ begin_ui :: proc(ctx: ^Core_Context) {
 	ctx.frame_start_time = time.now()
 }
 
-end_ui :: proc(ctx: ^Core_Context) {
+end :: proc(ctx: ^Core_Context) {
 	_build_stacks(ctx)
 	_sizing_pass(ctx)
 	_positioning_pass(ctx)

@@ -11,7 +11,6 @@ import "core:fmt"
 // Tooltip [DONE]
 // Radio button [DONE]
 // Dropdown
-// Separator
 // Text input
 // Multiline text box
 // Scrollable container
@@ -20,13 +19,11 @@ import "core:fmt"
 // Modal / Popup
 
 Ui_State :: struct {
-	radio_buttons: [dynamic]Radio_Button_Info,
+	open_dropdown_hash:  ui.Hash,
+	open_dropdown_index: ui.Widget_Index,
 }
 
-Radio_Button_Info :: struct {
-	widget: ui.Widget_Index,
-	toggle: ^bool,
-}
+Dropdown_Info :: struct {}
 
 Ui_Interaction_State :: enum {
 	Default,
@@ -34,6 +31,14 @@ Ui_Interaction_State :: enum {
 	Active,
 	Disabled,
 }
+
+Ui_Theme_Flag :: enum {
+	No_Theme_Hover,
+	No_Theme_Active,
+	No_Theme_Default,
+}
+
+Ui_Theme_Flags :: bit_set[Ui_Theme_Flag]
 
 Element_Colors :: [Ui_Interaction_State]ui.Color
 Element_Vec4f32 :: [Ui_Interaction_State]ui.Vec4f32
@@ -53,13 +58,12 @@ Theme :: struct {
 	bar_height:              f32,
 	container_child_gap:     f32,
 	font_size:               f32,
+	_list_item_style:        Element_Style,
 	_label_style:            Element_Style,
 	_container_style:        Element_Style,
 	_control_style:          Element_Style,
 	_handle_style:           Element_Style,
 }
-
-ui_state := Ui_State{}
 
 theme := Theme {
 	global_color = Element_Colors {
@@ -109,6 +113,7 @@ theme := Theme {
 	_handle_style = Element_Style{},
 }
 
+ui_state := Ui_State{}
 
 build_themes :: proc(ctx: ^ui.Core_Context) {
 	default_border := ui.Border_Style {
@@ -192,6 +197,19 @@ build_themes :: proc(ctx: ^ui.Core_Context) {
 		ctx,
 		{color = theme.global_color[.Active], border = active_border, padding = ui.axis_vec2f32({0, 0}, {0, 0})},
 	)
+
+	theme._list_item_style[.Default] = ui.create_style(
+		ctx,
+		{color = theme.global_color[.Default], border = default_border, padding = ui.axis_vec2f32({8, 8}, {8, 8})},
+	)
+	theme._list_item_style[.Hovered] = ui.create_style(
+		ctx,
+		{color = theme.global_color[.Default], border = hovered_border, padding = ui.axis_vec2f32({8, 8}, {8, 8})},
+	)
+	theme._list_item_style[.Active] = ui.create_style(
+		ctx,
+		{color = theme.global_color[.Default], border = active_border, padding = ui.axis_vec2f32({8, 8}, {8, 8})},
+	)
 }
 
 control :: proc(
@@ -273,10 +291,8 @@ begin_container :: proc(
 	id: ui.Keying_Id,
 	direction: ui.Axis = .X,
 	flags: ui.Event_Flags = {},
-	content_alignment: [ui.Axis]ui.Alignment = {.X = .Negative, .Y = .Negative},
-	no_theme_default: bool = false,
-	no_theme_hover: bool = false,
-	no_theme_active: bool = false,
+	content_alignment: [ui.Axis]ui.Alignment = {},
+	theme_flags: Ui_Theme_Flags = {},
 ) -> (
 	widget_index: ui.Widget_Index,
 	events: ui.Mouse_Events,
@@ -288,17 +304,17 @@ begin_container :: proc(
 		id,
 		ui.layout(ui.sizing(ui.fit(), ui.fit()), content_alignment, theme.container_child_gap, direction),
 		flags,
-		style = theme._container_style[.Default] if !no_theme_default else 0,
+		style = theme._container_style[.Default] if .No_Theme_Default not_in theme_flags else 0,
 	)
 	widget_index = container.index
 	events = ui.get_widget_mouse_events_all(ctx, container)
 
-	if ui.is_widget_hovered(ctx, container) && !no_theme_hover {
+	if ui.is_widget_hovered(ctx, container) && .No_Theme_Hover not_in theme_flags {
 		container.style = theme._container_style[.Hovered]
 		is_hovered = true
 	}
 
-	if ui.is_widget_active(ctx, container) && !no_theme_active {
+	if ui.is_widget_active(ctx, container) && .No_Theme_Active not_in theme_flags {
 		container.style = theme._container_style[.Active]
 		is_active = true
 	}
@@ -339,10 +355,10 @@ button :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, tooltip_t
 }
 
 slider :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, value: ^$T, minimum, maximum, step: T, direction: ui.Axis = .X) {
-	begin_container(ctx, id, direction, {.Disable_Active}, ui.alignment(.Center, .Center), no_theme_hover = true)
+	begin_container(ctx, id, direction, {.Disable_Active}, ui.alignment(.Center, .Center), {.No_Theme_Hover})
 	{
 		ui_label(ctx, "slider label", label)
-		begin_container(ctx, id, direction, {.Disable_Hover}, ui.alignment(.Center, .Center), no_theme_default = true)
+		begin_container(ctx, id, direction, {.Disable_Hover}, ui.alignment(.Center, .Center), {.No_Theme_Default})
 		{
 			ui_label(ctx, "slider min label", fmt.tprintf("%v", minimum))
 
@@ -375,7 +391,7 @@ slider :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, value: ^$
 }
 
 toggle :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, toggle_bool: ^bool) {
-	_, events, _, _ := begin_container(ctx, id, .X, {}, ui.alignment(.Center, .Center), no_theme_active = true)
+	_, events, _, _ := begin_container(ctx, id, .X, {}, ui.alignment(.Center, .Center), {.No_Theme_Active})
 	control(ctx, "toggle control", toggle_bool^, {.Disable_Hover})
 	ui_label(ctx, "toggle label", label)
 	if .Clicked in events[.Left] {
@@ -384,75 +400,107 @@ toggle :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, toggle_bo
 	end_container(ctx)
 }
 
-begin_radio :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id) {
-	begin_container(ctx, id, .Y, {.Disable_Active}, ui.alignment(.Center, .Center), no_theme_hover = true)
-
-}
-
-end_radio :: proc(ctx: ^ui.Core_Context) {
-	toggled_index: int = -1
-
-	for radio_info, index in ui_state.radio_buttons {
-		if radio_info.toggle^ {
-			toggled_index = index
-			break
-		}
-	}
-
-	for radio_info in ui_state.radio_buttons {
-		radio_widget := ui.get_widget(ctx, radio_info.widget)
-		events := ui.get_widget_mouse_events(ctx, radio_widget, .Left)
-		if .Clicked in events {
-			radio_info.toggle^ = !radio_info.toggle^
-			if toggled_index != -1 {
-				ui_state.radio_buttons[toggled_index].toggle^ = false
-			}
-		}
-	}
-
-	clear(&ui_state.radio_buttons)
-
-	end_container(ctx)
-}
-
-radio :: proc(ctx: ^ui.Core_Context, label: string, toggle: ^bool) {
-	begin_container(ctx, len(ui_state.radio_buttons), .X, {.Disable_Hover}, no_theme_default = true)
-	control_index, _ := control(ctx, "radio control", toggle^)
-	append(&ui_state.radio_buttons, Radio_Button_Info{widget = control_index, toggle = toggle})
-	ui_label(ctx, "radio label", label)
-	end_container(ctx)
-}
-
 ui_switch :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, switch_bool: ^bool) {
-	_, events, _, _ := begin_container(ctx, id, .X, {}, ui.alignment(.Center, .Center), no_theme_active = true)
-
+	_, events, _, _ := begin_container(ctx, id, .X, {}, ui.alignment(.Center, .Center), {.No_Theme_Active})
 	ui_label(ctx, "switch label", label)
-
 	alignment := ui.alignment(.Positive, .Center) if switch_bool^ else ui.alignment(.Negative, .Center)
-
 	begin_handle(ctx, "switch handle", {.Disable_Hover}, .X, alignment, {28, 8})
-
 	control(ctx, "switch control", switch_bool^, {.Disable_Hover})
-
 	end_handle(ctx)
-
 	if .Clicked in events[.Left] {
 		switch_bool^ = !switch_bool^
 	}
-
 	end_container(ctx)
 }
 
 progress_bar :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, label: string, progress: f32, direction: ui.Axis = .X) {
-	begin_container(ctx, id, .Y, {}, ui.alignment(.Center, .Center), no_theme_hover = true, no_theme_active = true)
-
+	begin_container(ctx, id, .Y, {}, ui.alignment(.Center, .Center), {.No_Theme_Active, .No_Theme_Hover})
 	ui_label(ctx, "progress label", fmt.tprintf("%s [%5.2f%s]", label, progress * 100, "%"))
-
 	begin_handle(ctx, "progress handle", {.Disable_Hover}, direction, ui.alignment(.Center, .Center))
-
 	bar(ctx, "progress", progress, direction)
-
 	end_handle(ctx)
-
 	end_container(ctx)
+}
+
+begin_radio :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id) {
+	begin_container(ctx, id, .Y, {.Disable_Active}, ui.alignment(.Center, .Center), {.No_Theme_Hover})
+}
+
+end_radio :: proc(ctx: ^ui.Core_Context) {
+	end_container(ctx)
+}
+
+radio :: proc(ctx: ^ui.Core_Context, label: string, id: int, selected_id: int) -> bool {
+	begin_container(ctx, id, .X, {.Disable_Hover}, theme_flags = {.No_Theme_Default})
+	control_index, events := control(ctx, "radio control", id == selected_id)
+	ui_label(ctx, "radio label", label)
+	end_container(ctx)
+	return .Clicked in events[.Left]
+}
+
+begin_dropdown :: proc(ctx: ^ui.Core_Context, id: ui.Keying_Id, selected_label: string) {
+	begin_container(ctx, id, .Y, {.Disable_Hover}, theme_flags = {.No_Theme_Default})
+	dropdown_index, events, _, _ := begin_container(ctx, "dropdown opener", .Y)
+
+	dropdown_hash := ui.get_widget(ctx, dropdown_index).key.hash
+	if .Clicked in events[.Left] {
+		if ui_state.open_dropdown_hash == dropdown_hash {
+			ui_state.open_dropdown_hash = 0
+			ui_state.open_dropdown_index = 0
+		} else {
+			ui_state.open_dropdown_index = dropdown_index
+			ui_state.open_dropdown_hash = dropdown_hash
+		}
+	}
+
+	ui_label(ctx, "dropdown selected label", selected_label if selected_label != "" else "Select an Item")
+	end_container(ctx)
+
+	if dropdown_hash == ui_state.open_dropdown_hash {
+		dropdown_widget := ui.get_widget(ctx, dropdown_index)
+		position := dropdown_widget.resolved.position + {0, dropdown_widget.resolved.size.y + theme.container_padding[.Default][.Y].x}
+		holder := ui.create_widget(
+			ctx,
+			"dropdown items holder",
+			ui.layout(ui.sizing(ui.fit(), ui.fit()), child_gap = theme.container_child_gap, direction = .Y),
+			style = theme._container_style[.Default],
+		)
+		holder_override := ui.create_override(
+			ctx,
+			ui.override(
+				ui.flags({.No_Size_Propagation, .No_Positioning}, {.No_Size_Propagation, .No_Positioning}),
+				ui.offset(ui.fixed(position.x), ui.fixed(position.y)),
+				ui.expand(),
+			),
+		)
+		holder.override = holder_override
+		holder.z_index = max(int) / 2
+		ui.push_parent(ctx, holder)
+	}
+}
+
+end_dropdown :: proc(ctx: ^ui.Core_Context) {
+	if ui_state.open_dropdown_hash != 0 {
+		ui.pop_parent(ctx)
+	}
+	end_container(ctx)
+}
+
+dropdown :: proc(ctx: ^ui.Core_Context, label: string, id: int, selected_id: int) -> bool {
+	if ui_state.open_dropdown_hash != 0 {
+		holder := ui.create_widget(ctx, id, ui.layout(ui.sizing(ui.grow(), ui.fit())), style = theme._list_item_style[.Default])
+
+		if id == selected_id {
+			holder.style = theme._list_item_style[.Active]
+		} else if ui.is_widget_hovered(ctx, holder) {
+			holder.style = theme._list_item_style[.Hovered]
+		}
+
+		ui.push_parent(ctx, holder)
+		ui_label(ctx, id, label)
+		ui.pop_parent(ctx)
+
+		return .Clicked in ui.get_widget_mouse_events(ctx, holder, .Left)
+	}
+	return false
 }

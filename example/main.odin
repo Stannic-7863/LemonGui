@@ -61,12 +61,16 @@ main :: proc() {
 	switch_bool: bool
 	progress: f32
 
-	radio_1_toggle, radio_2_toggle: bool
+	selected_radio_item: int = -1
+	selected_dropdown_item: int = -1
+	radio_labels: []string = {"Radio 1", "Radio 2", "Radio 3"}
+	dropdown_labels: []string = {"Dropdown item 1 long", "Dropdown item 2", "Dropdown item 3", "Dropdown item 4"}
 
 	for handle_events(ctp, &backend_ctx) {
 		defer free_all(context.temp_allocator)
-		ui.begin_ui(ctp)
+		ui.begin(ctp)
 		ui.push_parent(ctp, ui.create_widget(ctp, "real root", ui.layout(ui.sizing(ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)))))
+
 		widgets.build_themes(ctp)
 
 		progress += ctx.frametime / 25
@@ -79,7 +83,7 @@ main :: proc() {
 				"main container",
 				.Y,
 				{.Lock_Active, .Lock_Hover},
-				no_theme_hover = true,
+				theme_flags = {.No_Theme_Hover},
 			)
 			main_container := ui.get_widget(ctp, main_container_index)
 			main_container.override = ui.create_override(
@@ -94,18 +98,41 @@ main :: proc() {
 				widgets.toggle(ctp, "toggle", "Toggle", &toggle_bool)
 				widgets.button(ctp, "Button 1", "Test button", "A quick brown fox jumps over the lazy dog")
 				widgets.begin_radio(ctp, "Radio buttons")
-				widgets.radio(ctp, "1", &radio_1_toggle)
-				widgets.radio(ctp, "2", &radio_2_toggle)
+				{
+					for radio_label, index in radio_labels {
+						if widgets.radio(ctp, radio_label, index, selected_radio_item) {
+							selected_radio_item = index
+						}
+					}
+				}
 				widgets.end_radio(ctp)
+
+				widgets.begin_dropdown(ctp, "dropdown", "")
+				{
+					for dropdown_label, index in dropdown_labels {
+						if widgets.dropdown(ctp, dropdown_label, index, selected_dropdown_item) {
+							selected_dropdown_item = index
+						}
+					}
+				}
+				widgets.end_dropdown(ctp)
+
 				widgets.ui_switch(ctp, "switch", "Switch", &switch_bool)
 				widgets.progress_bar(ctp, "progress bar", "Progress", progress)
 				widgets.slider(ctp, "slider", "Slider", &slider_value, 5, 50, 1, .X)
+
+
 			}
 			widgets.end_container(ctp)
 		}
 
+		// if ctx.mouse.hovered != widgets.ui_state.open_dropdown_hash && .Pressed in ctx.mouse.mapped_events[.Left] {
+		// widgets.ui_state.open_dropdown_hash = 0
+		// widgets.ui_state.open_dropdown_index = 0
+		// }
+
 		ui.pop_parent(ctp)
-		ui.end_ui(ctp)
+		ui.end(ctp)
 
 		sdl_backend.render(&backend_ctx, &ctx)
 	}
