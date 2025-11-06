@@ -440,7 +440,7 @@ geometry_pass :: proc(
 
 update_buffers :: proc(backend_ctx: ^Backend_Context, command_buffer: ^sdl.GPUCommandBuffer) {
 	backend_ctx.borders_buf.prev_byte_size = backend_ctx.borders_buf.byte_size
-	backend_ctx.rects_buf.prev_byte_size = backend_ctx.borders_buf.byte_size
+	backend_ctx.rects_buf.prev_byte_size = backend_ctx.rects_buf.byte_size
 	backend_ctx.render_commands_buf.prev_byte_size = backend_ctx.render_commands_buf.byte_size
 	backend_ctx.text_buf.prev_byte_size = backend_ctx.text_buf.byte_size
 

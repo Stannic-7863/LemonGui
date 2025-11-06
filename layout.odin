@@ -173,14 +173,16 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 			case Fit:
 				widget_kind.accumulating_min[axis] += widget_style.padding[axis].x + widget_style.padding[axis].y
 				if widget_kind.direction == axis {
-					widget_kind.accumulating_min[axis] += max(0, f32(widget.total_children - 1)) * widget_kind.child_gap
+					widget_kind.accumulating_min[axis] +=
+						max(0, f32(widget.total_children - 1 - widget.detached_children[axis])) * widget_kind.child_gap
 				}
 				widget_kind.accumulating_min[axis] = max(widget_kind.accumulating_min[axis], kind.min)
 				widget_kind.accumulating_min[axis] = min(widget_kind.accumulating_min[axis], kind.max)
 			case Grow:
 				widget_kind.accumulating_min[axis] = max(widget_kind.accumulating_min[axis], kind.min)
 				if widget_kind.direction == axis {
-					widget_kind.accumulating_min[axis] += max(0, f32(widget.total_children - 1)) * widget_kind.child_gap
+					widget_kind.accumulating_min[axis] +=
+						max(0, f32(widget.total_children - 1 - widget.detached_children[axis])) * widget_kind.child_gap
 				}
 				widget_kind.accumulating_min[axis] += widget_style.padding[axis].x + widget_style.padding[axis].y
 			case Fixed:
@@ -192,8 +194,12 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 		case Text:
 			if axis == .X {
 				if widget_kind.minimum_width == 0 {
-					widget_kind.minimum_width = ctx.measure_text_width(widget_kind.text, widget_style.text)
-					widget_kind.maximum_width = widget_kind.minimum_width
+					_get_measured_words(ctx, widget_kind, ctx.styles[widget.style].text)
+					for words in ctx.measured_words {
+						widget_kind.minimum_width = max(words.width, widget_kind.minimum_width)
+					}
+					clear(&ctx.measured_words)
+					widget_kind.maximum_width = ctx.measure_text_width(widget_kind.text, widget_style.text)
 				}
 				widget.rect.size[axis] = max(widget_kind.minimum_width, min(widget_kind.maximum_width, widget_kind.preferred_min))
 			}
@@ -223,7 +229,7 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 
 		widget_style := ctx.styles[widget.style]
 
-		total_child_gap := max(0, f32(widget.total_children - 1)) * widget.kind.(Layout).child_gap
+		total_child_gap := max(0, f32(widget.total_children - 1 - widget.detached_children[axis])) * widget.kind.(Layout).child_gap
 		total_padding := widget_style.padding[axis].x + widget_style.padding[axis].y
 
 		if layout.direction == axis {

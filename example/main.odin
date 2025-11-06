@@ -48,14 +48,9 @@ main :: proc() {
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
 
 	sdl_backend.init_font(&backend_ctx)
-	nastaliq := sdl_backend.add_font(&backend_ctx, "./assets/NotoNastaliqUrdu-Regular.ttf", 100)
+	jetbrainsmono := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 100)
 
-	widgets.theme.font = nastaliq
-	widgets.theme.font_size = 20
-	widgets.theme.container_child_gap = 8
-	widgets.theme.bar_height = 8
-	widgets.theme.bar_minimum_width = 64
-	widgets.theme.control_size = 16
+	widgets.theme.font = jetbrainsmono
 
 	defer sdl_backend.de_init(&backend_ctx)
 	defer sdl_backend.de_init_font(&backend_ctx)
@@ -66,18 +61,20 @@ main :: proc() {
 	switch_bool: bool
 	progress: f32
 
+	radio_1_toggle, radio_2_toggle: bool
+
 	for handle_events(ctp, &backend_ctx) {
 		defer free_all(context.temp_allocator)
 		ui.begin_ui(ctp)
 		ui.push_parent(ctp, ui.create_widget(ctp, "real root", ui.layout(ui.sizing(ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)))))
 		widgets.build_themes(ctp)
 
-		progress += ctx.frametime / 5
+		progress += ctx.frametime / 25
 
 		if progress > 1 do progress = 0
 
 		{
-			main_container_index, main_container_events := widgets.begin_container(
+			main_container_index, main_container_events, _, _ := widgets.begin_container(
 				ctp,
 				"main container",
 				.Y,
@@ -94,12 +91,15 @@ main :: proc() {
 			}
 
 			{
-				widgets.button(ctp, "Button 1", "Test button")
-				widgets.button(ctp, "Button 2", "Test button hmmmm")
-				widgets.slider(ctp, "slider", "test slider", &slider_value, 5, 5000, 1, .X)
-				widgets.toggle(ctp, "toggle", "Toggle^2", &toggle_bool)
+				widgets.toggle(ctp, "toggle", "Toggle", &toggle_bool)
+				widgets.button(ctp, "Button 1", "Test button", "A quick brown fox jumps over the lazy dog")
+				widgets.begin_radio(ctp, "Radio buttons")
+				widgets.radio(ctp, "1", &radio_1_toggle)
+				widgets.radio(ctp, "2", &radio_2_toggle)
+				widgets.end_radio(ctp)
 				widgets.ui_switch(ctp, "switch", "Switch", &switch_bool)
-				widgets.progress_bar(ctp, "progress bar", "progress", progress)
+				widgets.progress_bar(ctp, "progress bar", "Progress", progress)
+				widgets.slider(ctp, "slider", "Slider", &slider_value, 5, 50, 1, .X)
 			}
 			widgets.end_container(ctp)
 		}

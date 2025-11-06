@@ -322,6 +322,15 @@ _build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
 
 		for child_index := widget.first; child_index != -1; {
 			child := &ctx.widgets[child_index]
+
+			child_override_flags := ctx.overrides[child.override].flags
+
+			for axis in Axis {
+				if .No_Positioning in child_override_flags[axis] || .No_Positioning_Relative in child_override_flags[axis] {
+					widget.detached_children[axis] += 1
+				}
+			}
+
 			child_index = child.next
 			temp_cursor += 1
 			ctx.temp[temp_cursor] = child

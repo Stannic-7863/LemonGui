@@ -107,6 +107,7 @@ Widget :: struct {
 	image:                                  rawptr,
 	custom_data:                            rawptr,
 	total_children, z_index:                int,
+	detached_children:                      [Axis]int,
 	clip:                                   Clip_Index,
 	style:                                  Style_Index,
 	override:                               Override_Index,
