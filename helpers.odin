@@ -125,6 +125,10 @@ axis_vec4f32 :: proc "contextless" (vec4: Vec4f32) -> [Axis]Vec2f32 {
 	return {.X = {vec4[3], vec4[1]}, .Y = {vec4[0], vec4[2]}}
 }
 
+vec4f32_axis :: proc "contextless" (vec: [Axis]Vec2f32) -> Vec4f32 {
+	return {vec[.Y].x, vec[.X].y, vec[.Y].y, vec[.X].x}
+}
+
 // EVENTS
 
 is_mouse_pressed :: proc(ctx: ^Core_Context, button: Mouse_Button) -> bool {
