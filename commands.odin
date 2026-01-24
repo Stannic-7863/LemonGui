@@ -1,11 +1,9 @@
 package core_ui
 
-import "core:fmt"
 import "core:math/linalg"
 
 Render_Command_Kind :: union {
 	Command_Rect,
-	Command_Border,
 	Command_Clip_Start,
 	Command_Clip_End,
 	Command_Text,
@@ -23,11 +21,7 @@ Render_Command :: struct {
 
 Command_Rect :: struct {
 	color:         Vec4f32,
-	border_radius: Vec4f32,
-}
-
-Command_Border :: struct {
-	style: Border_Style,
+	border:  Border_Style,
 }
 
 Command_Clip_Start :: struct {
@@ -63,7 +57,6 @@ _emit_render_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int
 			emitted = true
 			_emit_clip_start_command(ctx, widget, z_index, style)
 			_emit_rect_command(ctx, widget, z_index, style)
-			_emit_widget_border_command(ctx, widget, z_index, style)
 			_emit_image_command(ctx, widget, z_index, style)
 			_emit_custom_command(ctx, widget, z_index, style)
 			_emit_text_command(ctx, widget, z_index, style)
@@ -75,7 +68,6 @@ _emit_render_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int
 		_emit_image_command(ctx, widget, z_index, style)
 		_emit_custom_command(ctx, widget, z_index, style)
 		_emit_text_command(ctx, widget, z_index, style)
-		_emit_widget_border_command(ctx, widget, z_index, style)
 	}
 
 	if widget.next == -1 && widget.first == -1 {
@@ -102,14 +94,6 @@ _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^
 	_add_render_command(ctx, widget, Command_Clip_Start{border_radius = style.border.radius}, z_index)
 }
 
-_emit_widget_border_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int, style: ^Style) {
-	if style.border != {} {
-		command_border: Command_Border
-		command_border.style = style.border
-		_add_render_command(ctx, widget, command_border, z_index)
-	}
-}
-
 _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int, style: ^Style) {
 	if text, ok := widget.kind.(Text); ok {
 		command_text: Command_Text
@@ -126,7 +110,7 @@ _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int, s
 _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int, style: ^Style) {
 	command_rect: Command_Rect
 	command_rect.color = style.color
-	command_rect.border_radius = style.border.radius
+	command_rect.border = style.border
 	_add_render_command(ctx, widget, command_rect, z_index)
 }
 
