@@ -93,8 +93,8 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	hovered_z_index: int = -1
 	z_index_offset: int
 
-	root := &ctx.widgets[0]
-	root_override := &ctx.overrides[root.override]
+	root := get_widget(ctx, 0)
+	root_override := get_override(ctx, root.override)
 
 	root_offset_x := _get_override_transform_value(root_override.offset, root.rect.size, 0, .X)
 	root_offset_y := _get_override_transform_value(root_override.offset, root.rect.size, 0, .Y)
@@ -105,7 +105,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	root_clip_x := _get_clip_value(ctx, root, .X)
 	root_clip_y := _get_clip_value(ctx, root, .Y)
 
-	root.rect.position += {root_offset_x + root_clip_x, root_offset_y + root_clip_y}
+	root.rect.position += {root_offset_x, root_offset_y} + {root_clip_x, root_clip_y}
 	root.rect.size += {root_expand_x, root_expand_y}
 
 	for widget in ctx.pre {
@@ -114,7 +114,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 			_position_layout_widget_children(ctx, widget, layout)
 		}
 
-		widget_style := &ctx.styles[widget.style]
+		widget_style := get_style(ctx, widget.style)
 		prev_border_radius := widget_style.border.radius
 		_clamp_border_radius(widget, widget_style)
 		_resolve_widget_animation(ctx, widget)
@@ -169,23 +169,21 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 	#reverse for widget in ctx.post_r {
-		widget_style := &ctx.styles[widget.style]
+		widget_style := get_style(ctx, widget.style)
 		switch &widget_kind in widget.kind {
 		case Layout:
 			#partial switch kind in widget_kind.sizing[axis] {
 			case Fit:
 				widget_kind.accumulating_min[axis] += widget_style.padding[axis].x + widget_style.padding[axis].y
 				if widget_kind.direction == axis {
-					widget_kind.accumulating_min[axis] +=
-						max(0, f32(widget.total_children - 1 - widget.detached_children[axis])) * widget_kind.child_gap
+					widget_kind.accumulating_min[axis] += _get_child_gap(widget, axis)
 				}
 				widget_kind.accumulating_min[axis] = max(widget_kind.accumulating_min[axis], kind.min)
 				widget_kind.accumulating_min[axis] = min(widget_kind.accumulating_min[axis], kind.max)
 			case Grow:
 				widget_kind.accumulating_min[axis] = max(widget_kind.accumulating_min[axis], kind.min)
 				if widget_kind.direction == axis {
-					widget_kind.accumulating_min[axis] +=
-						max(0, f32(widget.total_children - 1 - widget.detached_children[axis])) * widget_kind.child_gap
+					widget_kind.accumulating_min[axis] += _get_child_gap(widget, axis)
 				}
 				widget_kind.accumulating_min[axis] += widget_style.padding[axis].x + widget_style.padding[axis].y
 			case Fixed:
@@ -209,9 +207,9 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 		}
 
 		if widget.parent == -1 {continue}
-		parent := &ctx.widgets[widget.parent]
-		parent_clip_kind := ctx.clips[parent.clip].kind[axis]
-		widget_override_flag := ctx.overrides[widget.override].flags[axis]
+		parent := get_widget(ctx, widget.parent)
+		parent_clip_kind := get_clip(ctx, parent.clip).kind[axis]
+		widget_override_flag := get_override(ctx, widget.override).flags[axis]
 
 		if .No_Size_Propagation not_in widget_override_flag && parent_clip_kind == .None {
 			parent_kind := &parent.kind.(Layout)
@@ -230,10 +228,10 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 		if !is_layout {continue}
 		if widget.first == -1 {continue}
 
-		widget_style := ctx.styles[widget.style]
+		widget_style := get_style(ctx, widget.style)
 
-		total_child_gap := max(0, f32(widget.total_children - 1 - widget.detached_children[axis])) * widget.kind.(Layout).child_gap
-		total_padding := widget_style.padding[axis].x + widget_style.padding[axis].y
+		total_child_gap := _get_child_gap(widget, axis)
+		total_padding := _get_axis_padding(axis, widget_style.padding)
 
 		if layout.direction == axis {
 			clear(&ctx.growable)
@@ -242,9 +240,9 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 			available := widget.rect.size[axis] - (total_child_gap + total_padding)
 
 			for child_index := widget.first; child_index != -1; {
-				child := &ctx.widgets[child_index]
+				child := get_widget(ctx, child_index)
 				child_index = child.next
-				child_override_flag := ctx.overrides[child.override].flags[axis]
+				child_override_flag := get_override(ctx, child.override).flags[axis]
 				switch child_kind in child.kind {
 				case Layout:
 					#partial switch kind in child_kind.sizing[axis] {
@@ -277,7 +275,7 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 			}
 		} else {
 			for child_index := widget.first; child_index != -1; {
-				child := &ctx.widgets[child_index]
+				child := get_widget(ctx, child_index)
 				child_index = child.next
 				switch child_kind in child.kind {
 				case Layout:
@@ -429,11 +427,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 
 				type.start = start
 				type.end = len(ctx.lines)
-				widget.rect.size.y =
-					f32(type.end - type.start) * (text_height + style.text.line_spacing) +
-					accumulated_height +
-					style.padding[.Y].x +
-					style.padding[.Y].y
+				widget.rect.size.y = f32(type.end - type.start) * (text_height + style.text.line_spacing) + accumulated_height + style.padding[.Y].x + style.padding[.Y].y
 				type.minimum_width = minimum_width + padding
 				type.maximum_width = maximum_width + padding
 			case .None:
@@ -510,13 +504,13 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 	axis := layout.direction
 	other_axis := _get_other_axis(axis)
 
-	widget_style := ctx.styles[widget.style]
+	widget_style := get_style(ctx, widget.style)
 
 	for child_index := widget.first; child_index != -1; {
-		child := &ctx.widgets[child_index]
+		child := get_widget(ctx, child_index)
 		child_index = child.next
 
-		child_override := &ctx.overrides[child.override]
+		child_override := get_override(ctx, child.override)
 
 		expand_axis := _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, axis)
 		expand_other_axis := _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, other_axis)
@@ -524,19 +518,19 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 		child.rect.size[axis] += expand_axis
 		child.rect.size[other_axis] += expand_other_axis
 
-		ignore_flags := Override_Flags{.No_Positioning, .No_Clip_Offset, .No_Positioning_Relative}
+		IGNORE_FLAGS :: Override_Flags{.No_Positioning, .No_Clip_Offset, .No_Positioning_Relative}
 
-		if ignore_flags & child_override.flags[axis] == {} {
+		if IGNORE_FLAGS & child_override.flags[axis] == {} {
 			total_size[axis] += child.rect.size[axis]
 		} else {
 			total_size[axis] -= layout.child_gap
 		}
-		if ignore_flags & child_override.flags[other_axis] == {} {
+		if IGNORE_FLAGS & child_override.flags[other_axis] == {} {
 			total_size[other_axis] = max(total_size[other_axis], child.rect.size[other_axis])
 		}
 	}
 
-	total_size[axis] += max(0, f32(widget.total_children - 1)) * layout.child_gap
+	total_size[axis] += _get_child_gap(widget, axis)
 	widget.resolved.content_size[axis] = total_size[axis] + widget_style.padding[axis].x + widget_style.padding[axis].y
 	widget.resolved.content_size[other_axis] = total_size[other_axis] + widget_style.padding[other_axis].x + widget_style.padding[other_axis].y
 
@@ -564,17 +558,17 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 	clip_other_axis := _get_clip_value(ctx, widget, other_axis)
 
 	for child_index := widget.first; child_index != -1; {
-		child := &ctx.widgets[child_index]
+		child := get_widget(ctx, child_index)
 		child_index = child.next
 
-		child_override := &ctx.overrides[child.override]
+		child_override := get_override(ctx, child.override)
 
 		offset_axis := _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, axis)
 		offset_other_axis := _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, other_axis)
 
-		ignore_flags := Override_Flags{.No_Positioning, .No_Positioning_Relative}
+		IGNORE_FLAGS :: Override_Flags{.No_Positioning, .No_Positioning_Relative}
 
-		if ignore_flags & child_override.flags[axis] == {} {
+		if IGNORE_FLAGS & child_override.flags[axis] == {} {
 			child.rect.position[axis] = increment[axis]
 			increment[axis] += child.rect.size[axis] + layout.child_gap + offset_axis
 		} else {
@@ -584,7 +578,7 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 			}
 		}
 
-		if ignore_flags & child_override.flags[other_axis] == {} {
+		if IGNORE_FLAGS & child_override.flags[other_axis] == {} {
 			switch layout.alignment[other_axis] {
 			case .Negative:
 				child.rect.position[other_axis] = increment[other_axis]

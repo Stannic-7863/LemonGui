@@ -1,6 +1,5 @@
 package core_ui
 
-import "core:fmt"
 import "core:math/linalg"
 
 clip :: proc "contextless" (
@@ -291,8 +290,8 @@ _get_axis_padding :: proc(axis: Axis, padding: [Axis]Vec2f32) -> f32 #no_bounds_
 	return padding[axis].x + padding[axis].y
 }
 
-_get_child_gap :: proc(widget: ^Widget) -> f32 {
-	return max(0, f32(widget.total_children - 1)) * widget.kind.(Layout).child_gap
+_get_child_gap :: proc(widget: ^Widget, axis: Axis) -> f32 {
+	return max(0, f32(widget.total_children - 1 - widget.detached_children[axis])) * widget.kind.(Layout).child_gap
 }
 
 _clamp_border_radius :: proc(widget: ^Widget, style: ^Style) {

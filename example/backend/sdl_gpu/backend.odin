@@ -83,7 +83,10 @@ Backend_Context :: struct {
 	batch:               [dynamic]Gpu_Batch,
 }
 
-init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, stencil_frag_path: string) -> Backend_Context {
+init :: proc(
+	window_title: cstring,
+	vert_path, frag_path, stencil_vert_path, stencil_frag_path: string,
+) -> Backend_Context {
 	sdl.SetLogPriorities(.VERBOSE)
 	assert(sdl.Init({.VIDEO}))
 
@@ -125,7 +128,10 @@ init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, ste
 			vertex_shader = stencil_vert_shader,
 			fragment_shader = stencil_frag_shader,
 			depth_stencil_state = depth_stencil_state,
-			target_info = {depth_stencil_format = .D32_FLOAT_S8_UINT, has_depth_stencil_target = true},
+			target_info = {
+				depth_stencil_format = .D32_FLOAT_S8_UINT,
+				has_depth_stencil_target = true,
+			},
 		},
 	)
 
@@ -200,7 +206,14 @@ init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, ste
 	backend_ctx.render_commands_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.dummy_texture = sdl.CreateGPUTexture(
 		gpu,
-		{height = 1, width = 1, format = .R8G8B8A8_UNORM, usage = {.SAMPLER}, layer_count_or_depth = 1, num_levels = 1},
+		{
+			height = 1,
+			width = 1,
+			format = .R8G8B8A8_UNORM,
+			usage = {.SAMPLER},
+			layer_count_or_depth = 1,
+			num_levels = 1,
+		},
 	)
 
 	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .VSYNC))
@@ -233,7 +246,10 @@ add_font :: proc(backend_ctx: ^Backend_Context, path: cstring, size: f32) -> ^tt
 }
 
 init_gpu_dynamic_buffer :: proc(backend_ctx: ^Backend_Context) -> Gpu_Dynamic_Buffer {
-	data_buffer := sdl.CreateGPUBuffer(backend_ctx.gpu, {size = 64, usage = {.GRAPHICS_STORAGE_READ}})
+	data_buffer := sdl.CreateGPUBuffer(
+		backend_ctx.gpu,
+		{size = 64, usage = {.GRAPHICS_STORAGE_READ}},
+	)
 	transfer_buffer := sdl.CreateGPUTransferBuffer(backend_ctx.gpu, {size = 64, usage = .UPLOAD})
 
 	dyn_buf: Gpu_Dynamic_Buffer
@@ -282,13 +298,24 @@ de_init_gpu_dynamic_buffer :: proc(backend_ctx: ^Backend_Context, buffer: ^Gpu_D
 	sdl.ReleaseGPUTransferBuffer(backend_ctx.gpu, buffer.tansfer)
 }
 
-update_dynamic_buffer :: proc(backend_ctx: ^Backend_Context, buf: ^Gpu_Dynamic_Buffer, command_buffer: ^sdl.GPUCommandBuffer, data: rawptr) {
+update_dynamic_buffer :: proc(
+	backend_ctx: ^Backend_Context,
+	buf: ^Gpu_Dynamic_Buffer,
+	command_buffer: ^sdl.GPUCommandBuffer,
+	data: rawptr,
+) {
 	if buf.byte_size > buf.prev_byte_size {
 		sdl.ReleaseGPUBuffer(backend_ctx.gpu, buf.data)
-		buf.data = sdl.CreateGPUBuffer(backend_ctx.gpu, {size = u32(buf.byte_size), usage = {.GRAPHICS_STORAGE_READ}})
+		buf.data = sdl.CreateGPUBuffer(
+			backend_ctx.gpu,
+			{size = u32(buf.byte_size), usage = {.GRAPHICS_STORAGE_READ}},
+		)
 
 		sdl.ReleaseGPUTransferBuffer(backend_ctx.gpu, buf.tansfer)
-		buf.tansfer = sdl.CreateGPUTransferBuffer(backend_ctx.gpu, {size = u32(buf.byte_size), usage = .UPLOAD})
+		buf.tansfer = sdl.CreateGPUTransferBuffer(
+			backend_ctx.gpu,
+			{size = u32(buf.byte_size), usage = .UPLOAD},
+		)
 	}
 
 	if buf.byte_size > 0 {
@@ -297,7 +324,12 @@ update_dynamic_buffer :: proc(backend_ctx: ^Backend_Context, buf: ^Gpu_Dynamic_B
 		sdl.UnmapGPUTransferBuffer(backend_ctx.gpu, buf.tansfer)
 
 		copy_pass := sdl.BeginGPUCopyPass(command_buffer)
-		sdl.UploadToGPUBuffer(copy_pass, {transfer_buffer = buf.tansfer}, {size = u32(buf.byte_size), buffer = buf.data}, false)
+		sdl.UploadToGPUBuffer(
+			copy_pass,
+			{transfer_buffer = buf.tansfer},
+			{size = u32(buf.byte_size), buffer = buf.data},
+			false,
+		)
 		sdl.EndGPUCopyPass(copy_pass)
 	}
 }
@@ -340,13 +372,18 @@ render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
 
 	command_buf := sdl.AcquireGPUCommandBuffer(backend_ctx.gpu)
 
-	for clip in backend_ctx.clips {
-	}
-
 	update_buffers(backend_ctx, command_buf)
 
 	swapchain_texture: ^sdl.GPUTexture
-	assert(sdl.WaitAndAcquireGPUSwapchainTexture(command_buf, backend_ctx.window, &swapchain_texture, nil, nil))
+	assert(
+		sdl.WaitAndAcquireGPUSwapchainTexture(
+			command_buf,
+			backend_ctx.window,
+			&swapchain_texture,
+			nil,
+			nil,
+		),
+	)
 
 	swapchain_target := sdl.GPUColorTargetInfo {
 		texture  = swapchain_texture,
@@ -369,7 +406,12 @@ render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
 
 	stencil_target.stencil_load_op = .LOAD
 
-	geometry_render_pass := sdl.BeginGPURenderPass(command_buf, &swapchain_target, 1, &stencil_target)
+	geometry_render_pass := sdl.BeginGPURenderPass(
+		command_buf,
+		&swapchain_target,
+		1,
+		&stencil_target,
+	)
 	geometry_pass(backend_ctx, core_ctx, geometry_render_pass, command_buf, &projection_mat)
 	sdl.EndGPURenderPass(geometry_render_pass)
 
@@ -417,7 +459,10 @@ geometry_pass :: proc(
 	sdl.BindGPUFragmentSamplers(
 		render_pass,
 		0,
-		&sdl.GPUTextureSamplerBinding{texture = backend_ctx.dummy_texture, sampler = backend_ctx.font_sampler},
+		&sdl.GPUTextureSamplerBinding {
+			texture = backend_ctx.dummy_texture,
+			sampler = backend_ctx.font_sampler,
+		},
 		1,
 	)
 
@@ -428,7 +473,10 @@ geometry_pass :: proc(
 			sdl.BindGPUFragmentSamplers(
 				render_pass,
 				0,
-				&sdl.GPUTextureSamplerBinding{texture = batch_data.texture, sampler = backend_ctx.font_sampler},
+				&sdl.GPUTextureSamplerBinding {
+					texture = batch_data.texture,
+					sampler = backend_ctx.font_sampler,
+				},
 				1,
 			)
 		}
@@ -446,13 +494,34 @@ update_buffers :: proc(backend_ctx: ^Backend_Context, command_buffer: ^sdl.GPUCo
 
 	backend_ctx.borders_buf.byte_size = len(backend_ctx.borders) * size_of(Border)
 	backend_ctx.rects_buf.byte_size = len(backend_ctx.rects) * size_of(Rect)
-	backend_ctx.render_commands_buf.byte_size = len(backend_ctx.render_commands) * size_of(Gpu_Render_Command)
+	backend_ctx.render_commands_buf.byte_size =
+		len(backend_ctx.render_commands) * size_of(Gpu_Render_Command)
 	backend_ctx.text_buf.byte_size = len(backend_ctx.texts) * size_of(Text)
 
-	update_dynamic_buffer(backend_ctx, &backend_ctx.text_buf, command_buffer, raw_data(backend_ctx.texts))
-	update_dynamic_buffer(backend_ctx, &backend_ctx.rects_buf, command_buffer, raw_data(backend_ctx.rects))
-	update_dynamic_buffer(backend_ctx, &backend_ctx.borders_buf, command_buffer, raw_data(backend_ctx.borders))
-	update_dynamic_buffer(backend_ctx, &backend_ctx.render_commands_buf, command_buffer, raw_data(backend_ctx.render_commands))
+	update_dynamic_buffer(
+		backend_ctx,
+		&backend_ctx.text_buf,
+		command_buffer,
+		raw_data(backend_ctx.texts),
+	)
+	update_dynamic_buffer(
+		backend_ctx,
+		&backend_ctx.rects_buf,
+		command_buffer,
+		raw_data(backend_ctx.rects),
+	)
+	update_dynamic_buffer(
+		backend_ctx,
+		&backend_ctx.borders_buf,
+		command_buffer,
+		raw_data(backend_ctx.borders),
+	)
+	update_dynamic_buffer(
+		backend_ctx,
+		&backend_ctx.render_commands_buf,
+		command_buffer,
+		raw_data(backend_ctx.render_commands),
+	)
 }
 
 feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
@@ -487,16 +556,36 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 		case ui.Command_Border:
 			grc := &backend_ctx.render_commands[grc_index]
 			grc.border_index = i32(len(backend_ctx.borders))
-			append(&backend_ctx.borders, Border{color = cmd_kind.style.color / 255, thickness = transmute(Vec4f32)cmd_kind.style.thickness})
+			append(
+				&backend_ctx.borders,
+				Border {
+					color = cmd_kind.style.color / 255,
+					thickness = transmute(Vec4f32)cmd_kind.style.thickness,
+				},
+			)
 		case ui.Command_Clip_Start:
 			index := len(backend_ctx.render_commands)
-			append(&backend_ctx.batch, Gpu_Batch{batch_start, index, clip_ref, active_atlast_texture})
+			append(
+				&backend_ctx.batch,
+				Gpu_Batch{batch_start, index, clip_ref, active_atlast_texture},
+			)
 			clip_ref += 1
 			batch_start = index
-			append(&backend_ctx.clips, Clip{ref = clip_ref, position = cmd.rect.position, size = cmd.rect.size, radius = cmd_kind.border_radius})
+			append(
+				&backend_ctx.clips,
+				Clip {
+					ref = clip_ref,
+					position = cmd.rect.position,
+					size = cmd.rect.size,
+					radius = cmd_kind.border_radius,
+				},
+			)
 		case ui.Command_Clip_End:
 			index := len(backend_ctx.render_commands)
-			append(&backend_ctx.batch, Gpu_Batch{batch_start, index, clip_ref, active_atlast_texture})
+			append(
+				&backend_ctx.batch,
+				Gpu_Batch{batch_start, index, clip_ref, active_atlast_texture},
+			)
 			clip_ref = clip_ref - 1
 			batch_start = index
 		case ui.Command_Image:
@@ -506,15 +595,21 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 			// So a new gpu render commands can be issued from here and will cause no problem
 			line_offset: f32
 			text_height := measure_text_height(cmd_kind.style)
+			ttf.SetFontSize(cast(^ttf.Font)cmd_kind.style.font, cmd_kind.style.font_size)
 			for line in cmd_kind.lines {
 				defer line_offset += text_height + cmd_kind.style.line_spacing
 
-				if line_offset + cmd.rect.position.y + text_height < 0 || (line_offset + cmd.rect.position.y) > f32(backend_ctx.window_size.y) {
+				if line_offset + cmd.rect.position.y + text_height < 0 ||
+				   (line_offset + cmd.rect.position.y) > f32(backend_ctx.window_size.y) {
 					continue
 				}
 
-				ttf.SetFontSize(cast(^ttf.Font)cmd_kind.style.font, cmd_kind.style.font_size)
-				text := ttf.CreateText(backend_ctx.font_engine, cast(^ttf.Font)cmd_kind.style.font, cast(cstring)raw_data(line), len(line))
+				text := ttf.CreateText(
+					backend_ctx.font_engine,
+					cast(^ttf.Font)cmd_kind.style.font,
+					cast(cstring)raw_data(line),
+					len(line),
+				)
 				defer ttf.DestroyText(text)
 				draw_data := ttf.GetGPUTextDrawData(text)
 
@@ -565,8 +660,12 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 							active_atlast_texture = draw_data.atlas_texture
 						}
 
-						if draw_data.next != nil && draw_data.next.atlas_texture != active_atlast_texture {
-							append(&backend_ctx.batch, Gpu_Batch{batch_start, index, clip_ref, active_atlast_texture})
+						if draw_data.next != nil &&
+						   draw_data.next.atlas_texture != active_atlast_texture {
+							append(
+								&backend_ctx.batch,
+								Gpu_Batch{batch_start, index, clip_ref, active_atlast_texture},
+							)
 							active_atlast_texture = draw_data.atlas_texture
 							batch_start = index
 						}
@@ -577,7 +676,15 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 	}
 
 	if batch_start < len(backend_ctx.render_commands) {
-		append(&backend_ctx.batch, Gpu_Batch{batch_start, len(backend_ctx.render_commands), clip_ref, active_atlast_texture})
+		append(
+			&backend_ctx.batch,
+			Gpu_Batch {
+				batch_start,
+				len(backend_ctx.render_commands),
+				clip_ref,
+				active_atlast_texture,
+			},
+		)
 	}
 }
 
