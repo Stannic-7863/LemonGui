@@ -7,7 +7,6 @@ import sdl_backend "backend/sdl_gpu"
 import sdl "vendor:sdl3"
 
 import ui "../"
-import widgets "widgets"
 
 PRIMARY_COLOR :: ui.Color{110, 197, 190, 255} // #6EC5BE
 ON_PRIMARY_COLOR :: ui.Color{235, 219, 178, 255} // #ebdbb2
@@ -50,7 +49,7 @@ main :: proc() {
 	sdl_backend.init_font(&backend_ctx)
 	jetbrainsmono := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 100)
 
-	widgets.theme.font = jetbrainsmono
+	// widgets.theme.font = jetbrainsmono
 
 	defer sdl_backend.de_init(&backend_ctx)
 	defer sdl_backend.de_init_font(&backend_ctx)
@@ -69,67 +68,37 @@ main :: proc() {
 	for handle_events(ctp, &backend_ctx) {
 		defer free_all(context.temp_allocator)
 		ui.begin(ctp)
-		ui.push_parent(ctp, ui.create_widget(ctp, "real root", ui.layout(ui.sizing(ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)))))
 
-		widgets.build_themes(ctp)
+		style_root := ui.create_style(ctp, {color = SURFACE_COLOR, padding = {16, 8}})
+		style_base := ui.create_style(ctp, {color = SURFACE_COLOR, padding = {8, 16}, border = {color = BORDER_COLOR, radius = 12, thickness = 2}})
+		style_elevated := ui.create_style(ctp, {color = ELEVATED_SURFACE_COLOR, border = {color = BORDER_COLOR, radius = 12, thickness = 2}})
 
-		progress += ctx.frametime / 25
+		root_info := ui.reserve_widget(ctp, "root")
+		root_form := ui.Form{kind = ui.Layout{sizing = {ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)}, child_gap = 16}, style = style_root}
+		ui.submit_widget(ctp, root_info, root_form)
 
-		if progress > 1 do progress = 0
+		ui.push_parent(ctp, root_info)
 
-		{
-			main_container_index, main_container_events, _, _ := widgets.begin_container(
-				ctp,
-				"main container",
-				.Y,
-				{.Lock_Active, .Lock_Hover},
-				theme_flags = {.No_Theme_Hover},
-			)
-			main_container := ui.get_widget(ctp, main_container_index)
-			main_container.override = ui.create_override(
-				ctp,
-				ui.override({}, ui.offset(ui.fixed(main_container_offset.x), ui.fixed(main_container_offset.y)), {}),
-			)
-			if .Down in main_container_events[.Left] {
-				main_container_offset += ctx.mouse.delta
-			}
+		container1 := ui.reserve_widget(ctp, "container 1")
+		container2 := ui.reserve_widget(ctp, "container 2")
 
-			{
-				widgets.toggle(ctp, "toggle", "Toggle", &toggle_bool)
-				widgets.button(ctp, "Button 1", "Test button", "A quick brown fox jumps over the lazy dog")
-				widgets.begin_radio(ctp, "Radio buttons")
-				{
-					for radio_label, index in radio_labels {
-						if widgets.radio(ctp, radio_label, index, selected_radio_item) {
-							selected_radio_item = index
-						}
-					}
-				}
-				widgets.end_radio(ctp)
-
-				widgets.begin_dropdown(ctp, "dropdown", "")
-				{
-					for dropdown_label, index in dropdown_labels {
-						if widgets.dropdown(ctp, dropdown_label, index, selected_dropdown_item) {
-							selected_dropdown_item = index
-						}
-					}
-				}
-				widgets.end_dropdown(ctp)
-
-				widgets.ui_switch(ctp, "switch", "Switch", &switch_bool)
-				widgets.progress_bar(ctp, "progress bar", "Progress", progress)
-				widgets.slider(ctp, "slider", "Slider", &slider_value, 5, 50, 1, .X)
-
-
-			}
-			widgets.end_container(ctp)
+		container_form := ui.Form {
+			kind = ui.Layout{sizing = {ui.grow(), ui.grow()}, child_gap = 16, alignment = {.Center, .Center}},
+			style = style_base,
 		}
 
-		// if ctx.mouse.hovered != widgets.ui_state.open_dropdown_hash && .Pressed in ctx.mouse.mapped_events[.Left] {
-		// widgets.ui_state.open_dropdown_hash = 0
-		// widgets.ui_state.open_dropdown_index = 0
-		// }
+		ui.submit_widget(ctp, container1, container_form)
+		ui.submit_widget(ctp, container2, container_form)
+
+		ui.push_parent(ctp, container1)
+		
+		c_1 := ui.reserve_widget(ctp, "child container 1")
+		c_2 := ui.reserve_widget(ctp, "child container 2")
+
+		ui.submit_widget(ctp, c_1, container_form)
+		ui.submit_widget(ctp, c_2, container_form)
+
+		ui.pop_parent(ctp)
 
 		ui.pop_parent(ctp)
 		ui.end(ctp)

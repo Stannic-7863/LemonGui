@@ -2,6 +2,8 @@ package core_ui
 
 import "core:unicode/utf8"
 
+// BOG: The max size in grow sizing is not respected. Figure that out.
+
 Axis :: enum {
 	X,
 	Y,
@@ -35,7 +37,7 @@ Alignment :: enum u8 {
 	Positive, // +x, +y, right, down
 }
 
-Percent_Self :: distinct Percent
+Percent_Self :: distinct Value
 
 Override_Transform :: union {
 	Fixed,
@@ -117,7 +119,6 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		widget_style := get_style(ctx, widget.style)
 		prev_border_radius := widget_style.border.radius
 		_clamp_border_radius(widget, widget_style)
-		_resolve_widget_animation(ctx, widget)
 		_emit_render_commands(ctx, widget, &z_index_offset, widget_style)
 		_write_widget_persistant_data(ctx, widget)
 		widget_style.border.radius = prev_border_radius
@@ -129,11 +130,11 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 			hovered_z_index = widget.z_index
 			widget_clip := ctx.clips[widget.clip]
-			if widget_clip.kind[.X] != .None || widget_clip.kind[.Y] != .None {
+			if widget_clip.kind.x != .None || widget_clip.kind.y != .None {
 				ctx.mouse.hovered_clip = widget_clip.hash
 			}
 
-			ctx.mouse.hovered = widget.key.hash
+			ctx.mouse.hovered = widget.info.hash
 			ctx.mouse.can_lock_active = .Lock_Active in widget.event_flags
 			ctx.mouse.can_lock_hover = .Lock_Hover in widget.event_flags
 			ctx.mouse.active_disabled = .Disable_Active in widget.event_flags
@@ -151,7 +152,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 			clip.value[axis] = min(clip.max[axis], clip.value[axis])
 		}
 
-		if (clip.kind[.X] == .Auto || clip.kind[.Y] == .Auto) && clip.hash != 0 {
+		if (clip.kind.y == .Auto || clip.kind.y == .Auto) && clip.hash != 0 {
 			ctx.persistant.clip[clip.hash] = clip.value
 		}
 	}
@@ -189,20 +190,20 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 			case Fixed:
 				widget_kind.accumulating_min[axis] = kind.value
 			case Ratio:
-				widget_kind.accumulating_min[axis] = kind.value * widget.resolved.size[_get_other_axis(axis)]
+				widget_kind.accumulating_min[axis] = kind.value * widget.info.size[_get_other_axis(axis)]
 			}
 			widget.rect.size[axis] = max(widget_kind.accumulating_min[axis], widget.rect.size[axis])
 		case Text:
 			if axis == .X {
-				if widget_kind.minimum_width == 0 {
+				if widget.info.text_extent.x == 0 {
 					_get_measured_words(ctx, widget_kind, ctx.styles[widget.style].text)
 					for words in ctx.measured_words {
-						widget_kind.minimum_width = max(words.width, widget_kind.minimum_width)
+						widget.info.text_extent.x = max(words.width, widget.info.text_extent.x)
 					}
 					clear(&ctx.measured_words)
-					widget_kind.maximum_width = ctx.measure_text_width(widget_kind.text, widget_style.text)
+					widget.info.text_extent.y = ctx.measure_text_width(widget_kind.text, widget_style.text)
 				}
-				widget.rect.size[axis] = max(widget_kind.minimum_width, min(widget_kind.maximum_width, widget_kind.preferred_min))
+				widget.rect.size[axis] = max(widget.info.text_extent.x, min(widget.info.text_extent.y, widget_kind.preferred_min))
 			}
 		}
 
@@ -256,8 +257,8 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 				case Text:
 					if axis == .X {
 						contribute := .No_Size_Propagation not_in child_override_flag
-						child.rect.size[axis] = min(child_kind.maximum_width, child_kind.preferred_max)
-						append(&ctx.growable, Growable{&child.rect.size[axis], child_kind.minimum_width, child.rect.size[axis], true, contribute})
+						child.rect.size[axis] = min(child.info.text_extent.y, child_kind.preferred_max)
+						append(&ctx.growable, Growable{&child.rect.size[axis], child.info.text_extent.x, child.rect.size[axis], true, contribute})
 					}
 				}
 
@@ -289,7 +290,7 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 					}
 				case Text:
 					if axis == .X {
-						child.rect.size[axis] = min(child_kind.maximum_width, widget.rect.size[axis] - total_padding)
+						child.rect.size[axis] = min(child.info.text_extent.y, widget.rect.size[axis] - total_padding)
 					}
 				}
 			}
@@ -397,7 +398,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				text_height := ctx.measure_text_height(style.text)
 
 				space_width := ctx.measure_text_width(" ", style.text)
-				padding := style.padding[.X].x + style.padding[.X].y
+				padding := style.padding.x.x + style.padding.x.y
 				start := len(ctx.lines)
 
 				for word, index in ctx.measured_words {
@@ -427,19 +428,17 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 
 				type.start = start
 				type.end = len(ctx.lines)
-				widget.rect.size.y = f32(type.end - type.start) * (text_height + style.text.line_spacing) + accumulated_height + style.padding[.Y].x + style.padding[.Y].y
-				type.minimum_width = minimum_width + padding
-				type.maximum_width = maximum_width + padding
+				widget.rect.size.y = f32(type.end - type.start) * (text_height + style.text.line_spacing) + accumulated_height + style.padding.y.x + style.padding.y.y
+				widget.info.text_extent = {minimum_width + padding, maximum_width + padding}
 			case .None:
 				style := ctx.styles[widget.style]
 				append(&ctx.lines, type.text)
 				type.start = len(ctx.lines) - 1
 				type.end = len(ctx.lines)
-				padding_x := style.padding[.X].x + style.padding[.X].y
-				padding_y := style.padding[.Y].x + style.padding[.Y].y
+				padding_x := style.padding.x.x + style.padding.x.y
+				padding_y := style.padding.y.x + style.padding.y.y
 				widget.rect.size.y = ctx.measure_text_height(style.text) + padding_y
-				type.maximum_width = ctx.measure_text_width(type.text, style.text) + padding_x
-				type.minimum_width = type.maximum_width
+				widget.info.text_extent = ctx.measure_text_width(type.text, style.text) + padding_x
 			}
 		}
 	}
@@ -531,8 +530,8 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 	}
 
 	total_size[axis] += _get_child_gap(widget, axis)
-	widget.resolved.content_size[axis] = total_size[axis] + widget_style.padding[axis].x + widget_style.padding[axis].y
-	widget.resolved.content_size[other_axis] = total_size[other_axis] + widget_style.padding[other_axis].x + widget_style.padding[other_axis].y
+	widget.info.content_size[axis] = total_size[axis] + widget_style.padding[axis].x + widget_style.padding[axis].y
+	widget.info.content_size[other_axis] = total_size[other_axis] + widget_style.padding[other_axis].x + widget_style.padding[other_axis].y
 
 	increment: Vec2f32
 

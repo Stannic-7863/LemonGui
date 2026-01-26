@@ -15,15 +15,17 @@ Color :: Vec4f32
 Hash :: distinct u64
 
 Rect :: struct {
-	position, size: Vec2f32,
+	position:     Vec2f32,
+	size:         Vec2f32,
+	content_size: Vec2f32,
 }
 
 Layout :: struct {
-	sizing:           [Axis]Sizing,
-	accumulating_min: [Axis]f32,
+	sizing:           [2]Sizing,
+	accumulating_min: [2]f32,
 	direction:        Axis,
 	child_gap:        f32,
-	alignment:        [Axis]Alignment,
+	alignment:        [2]Alignment,
 }
 
 Text_Wrap_Mode :: enum u8 {
@@ -34,8 +36,6 @@ Text_Wrap_Mode :: enum u8 {
 Text :: struct {
 	text:          string,
 	start, end:    int,
-	minimum_width: f32,
-	maximum_width: f32,
 	preferred_min: f32,
 	preferred_max: f32,
 	wrap_mode:     Text_Wrap_Mode,
@@ -46,7 +46,7 @@ Style :: struct {
 	border:     Border_Style,
 	color:      Color,
 	image_tint: Color,
-	padding:    [Axis]Vec2f32,
+	padding:    [2]Vec2f32,
 }
 
 Text_Style :: struct {
@@ -61,7 +61,7 @@ Text_Style :: struct {
 
 Border_Style :: struct {
 	color:     [4]Color,
-	thickness: [Axis]Vec2f32,
+	thickness: [2]Vec2f32,
 	radius:    Vec4f32,
 }
 
@@ -70,22 +70,17 @@ Widget_Kind :: union {
 	Text,
 }
 
-Keying_Id :: union {
+Key :: union {
 	string,
 	int,
 }
 
-Key :: struct {
-	keying_id:         Keying_Id,
-	hash, parent_hash: Hash,
-}
-
 Clip :: struct {
-	value: [Axis]f32,
-	scale: [Axis]f32,
-	min:   [Axis]f32,
-	max:   [Axis]f32,
-	kind:  [Axis]Clip_Kind,
+	value: Vec2f32,
+	scale: Vec2f32,
+	min:   Vec2f32,
+	max:   Vec2f32,
+	kind:  [2]Clip_Kind,
 	hash:  Hash,
 }
 
@@ -95,25 +90,38 @@ Clip_Kind :: enum u8 {
 	Auto,
 }
 
-Resolved :: struct {
-	size, content_size, position: Vec2f32,
+Widget :: struct {
+	kind:                            Widget_Kind,
+	info:                            Info,
+	rect:                            Rect,
+	image:                           rawptr,
+	total_children, z_index:         int,
+	detached_children:               [Axis]int,
+	clip:                            Clip_Index,
+	style:                           Style_Index,
+	override:                        Override_Index,
+	first, last, prev, next, parent: Widget_Index,
+	event_flags:                     Event_Flags,
 }
 
-Widget :: struct {
-	kind:                                   Widget_Kind,
-	key:                                    Key,
-	resolved:                               Resolved,
-	rect:                                   Rect,
-	image:                                  rawptr,
-	custom_data:                            rawptr,
-	total_children, z_index:                int,
-	detached_children:                      [Axis]int,
-	clip:                                   Clip_Index,
-	style:                                  Style_Index,
-	override:                               Override_Index,
-	first, last, prev, next, parent, index: Widget_Index,
-	event_flags:                            Event_Flags,
-	animate_props:                          Animate_Props,
+Form :: struct {
+	kind:        Widget_Kind,
+	clip:        Clip_Index,
+	image:       rawptr,
+	style:       Style_Index,
+	override:    Override_Index,
+	event_flags: Event_Flags,
+}
+
+Info :: struct {
+	position:     Vec2f32,
+	size:         Vec2f32,
+	content_size: Vec2f32,
+	text_extent:  Vec2f32,
+	index:        Widget_Index,
+	key:          Key,
+	hash:         Hash,
+	parent_hash:  Hash,
 }
 
 Core_Context :: struct {
@@ -139,16 +147,13 @@ Core_Context :: struct {
 }
 
 Persistant_Data :: struct {
-	widget:  map[Hash]Widget_Persistant_Data,
-	animate: map[Hash]Animate_Persistant_Data,
-	clip:    map[Hash][Axis]f32,
+	widget: map[Hash]Widget_Persistant_Data,
+	clip:   map[Hash]Vec2f32,
 }
 
 Widget_Persistant_Data :: struct {
-	rect:               Rect,
-	content_size:       Vec2f32,
-	text_minimum_width: f32,
-	text_maximum_width: f32,
+	rect:        Rect,
+	text_extent: Vec2f32,
 }
 
 init_context :: proc(size: int) -> Core_Context {
@@ -172,36 +177,28 @@ deinit_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.render_commands)
 	delete(ctx.persistant.clip)
 	delete(ctx.persistant.widget)
-	delete(ctx.persistant.animate)
 }
 
-create_widget :: proc(
-	ctx: ^Core_Context,
-	id: Keying_Id,
-	kind: Widget_Kind = {},
-	event_flags: Event_Flags = {},
-	animate_props: Animate_Props = {},
-	image: rawptr = nil,
-	override: Override_Index = 0,
-	clip: Clip_Index = 0,
-	style: Style_Index = 0,
-) -> ^Widget {
+reserve_widget :: proc(ctx: ^Core_Context, key: Key) -> Info {
 	widget := _get_new_widget(ctx)
 
-	widget.clip = clip
-	widget.kind = kind
-	widget.image = image
-	widget.style = style
-	widget.override = override
-
-	widget.key.keying_id = id
-	widget.event_flags = event_flags
-	widget.animate_props = animate_props
-
+	widget.info.key = key
 	_add_widget_to_tree(ctx, widget)
-	_generate_widget_hash(widget)
+	_generate_widget_hash(&widget.info)
 	_read_widget_persistant_data(ctx, widget)
-	return widget
+
+	return widget.info
+}
+
+submit_widget :: proc(ctx: ^Core_Context, info: Info, form: Form) {
+	widget := get_widget(ctx, info.index)
+
+	widget.clip = form.clip
+	widget.kind = form.kind
+	widget.image = form.image
+	widget.style = form.style
+	widget.override = form.override
+	widget.event_flags = form.event_flags
 }
 
 _get_new_widget :: proc(ctx: ^Core_Context) -> ^Widget {
@@ -211,7 +208,7 @@ _get_new_widget :: proc(ctx: ^Core_Context) -> ^Widget {
 	widget := &ctx.widgets[widget_index]
 	widget^ = {}
 
-	widget.index = widget_index
+	widget.info.index = widget_index
 	widget.parent = ctx.active_parent
 	widget.first = -1
 	widget.last = -1
@@ -225,62 +222,51 @@ _add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
 		parent := &ctx.widgets[widget.parent]
 		parent.total_children += 1
 		if parent.first == -1 {
-			parent.first = widget.index
+			parent.first = widget.info.index
 		}
 
 		widget.prev = parent.last
 
 		if parent.last != -1 {
 			last := &ctx.widgets[parent.last]
-			last.next = widget.index
+			last.next = widget.info.index
 		}
 
-		parent.last = widget.index
+		parent.last = widget.info.index
 		widget.z_index += parent.z_index
-		widget.key.parent_hash = parent.key.hash
+		widget.info.parent_hash = parent.info.hash
 	}
 }
 
-_generate_widget_hash :: proc(widget: ^Widget) {
-	switch key in widget.key.keying_id {
+_generate_widget_hash :: proc(info: ^Info) {
+	switch key in info.key {
 	case string:
-		widget.key.hash = cast(Hash)hash.fnv64(transmute([]u8)key)
+		info.hash = cast(Hash)hash.fnv64(transmute([]u8)key)
 	case int:
 		e := (transmute([size_of(int)]u8)key)
-		widget.key.hash = cast(Hash)hash.fnv64(e[:])
+		info.hash = cast(Hash)hash.fnv64(e[:])
 	}
-	widget.key.hash ~= (widget.key.hash >> 2 ~ widget.key.parent_hash << 6)
+	info.hash = info.hash ~ (info.parent_hash + 0x9e3779b97f4a7c15 + (info.hash << 6) + (info.hash >> 2))
 }
 
 _read_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	data := ctx.persistant.widget[widget.key.hash]
+	data := ctx.persistant.widget[widget.info.hash]
 
-	widget.resolved.position = data.rect.position
-	widget.resolved.size = data.rect.size
-	widget.resolved.content_size = data.content_size
-
-	if text, ok := &widget.kind.(Text); ok {
-		text.minimum_width = data.text_minimum_width
-		text.maximum_width = data.text_maximum_width
-	}
+	widget.info.position = data.rect.position
+	widget.info.size = data.rect.size
+	widget.info.content_size = data.rect.content_size
+	widget.info.text_extent = data.text_extent
 }
 
 _write_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	text, ok := widget.kind.(Text)
-	ctx.persistant.widget[widget.key.hash] = Widget_Persistant_Data {
-		text_minimum_width = text.minimum_width,
-		text_maximum_width = text.maximum_width,
-		rect               = widget.rect,
-		content_size       = widget.resolved.content_size,
+	ctx.persistant.widget[widget.info.hash] = Widget_Persistant_Data {
+		text_extent = widget.info.text_extent,
+		rect        = widget.rect,
 	}
 }
 
-push_parent :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
-	if text, ok := widget.kind.(Text); !ok {
-		ctx.active_parent = widget.index
-		return true
-	}
-	return false
+push_parent :: proc(ctx: ^Core_Context, info: Info) {
+	ctx.active_parent = info.index
 }
 
 pop_parent :: proc(ctx: ^Core_Context) {

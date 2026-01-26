@@ -2,21 +2,8 @@ package core_ui
 
 import "core:math/linalg"
 
-clip :: proc "contextless" (
-	x_kind: Clip_Kind,
-	x_value, x_scale, x_min, x_max: f32,
-	y_kind: Clip_Kind,
-	y_value, y_scale, y_min, y_max: f32,
-	hash: Hash = 0,
-) -> Clip {
-	return Clip {
-		value = {.X = x_value, .Y = y_value},
-		kind = {.X = x_kind, .Y = y_kind},
-		scale = {.X = x_scale, .Y = y_scale},
-		min = {.X = x_min, .Y = y_min},
-		max = {.X = x_max, .Y = y_max},
-		hash = hash,
-	}
+clip :: proc "contextless" (x_kind: Clip_Kind, x_value, x_scale, x_min, x_max: f32, y_kind: Clip_Kind, y_value, y_scale, y_min, y_max: f32, hash: Hash = 0) -> Clip {
+	return Clip{value = {x_value, y_value}, kind = {x_kind, y_kind}, scale = {x_scale, y_scale}, min = {x_min, y_min}, max = {x_max, y_max}, hash = hash}
 }
 
 clip_none :: proc "contextless" () -> (Clip_Kind, f32, f32, f32, f32) {
@@ -51,16 +38,16 @@ text :: proc "contextless" (text: string, wrap_mode: Text_Wrap_Mode = .Words, pr
 	return Text{text = text, preferred_min = preferred_min, preferred_max = preferred_max, wrap_mode = wrap_mode}
 }
 
-layout :: proc "contextless" (sizing: [Axis]Sizing, alignment: [Axis]Alignment = {}, child_gap: f32 = 0, direction: Axis = .X) -> Layout {
+layout :: proc "contextless" (sizing: [2]Sizing, alignment: [2]Alignment = {}, child_gap: f32 = 0, direction: Axis = .X) -> Layout {
 	return {sizing = sizing, alignment = alignment, direction = direction, child_gap = child_gap}
 }
 
-sizing :: proc "contextless" (x: Sizing = Fit{0, max(f32)}, y: Sizing = Fit{0, max(f32)}) -> [Axis]Sizing {
-	return {.X = x, .Y = y}
+sizing :: proc "contextless" (x: Sizing = Fit{0, max(f32)}, y: Sizing = Fit{0, max(f32)}) -> [2]Sizing {
+	return {x, y}
 }
 
-alignment :: proc "contextless" (x: Alignment = .Negative, y: Alignment = .Negative) -> [Axis]Alignment {
-	return {.X = x, .Y = y}
+alignment :: proc "contextless" (x: Alignment = .Negative, y: Alignment = .Negative) -> [2]Alignment {
+	return {x, y}
 }
 
 ratio :: proc "contextless" (value: f32) -> Sizing {
@@ -92,41 +79,27 @@ text_style :: proc "contextless" (
 	font_name: string = "",
 	font_id: int = 0,
 ) -> Text_Style {
-	return {
-		color = color,
-		font_size = font_size,
-		letter_spacing = letter_spacing,
-		line_spacing = line_spacing,
-		font = font,
-		font_name = font_name,
-		font_id = font_id,
-	}
+	return {color = color, font_size = font_size, letter_spacing = letter_spacing, line_spacing = line_spacing, font = font, font_name = font_name, font_id = font_id}
 }
 
-style :: proc "contextless" (
-	color: Color = 0,
-	image_tint: Color = 255,
-	padding: [Axis]Vec2f32 = {},
-	border: Border_Style = {},
-	text: Text_Style = {},
-) -> Style {
+style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, padding: [2]Vec2f32 = {}, border: Border_Style = {}, text: Text_Style = {}) -> Style {
 	return {color = color, border = border, padding = padding, text = text}
 }
 
-border :: proc "contextless" (color: [4]Color = 0, radius: Vec4f32 = 0, thickness: [Axis]Vec2f32 = {}) -> Border_Style {
+border :: proc "contextless" (color: [4]Color = 0, radius: Vec4f32 = 0, thickness: [2]Vec2f32 = {}) -> Border_Style {
 	return {color = color, radius = radius, thickness = thickness}
 }
 
-axis_vec2f32 :: proc "contextless" (x: Vec2f32 = 0, y: Vec2f32 = 0) -> [Axis]Vec2f32 {
-	return {.X = x, .Y = y}
+axis_vec2f32 :: proc "contextless" (x: Vec2f32 = 0, y: Vec2f32 = 0) -> [2]Vec2f32 {
+	return {x, y}
 }
 
-axis_vec4f32 :: proc "contextless" (vec4: Vec4f32) -> [Axis]Vec2f32 {
-	return {.X = {vec4[3], vec4[1]}, .Y = {vec4[0], vec4[2]}}
+axis_vec4f32 :: proc "contextless" (vec4: Vec4f32) -> [2]Vec2f32 {
+	return {{vec4[3], vec4[1]}, {vec4[0], vec4[2]}}
 }
 
-vec4f32_axis :: proc "contextless" (vec: [Axis]Vec2f32) -> Vec4f32 {
-	return {vec[.Y].x, vec[.X].y, vec[.Y].y, vec[.X].x}
+vec4f32_axis :: proc "contextless" (vec: [2]Vec2f32) -> Vec4f32 {
+	return {vec.y.x, vec.x.y, vec.y.y, vec.x.x}
 }
 
 // EVENTS
@@ -143,23 +116,23 @@ is_mouse_released :: proc(ctx: ^Core_Context, button: Mouse_Button) -> bool {
 	return .Released in ctx.mouse.mapped_events[button]
 }
 
-is_widget_hovered :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
-	return widget.key.hash == ctx.mouse.hovered
+is_widget_hovered :: proc(ctx: ^Core_Context, info: Info) -> bool {
+	return info.hash == ctx.mouse.hovered
 }
 
-is_widget_active :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
-	return widget.key.hash == ctx.mouse.active
+is_widget_active :: proc(ctx: ^Core_Context, info: Info) -> bool {
+	return info.hash == ctx.mouse.active
 }
 
-get_widget_mouse_events_all :: proc(ctx: ^Core_Context, widget: ^Widget) -> Mouse_Events {
-	if is_widget_active(ctx, widget) {
+get_widget_mouse_events_all :: proc(ctx: ^Core_Context, info: Info) -> Mouse_Events {
+	if is_widget_active(ctx, info) {
 		return ctx.mouse.events
 	}
 	return {}
 }
 
-get_widget_mouse_events :: proc(ctx: ^Core_Context, widget: ^Widget, button: Mouse_Button) -> bit_set[Widget_Key_Event] {
-	return get_widget_mouse_events_all(ctx, widget)[button]
+get_widget_mouse_events :: proc(ctx: ^Core_Context, info: Info, button: Mouse_Button) -> bit_set[Widget_Key_Event] {
+	return get_widget_mouse_events_all(ctx, info)[button]
 }
 
 is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style) -> bool {
@@ -259,14 +232,7 @@ sort_render_commands :: proc(commands: []Render_Command) #no_bounds_check {
 
 // INTERNALS
 
-_get_override_transform_value :: proc(
-	transform: [Axis]Override_Transform,
-	widget_size: Vec2f32,
-	parent_size: Vec2f32,
-	axis: Axis,
-) -> (
-	offset_value: f32,
-) #no_bounds_check {
+_get_override_transform_value :: proc(transform: [Axis]Override_Transform, widget_size: Vec2f32, parent_size: Vec2f32, axis: Axis) -> (offset_value: f32) #no_bounds_check {
 	switch kind in transform[axis] {
 	case Percent_Self:
 		offset_value = widget_size[axis] * kind.value
@@ -279,7 +245,7 @@ _get_override_transform_value :: proc(
 }
 
 _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 #no_bounds_check {
-	if widget.rect.size[axis] > widget.resolved.content_size[axis] || widget.clip == 0 {
+	if widget.rect.size[axis] > widget.info.content_size[axis] || widget.clip == 0 {
 		return 0
 	}
 	clip := &ctx.clips[widget.clip]
@@ -290,7 +256,7 @@ _get_other_axis :: proc(axis: Axis) -> Axis {
 	return .X if axis == .Y else .Y
 }
 
-_get_axis_padding :: proc(axis: Axis, padding: [Axis]Vec2f32) -> f32 #no_bounds_check {
+_get_axis_padding :: proc(axis: Axis, padding: [2]Vec2f32) -> f32 #no_bounds_check {
 	return padding[axis].x + padding[axis].y
 }
 
