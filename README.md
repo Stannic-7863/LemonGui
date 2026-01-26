@@ -16,6 +16,8 @@ Chass chao 👍 (means to have fun in the present moment, in my native language)
 
 # Example usage 
 
+> API is experimental. Refer to files in example/ directory for latest API. 
+
 ```odin
 package main
 
