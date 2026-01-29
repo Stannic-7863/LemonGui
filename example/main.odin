@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:time"
 import "vendor:sdl3/ttf"
 
@@ -49,8 +50,6 @@ main :: proc() {
 	sdl_backend.init_font(&backend_ctx)
 	jetbrainsmono := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 100)
 
-	// widgets.theme.font = jetbrainsmono
-
 	defer sdl_backend.de_init(&backend_ctx)
 	defer sdl_backend.de_init_font(&backend_ctx)
 
@@ -65,44 +64,114 @@ main :: proc() {
 	radio_labels: []string = {"Radio 1", "Radio 2", "Radio 3"}
 	dropdown_labels: []string = {"Dropdown item 1 long", "Dropdown item 2", "Dropdown item 3", "Dropdown item 4"}
 
+	containers := make([dynamic]int) 
+
 	for handle_events(ctp, &backend_ctx) {
 		defer free_all(context.temp_allocator)
 		ui.begin(ctp)
 
-		style_root := ui.create_style(ctp, {color = SURFACE_COLOR, padding = {16, 8}})
-		style_base := ui.create_style(ctp, {color = SURFACE_COLOR, padding = {8, 16}, border = {color = BORDER_COLOR, radius = 12, thickness = 2}})
-		style_elevated := ui.create_style(ctp, {color = ELEVATED_SURFACE_COLOR, border = {color = BORDER_COLOR, radius = 12, thickness = 2}})
+		style_base := ui.create_style(
+			ctp,
+			{
+				color = SURFACE_COLOR,
+				padding = {8, 8},
+				border = {color = BORDER_COLOR, radius = 12, thickness = 2},
+				text = {font = jetbrainsmono, color = TEXT_PRIMARY_COLOR, font_size = 20},
+			},
+		)
+		style_elevated := ui.create_style(
+			ctp,
+			{
+				color = ELEVATED_SURFACE_COLOR,
+				padding = {8, 8},
+				border = {color = BORDER_COLOR, radius = 12, thickness = 2},
+				text = {font = jetbrainsmono, color = TEXT_PRIMARY_COLOR, font_size = 20},
+			},
+		)
 
-		root_info := ui.reserve_widget(ctp, "root")
-		root_form := ui.Form{kind = ui.Layout{sizing = {ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)}, child_gap = 16}, style = style_root}
-		ui.submit_widget(ctp, root_info, root_form)
+		style_green := ui.create_style(
+			ctp,
+			{
+				color = SUCCESS_COLOR,
+				padding = {8, 8},
+				border = {color = BORDER_COLOR, radius = 12, thickness = 2},
+				text = {font = jetbrainsmono, color = TEXT_PRIMARY_COLOR, font_size = 20},
+			},
+		)
 
-		ui.push_parent(ctp, root_info)
+		style_red := ui.create_style(
+			ctp,
+			{
+				color = ERROR_COLOR,
+				padding = {8, 8},
+				border = {color = BORDER_COLOR, radius = 12, thickness = 2},
+				text = {font = jetbrainsmono, color = TEXT_PRIMARY_COLOR, font_size = 20},
+			},
+		)
 
-		container1 := ui.reserve_widget(ctp, "container 1")
-		container2 := ui.reserve_widget(ctp, "container 2")
-
-		container_form := ui.Form {
-			kind = ui.Layout{sizing = {ui.grow(), ui.grow()}, child_gap = 16, alignment = {.Center, .Center}},
+		anim := ui.create_animation(ctp)
+		
+		root_form := ui.Form {
+			kind = ui.Layout{sizing = {ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)}, alignment = {.Center, .Negative}, child_gap = 16, direction = .Y},
 			style = style_base,
+			animation = anim
 		}
 
-		ui.submit_widget(ctp, container1, container_form)
-		ui.submit_widget(ctp, container2, container_form)
 
-		ui.push_parent(ctp, container1)
+		root_info := ui.reserve_widget(ctp, "root")
+		ui.submit_widget(ctp, root_info, root_form)
+		ui.push_parent(ctp, root_info)
+	
+		test_form := ui.Form{kind = ui.Layout{sizing = {ui.fixed(90), ui.fixed(90)}, alignment = {.Center, .Center}}, style = style_elevated, animation = anim}
+		container_form := ui.Form{kind = ui.Layout{sizing = {ui.grow(min = 200), ui.fixed(100)}, alignment = {.Center, .Center}, child_gap = 16}, style = style_base, animation = anim}
+		add_form := ui.Form{kind = ui.text("Add", .None), style = style_green, animation = anim}
+		remove_form := ui.Form{kind = ui.text("Remove", .None), style = style_red, animation = anim}
 		
-		c_1 := ui.reserve_widget(ctp, "child container 1")
-		c_2 := ui.reserve_widget(ctp, "child container 2")
+		add_info := ui.reserve_widget(ctp, "add button")
+		ui.submit_widget(ctp, add_info, add_form)
+		if .Clicked in ui.get_widget_mouse_events(ctp, add_info, .Left) {append(&containers, 5)}
 
-		ui.submit_widget(ctp, c_1, container_form)
-		ui.submit_widget(ctp, c_2, container_form)
+		#reverse for c, i in containers {
+			container_info := ui.reserve_widget(ctp, i)
 
-		ui.pop_parent(ctp)
+			ui.push_parent(ctp, container_info)
+
+			add_info := ui.reserve_widget(ctp, i)
+			
+			for j in 0..<c {
+				test_container := ui.reserve_widget(ctp, (100 + i + j))
+				if ui.is_widget_hovered(ctp, test_container) {
+					test_form.style = style_green
+				}
+				if .Clicked in ui.get_widget_mouse_events(ctp, test_container, .Left) {containers[i] -= 1}
+				ui.submit_widget(ctp, test_container, test_form)
+				test_form.style = style_elevated
+			}
+
+			remove_info := ui.reserve_widget(ctp, i + 500)
+
+			ui.pop_parent(ctp)
+
+			ui.submit_widget(ctp, container_info, container_form)
+			ui.submit_widget(ctp, add_info, add_form)
+			ui.submit_widget(ctp, remove_info, remove_form)
+
+			if .Clicked in ui.get_widget_mouse_events(ctp, remove_info, .Left) {ordered_remove(&containers, i)}
+			if .Clicked in ui.get_widget_mouse_events(ctp, add_info, .Left) {containers[i] += 1}
+		}
 
 		ui.pop_parent(ctp)
 		ui.end(ctp)
 
+		// if len(ctp.new) > 0 {
+		// 	fmt.println(ctp.new)
+		// }
+		
+		// if len(ctp.dead) > 0 {
+		// 	fmt.println(ctp.dead)
+		// }
+
+			
 		sdl_backend.render(&backend_ctx, &ctx)
 	}
 }

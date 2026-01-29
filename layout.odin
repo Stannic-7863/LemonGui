@@ -1,5 +1,7 @@
 package core_ui
 
+import "core:fmt"
+import "core:time"
 import "core:unicode/utf8"
 
 // BOG: The max size in grow sizing is not respected. Figure that out.
@@ -83,7 +85,9 @@ _sizing_pass :: proc(ctx: ^Core_Context) {
 }
 
 _positioning_pass :: proc(ctx: ^Core_Context) {
-	clear(&ctx.persistant.widget)
+	clear(&ctx.new)
+	clear(&ctx.dead)
+
 	clear(&ctx.persistant.clip)
 
 	prev_hovered, prev_active := ctx.mouse.hovered, ctx.mouse.active
@@ -93,7 +97,6 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	if !ctx.mouse.active_is_locked {ctx.mouse.active = 0}
 
 	hovered_z_index: int = -1
-	z_index_offset: int
 
 	root := get_widget(ctx, 0)
 	root_override := get_override(ctx, root.override)
@@ -112,16 +115,11 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 	for widget in ctx.pre {
 		layout, is_layout := widget.kind.(Layout)
-		if is_layout {
-			_position_layout_widget_children(ctx, widget, layout)
-		}
+		if is_layout {_position_layout_widget_children(ctx, widget, layout)}
 
 		widget_style := get_style(ctx, widget.style)
-		prev_border_radius := widget_style.border.radius
 		_clamp_border_radius(widget, widget_style)
-		_emit_render_commands(ctx, widget, &z_index_offset, widget_style)
 		_write_widget_persistant_data(ctx, widget)
-		widget_style.border.radius = prev_border_radius
 
 		if is_point_in_rect(widget.rect, ctx.mouse.position, widget_style.border) &&
 		   .Disable_Hover not_in widget.event_flags &&
@@ -157,6 +155,110 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		}
 	}
 
+	add_animation :: proc (ctx: ^Core_Context, state: Animation_State) {
+		s, ok := &ctx.animation_states[state.target_info.hash] 
+		
+		if !ok { // No animation, Add a new one
+			ctx.animation_states[state.target_info.hash] = state
+			return
+		}
+
+		// animation already exists, update it 
+		s.start = s.now 
+		s.end = state.end
+		s.elapsed = 0 
+		s.animation = state.animation
+		s.target_info = state.target_info
+		s.type = state.type
+	}
+
+	for h, v in ctx.persistant.curr_lookup {
+		if h not_in ctx.persistant.prev_lookup {
+			ctx.new[h] = ctx.persistant.curr_lookup[h].info
+			style := ctx.styles[v.form.style]
+			anim := ctx.animations[v.form.animation]
+			if anim.hooks.on_created != nil {
+				state := Animation_State{}
+				start := anim.hooks.on_created(v.info, style)
+				state.animation = anim
+				state.start = start
+				state.end = {
+					rect  = v.info.rect,
+					style = get_style(ctx, v.form.style)^,
+				}
+				state.type = .Creation
+				state.target_info = v.info
+				add_animation(ctx, state)
+			}
+		}
+	}
+
+	for h, v in ctx.persistant.prev_lookup {
+		if h not_in ctx.persistant.curr_lookup {
+			ctx.dead[h] = ctx.persistant.prev_lookup[h].info
+			style := ctx.persistant.prev_styles[v.form.style]
+			anim := ctx.persistant.prev_animations[v.form.animation]
+			if anim.hooks.on_destroyed != nil {
+				state := Animation_State{}
+				end := anim.hooks.on_destroyed(v.info, style)
+				state.animation = anim
+				state.end = end
+				state.start = {
+					rect  = v.info.rect,
+					style = ctx.persistant.prev_styles[v.form.style],
+				}
+				state.type = .Destruction
+				state.target_info = v.info
+				add_animation(ctx, state)
+			}
+		}
+	}
+
+	for w in ctx.pre {
+		prev := ctx.persistant.prev_lookup[w.info.hash]
+		curr := ctx.persistant.curr_lookup[w.info.hash]
+
+		anim := ctx.animations[w.animation]
+
+		if anim.hooks.compare != nil {
+			curr_data := Animation_Data{style = ctx.styles[curr.form.style], rect = curr.info.rect}
+			prev_data := Animation_Data{style = ctx.persistant.prev_styles[prev.form.style], rect = prev.info.rect}
+			if anim.hooks.compare(curr_data, prev_data) { 
+				state := Animation_State{}
+				state.animation = anim
+				state.start = prev_data
+				state.end = curr_data
+				state.now = prev_data
+				state.target_info = w.info
+				state.type = .Update
+				add_animation(ctx, state)
+			}
+		}
+	}
+
+	for k, &a in ctx.animation_states {
+		remove := false 
+		if a.animation.hooks.update(&a, ctx.frametime) {
+			remove = true
+		}
+		switch a.type {
+		case .Creation, .Update:
+			w := get_widget(ctx, a.target_info.index)
+			w.style = create_style(ctx, a.now.style)
+			w.rect = a.now.rect
+		case .Destruction:
+		}
+		if remove {
+			delete_key(&ctx.animation_states, k)
+		}
+	}
+
+	z_index_offset := int(0)
+	for widget in ctx.pre {
+		widget_style := get_style(ctx, widget.style)
+		_emit_render_commands(ctx, widget, &z_index_offset, widget_style)
+	}
+
 	sort_render_commands(ctx.render_commands[:])
 	_resolve_events(ctx)
 
@@ -166,6 +268,14 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 	ctx.mouse.mapped_events = {}
 	ctx.keyboard.mapped_events = {}
+}
+
+_post_layout_pass :: proc(ctx: ^Core_Context) {
+	ctx.layouttime = time.diff(ctx.frame_start, time.now())
+
+	ctx.persistant.prev_styles, ctx.styles = ctx.styles, ctx.persistant.prev_styles
+	ctx.persistant.prev_lookup, ctx.persistant.curr_lookup = ctx.persistant.curr_lookup, ctx.persistant.prev_lookup
+	ctx.persistant.prev_animations, ctx.animations = ctx.animations, ctx.persistant.prev_animations
 }
 
 _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
@@ -190,7 +300,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 			case Fixed:
 				widget_kind.accumulating_min[axis] = kind.value
 			case Ratio:
-				widget_kind.accumulating_min[axis] = kind.value * widget.info.size[_get_other_axis(axis)]
+				widget_kind.accumulating_min[axis] = kind.value * widget.info.rect.size[_get_other_axis(axis)]
 			}
 			widget.rect.size[axis] = max(widget_kind.accumulating_min[axis], widget.rect.size[axis])
 		case Text:
@@ -530,8 +640,8 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 	}
 
 	total_size[axis] += _get_child_gap(widget, axis)
-	widget.info.content_size[axis] = total_size[axis] + widget_style.padding[axis].x + widget_style.padding[axis].y
-	widget.info.content_size[other_axis] = total_size[other_axis] + widget_style.padding[other_axis].x + widget_style.padding[other_axis].y
+	widget.info.rect.content_size[axis] = total_size[axis] + widget_style.padding[axis].x + widget_style.padding[axis].y
+	widget.info.rect.content_size[other_axis] = total_size[other_axis] + widget_style.padding[other_axis].x + widget_style.padding[other_axis].y
 
 	increment: Vec2f32
 

@@ -1,6 +1,7 @@
 package core_ui
 
 import "core:math/linalg"
+import "core:time"
 
 clip :: proc "contextless" (x_kind: Clip_Kind, x_value, x_scale, x_min, x_max: f32, y_kind: Clip_Kind, y_value, y_scale, y_min, y_max: f32, hash: Hash = 0) -> Clip {
 	return Clip{value = {x_value, y_value}, kind = {x_kind, y_kind}, scale = {x_scale, y_scale}, min = {x_min, y_min}, max = {x_max, y_max}, hash = hash}
@@ -176,10 +177,19 @@ create_style :: proc(ctx: ^Core_Context, style: Style) -> Style_Index {
 	return Style_Index(len(ctx.styles) - 1)
 }
 
+create_animation :: proc(ctx: ^Core_Context, hooks: Animation_Hooks = DEFAULT_HOOKS, duration: time.Duration = time.Second, delay: time.Duration = 0) -> Animation_Index {
+	append(&ctx.animations, Animation{hooks = hooks, delay = delay, duration = duration})
+	return Animation_Index(len(ctx.animations) - 1)
+}
+
 create_override :: proc(ctx: ^Core_Context, override: Override) -> Override_Index {
 	override_index := Override_Index(len(ctx.overrides))
 	append(&ctx.overrides, override)
 	return override_index
+}
+
+get_animation :: #force_inline proc(ctx: ^Core_Context, index: Animation_Index) -> ^Animation #no_bounds_check {
+	return &ctx.animations[index]
 }
 
 get_clip :: #force_inline proc(ctx: ^Core_Context, index: Clip_Index) -> ^Clip #no_bounds_check {
@@ -245,7 +255,7 @@ _get_override_transform_value :: proc(transform: [Axis]Override_Transform, widge
 }
 
 _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 #no_bounds_check {
-	if widget.rect.size[axis] > widget.info.content_size[axis] || widget.clip == 0 {
+	if widget.rect.size[axis] > widget.info.rect.content_size[axis] || widget.clip == 0 {
 		return 0
 	}
 	clip := &ctx.clips[widget.clip]

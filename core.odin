@@ -7,6 +7,7 @@ Widget_Index :: distinct i32
 Style_Index :: distinct i32
 Clip_Index :: distinct i32
 Override_Index :: distinct i32
+Animation_Index :: distinct i32
 
 Vec2f32 :: [2]f32
 Vec4f32 :: [4]f32
@@ -23,9 +24,9 @@ Rect :: struct {
 Layout :: struct {
 	sizing:           [2]Sizing,
 	accumulating_min: [2]f32,
+	alignment:        [2]Alignment,
 	direction:        Axis,
 	child_gap:        f32,
-	alignment:        [2]Alignment,
 }
 
 Text_Wrap_Mode :: enum u8 {
@@ -35,7 +36,7 @@ Text_Wrap_Mode :: enum u8 {
 
 Text :: struct {
 	text:          string,
-	start, end:    int,
+	start, end:    int, // Use to slice Core_Context.lines
 	preferred_min: f32,
 	preferred_max: f32,
 	wrap_mode:     Text_Wrap_Mode,
@@ -92,73 +93,80 @@ Clip_Kind :: enum u8 {
 
 Widget :: struct {
 	kind:                            Widget_Kind,
-	info:                            Info,
-	rect:                            Rect,
+	info:                            Info, // This will contain a Rect from previous frame. 
+	rect:                            Rect, // Info about current frame processed rect 
 	image:                           rawptr,
 	total_children, z_index:         int,
 	detached_children:               [Axis]int,
 	clip:                            Clip_Index,
 	style:                           Style_Index,
+	animation:                       Animation_Index,
 	override:                        Override_Index,
 	first, last, prev, next, parent: Widget_Index,
 	event_flags:                     Event_Flags,
 }
 
 Form :: struct {
-	kind:        Widget_Kind,
-	clip:        Clip_Index,
 	image:       rawptr,
+	kind:        Widget_Kind,
+	event_flags: Event_Flags,
+	clip:        Clip_Index,
 	style:       Style_Index,
 	override:    Override_Index,
-	event_flags: Event_Flags,
+	animation:   Animation_Index,
 }
 
 Info :: struct {
-	position:     Vec2f32,
-	size:         Vec2f32,
-	content_size: Vec2f32,
-	text_extent:  Vec2f32,
-	index:        Widget_Index,
-	key:          Key,
-	hash:         Hash,
-	parent_hash:  Hash,
+	rect:        Rect,
+	text_extent: Vec2f32,
+	index:       Widget_Index,
+	key:         Key,
+	hash:        Hash,
+	parent_hash: Hash,
 }
 
 Core_Context :: struct {
-	active_parent:               Widget_Index,
-	active_clip:                 ^Widget,
-	overrides:                   [dynamic]Override,
-	clips:                       [dynamic]Clip,
-	styles:                      [dynamic]Style,
-	temp, post_r, pre, clippers: [dynamic]^Widget,
-	growable:                    [dynamic]Growable,
-	widgets:                     [dynamic]Widget,
-	lines:                       [dynamic]string,
-	render_commands:             [dynamic]Render_Command,
-	measured_words:              [dynamic]Measured_Word,
-	persistant:                  Persistant_Data,
-	measure_text_width:          proc(text: string, style: Text_Style) -> f32,
-	measure_text_height:         proc(style: Text_Style) -> f32,
-	mouse:                       Mouse_Context,
-	keyboard:                    Keyboard_Context,
-	window_size:                 Vec2f32,
-	frame_start_time:            time.Time,
-	frametime:                   f32,
+	active_parent:       Widget_Index,
+	overrides:           [dynamic]Override,
+	clips:               [dynamic]Clip,
+	animations:          [dynamic]Animation,
+	styles:              [dynamic]Style,
+	temp, post_r, pre:   [dynamic]^Widget,
+	growable:            [dynamic]Growable,
+	widgets:             [dynamic]Widget,
+	lines:               [dynamic]string,
+	render_commands:     [dynamic]Render_Command,
+	measured_words:      [dynamic]Measured_Word,
+	animation_states:    map[Hash]Animation_State,
+	new, dead:           map[Hash]Info,
+	persistant:          Persistant_Data,
+	measure_text_width:  proc(text: string, style: Text_Style) -> f32,
+	measure_text_height: proc(style: Text_Style) -> f32,
+	mouse:               Mouse_Context,
+	keyboard:            Keyboard_Context,
+	window_size:         Vec2f32,
+	frame_start:         time.Time,
+	layout_start:        time.Time,
+	frametime:           time.Duration,
+	layouttime:          time.Duration,
+}
+
+Lookup_Data :: struct {
+	form: Form,
+	info: Info,
 }
 
 Persistant_Data :: struct {
-	widget: map[Hash]Widget_Persistant_Data,
-	clip:   map[Hash]Vec2f32,
-}
-
-Widget_Persistant_Data :: struct {
-	rect:        Rect,
-	text_extent: Vec2f32,
+	prev_animations: [dynamic]Animation,
+	prev_styles:     [dynamic]Style,
+	prev_lookup:     map[Hash]Lookup_Data, // Swapped with curr_lookup at frame end
+	curr_lookup:     map[Hash]Lookup_Data, // Cleared at frame start
+	clip:            map[Hash]Vec2f32,
 }
 
 init_context :: proc(size: int) -> Core_Context {
 	ctx: Core_Context
-	ctx.frame_start_time = time.now()
+	ctx.frame_start = time.now()
 	return ctx
 }
 
@@ -170,13 +178,21 @@ deinit_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.styles)
 	delete(ctx.post_r)
 	delete(ctx.widgets)
-	delete(ctx.clippers)
 	delete(ctx.growable)
 	delete(ctx.overrides)
 	delete(ctx.measured_words)
 	delete(ctx.render_commands)
+	delete(ctx.animation_states)
+	delete(ctx.animations)
+
+	delete(ctx.new)
+	delete(ctx.dead)
+
+	delete(ctx.persistant.curr_lookup)
+	delete(ctx.persistant.prev_lookup)
+	delete(ctx.persistant.prev_styles)
+	delete(ctx.persistant.prev_animations)
 	delete(ctx.persistant.clip)
-	delete(ctx.persistant.widget)
 }
 
 reserve_widget :: proc(ctx: ^Core_Context, key: Key) -> Info {
@@ -193,12 +209,18 @@ reserve_widget :: proc(ctx: ^Core_Context, key: Key) -> Info {
 submit_widget :: proc(ctx: ^Core_Context, info: Info, form: Form) {
 	widget := get_widget(ctx, info.index)
 
+	ctx.persistant.curr_lookup[info.hash] = {
+		info = info,
+		form = form,
+	}
+
 	widget.clip = form.clip
 	widget.kind = form.kind
 	widget.image = form.image
 	widget.style = form.style
 	widget.override = form.override
 	widget.event_flags = form.event_flags
+	widget.animation = form.animation
 }
 
 _get_new_widget :: proc(ctx: ^Core_Context) -> ^Widget {
@@ -246,23 +268,22 @@ _generate_widget_hash :: proc(info: ^Info) {
 		e := (transmute([size_of(int)]u8)key)
 		info.hash = cast(Hash)hash.fnv64(e[:])
 	}
-	info.hash = info.hash ~ (info.parent_hash + 0x9e3779b97f4a7c15 + (info.hash << 6) + (info.hash >> 2))
+	info.hash = info.hash ~ (info.parent_hash + 0x9e3779b97f4a7c15 + (info.hash << 6) + (info.hash >> 2)) // Boost / split-max hash combine
 }
 
 _read_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	data := ctx.persistant.widget[widget.info.hash]
+	data, ok := ctx.persistant.prev_lookup[widget.info.hash]
 
-	widget.info.position = data.rect.position
-	widget.info.size = data.rect.size
-	widget.info.content_size = data.rect.content_size
-	widget.info.text_extent = data.text_extent
+	if !ok {return}
+
+	widget.info.rect = data.info.rect
+	widget.info.text_extent = data.info.text_extent
 }
 
 _write_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	ctx.persistant.widget[widget.info.hash] = Widget_Persistant_Data {
-		text_extent = widget.info.text_extent,
-		rect        = widget.rect,
-	}
+	data := &ctx.persistant.curr_lookup[widget.info.hash]
+	data.info.rect = widget.rect
+	data.info.text_extent = widget.info.text_extent
 }
 
 push_parent :: proc(ctx: ^Core_Context, info: Info) {
@@ -282,20 +303,31 @@ begin :: proc(ctx: ^Core_Context) {
 	clear(&ctx.clips)
 	clear(&ctx.styles)
 	clear(&ctx.overrides)
+	clear(&ctx.animations)
 
+	// Valid 0 states
 	append(&ctx.clips, Clip{})
 	append(&ctx.styles, Style{})
 	append(&ctx.overrides, Override{})
+	append(&ctx.animations, Animation{})
+	append(&ctx.persistant.prev_styles, Style{})
+	append(&ctx.persistant.prev_animations, Animation{})
 
 	clear(&ctx.temp)
 	clear(&ctx.pre)
 	clear(&ctx.post_r)
-	ctx.frametime = f32(time.diff(ctx.frame_start_time, time.now())) / f32(time.Second)
-	ctx.frame_start_time = time.now()
+
+
+	clear(&ctx.persistant.curr_lookup)
+
+	ctx.frametime = time.diff(ctx.frame_start, time.now())
+	ctx.frame_start = time.now()
+	ctx.layout_start = time.now()
 }
 
 end :: proc(ctx: ^Core_Context) {
 	_build_stacks(ctx)
 	_sizing_pass(ctx)
 	_positioning_pass(ctx)
+	_post_layout_pass(ctx)
 }
