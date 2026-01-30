@@ -1,8 +1,6 @@
 package core_ui
 
-import "core:fmt"
 import "core:math/ease"
-import "core:math"
 import "core:time"
 
 // Return true on change. Return False for no change

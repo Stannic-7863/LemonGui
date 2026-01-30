@@ -1,6 +1,5 @@
 package core_ui
 
-import "core:fmt"
 import "core:time"
 import "core:unicode/utf8"
 
@@ -47,19 +46,18 @@ Override_Transform :: union {
 	Percent_Self,
 }
 
-Override_Flag :: enum u8 {
+Layout_Flag :: enum u8 {
 	No_Positioning,
 	No_Clip_Offset,
 	No_Size_Propagation,
 	No_Positioning_Relative,
 }
 
-Override_Flags :: bit_set[Override_Flag]
+Layout_Flags :: bit_set[Layout_Flag]
 
 Override :: struct {
 	offset: [Axis]Override_Transform,
 	expand: [Axis]Override_Transform,
-	flags:  [Axis]Override_Flags,
 }
 
 Growable :: struct {
@@ -318,7 +316,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 		if widget.parent == -1 {continue}
 		parent := get_widget(ctx, widget.parent)
 		parent_clip_kind := get_clip(ctx, parent.clip).kind[axis]
-		widget_override_flag := get_override(ctx, widget.override).flags[axis]
+		widget_override_flag := widget.layout_flags[axis] 
 
 		if .No_Size_Propagation not_in widget_override_flag && parent_clip_kind == .None {
 			parent_kind := &parent.kind.(Layout)
@@ -351,7 +349,7 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 			for child_index := widget.first; child_index != -1; {
 				child := get_widget(ctx, child_index)
 				child_index = child.next
-				child_override_flag := get_override(ctx, child.override).flags[axis]
+				child_override_flag := child.layout_flags[axis]
 				switch child_kind in child.kind {
 				case Layout:
 					#partial switch kind in child_kind.sizing[axis] {
@@ -625,14 +623,14 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 		child.rect.size[axis] += expand_axis
 		child.rect.size[other_axis] += expand_other_axis
 
-		IGNORE_FLAGS :: Override_Flags{.No_Positioning, .No_Clip_Offset, .No_Positioning_Relative}
+		IGNORE_FLAGS :: Layout_Flags{.No_Positioning, .No_Clip_Offset, .No_Positioning_Relative}
 
-		if IGNORE_FLAGS & child_override.flags[axis] == {} {
+		if IGNORE_FLAGS & child.layout_flags[axis] == {} {
 			total_size[axis] += child.rect.size[axis]
 		} else {
 			total_size[axis] -= layout.child_gap
 		}
-		if IGNORE_FLAGS & child_override.flags[other_axis] == {} {
+		if IGNORE_FLAGS & child.layout_flags[other_axis] == {} {
 			total_size[other_axis] = max(total_size[other_axis], child.rect.size[other_axis])
 		}
 	}
@@ -673,19 +671,19 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 		offset_axis := _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, axis)
 		offset_other_axis := _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, other_axis)
 
-		IGNORE_FLAGS :: Override_Flags{.No_Positioning, .No_Positioning_Relative}
+		IGNORE_FLAGS :: Layout_Flags{.No_Positioning, .No_Positioning_Relative}
 
-		if IGNORE_FLAGS & child_override.flags[axis] == {} {
+		if IGNORE_FLAGS & child.layout_flags[axis] == {} {
 			child.rect.position[axis] = increment[axis]
 			increment[axis] += child.rect.size[axis] + layout.child_gap + offset_axis
 		} else {
 			child.rect.position[axis] = 0
-			if .No_Positioning_Relative in child_override.flags[axis] {
+			if .No_Positioning_Relative in child.layout_flags[axis] {
 				child.rect.position[axis] = widget.rect.position[axis]
 			}
 		}
 
-		if IGNORE_FLAGS & child_override.flags[other_axis] == {} {
+		if IGNORE_FLAGS & child.layout_flags[other_axis] == {} {
 			switch layout.alignment[other_axis] {
 			case .Negative:
 				child.rect.position[other_axis] = increment[other_axis]
@@ -696,7 +694,7 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 			}
 		} else {
 			child.rect.position[other_axis] = 0
-			if .No_Positioning_Relative in child_override.flags[other_axis] {
+			if .No_Positioning_Relative in child.layout_flags[other_axis] {
 				child.rect.position[other_axis] = widget.rect.position[other_axis]
 			}
 		}
@@ -704,11 +702,11 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 		child.rect.position[axis] += offset_axis
 		child.rect.position[other_axis] += offset_other_axis
 
-		if .No_Clip_Offset not_in child_override.flags[axis] {
+		if .No_Clip_Offset not_in child.layout_flags[axis] {
 			child.rect.position[axis] -= clip_axis
 		}
 
-		if .No_Clip_Offset not_in child_override.flags[other_axis] {
+		if .No_Clip_Offset not_in child.layout_flags[other_axis] {
 			child.rect.position[other_axis] -= clip_other_axis
 		}
 	}

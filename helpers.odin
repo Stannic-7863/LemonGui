@@ -19,11 +19,11 @@ clip_auto :: proc "contextless" (scale: f32, min: f32 = min(f32), max: f32 = max
 	return .Auto, 0, scale, min, max
 }
 
-override :: proc "contextless" (flags: [Axis]Override_Flags, offset: [Axis]Override_Transform, expand: [Axis]Override_Transform) -> Override {
-	return {flags = flags, offset = offset, expand = expand}
+override :: proc "contextless" (offset: [Axis]Override_Transform, expand: [Axis]Override_Transform) -> Override {
+	return {offset = offset, expand = expand}
 }
 
-flags :: proc "contextless" (x: Override_Flags = {}, y: Override_Flags = {}) -> [Axis]Override_Flags {
+flags :: proc "contextless" (x: Layout_Flags = {}, y: Layout_Flags = {}) -> [Axis]Layout_Flags {
 	return {.X = x, .Y = y}
 }
 
@@ -302,7 +302,7 @@ _build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
 		for child_index := widget.first; child_index != -1; {
 			child := &ctx.widgets[child_index]
 
-			child_override_flags := ctx.overrides[child.override].flags
+			child_override_flags := child.layout_flags
 
 			for axis in Axis {
 				if .No_Positioning in child_override_flags[axis] || .No_Positioning_Relative in child_override_flags[axis] {

@@ -93,8 +93,8 @@ Clip_Kind :: enum u8 {
 
 Widget :: struct {
 	kind:                            Widget_Kind,
-	info:                            Info, // This will contain a Rect from previous frame. 
-	rect:                            Rect, // Info about current frame processed rect 
+	info:                            Info, // This will contain a Rect from previous frame.
+	rect:                            Rect, // Info about current frame processed rect
 	image:                           rawptr,
 	total_children, z_index:         int,
 	detached_children:               [Axis]int,
@@ -103,6 +103,7 @@ Widget :: struct {
 	animation:                       Animation_Index,
 	override:                        Override_Index,
 	first, last, prev, next, parent: Widget_Index,
+	layout_flags:                    [Axis]Layout_Flags,
 	event_flags:                     Event_Flags,
 }
 
