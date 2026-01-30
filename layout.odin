@@ -182,6 +182,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 				start := anim.hooks.on_created(v.info, style)
 				state.animation = anim
 				state.start = start
+				state.now = start
 				state.end = {
 					rect  = v.info.rect,
 					style = get_style(ctx, v.form.style)^,
@@ -237,10 +238,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	}
 
 	for k, &a in ctx.animation_states {
-		remove := false 
-		if a.animation.hooks.update(&a, ctx.frametime) {
-			remove = true
-		}
+		remove := a.animation.hooks.update(&a, ctx.frametime)
 		switch a.type {
 		case .Creation, .Update:
 			w := get_widget(ctx, a.target_info.index)

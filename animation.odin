@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:fmt"
 import "core:math/ease"
 import "core:math"
 import "core:time"
@@ -41,6 +42,7 @@ Animation_Data :: struct {
 }
 
 Animation_State :: struct {
+	set:		 bool,
 	animation:   Animation,
 	type:        Animation_Type,
 	target_info: Info,
@@ -50,11 +52,8 @@ Animation_State :: struct {
 	elapsed:     time.Duration,
 }
 
-_update_animation_states :: proc() {}
-
 DEFAULT_HOOKS :: Animation_Hooks {
 	update = proc(state: ^Animation_State, deltatime: time.Duration) -> bool {
-		
 		state.elapsed += deltatime
 
 		if state.elapsed >= state.animation.duration {
@@ -66,7 +65,6 @@ DEFAULT_HOOKS :: Animation_Hooks {
 		e_color := ease.ease(.Exponential_In_Out, e_o)
 
 		state.now = state.end
-
 
 		state.now.rect.position = state.start.rect.position + e_rect * (state.end.rect.position - state.start.rect.position)
 		state.now.rect.size = state.start.rect.size + e_color * (state.end.rect.size - state.start.rect.size)
@@ -86,7 +84,11 @@ DEFAULT_HOOKS :: Animation_Hooks {
 		return false 
 	},
 	on_created = proc(info: Info, style: Style) -> (start: Animation_Data) {
-		return {rect = info.rect, style = style}	
+		rect := Rect{}
+		rect.position = info.rect.position + info.rect.size / 2
+		rect.size = {}
+		rect.content_size = {}
+		return {rect = rect, style = style}	
 	},
 	on_destroyed = proc(info: Info, style: Style) -> (end: Animation_Data) {
 		return {rect = {}, style = style}

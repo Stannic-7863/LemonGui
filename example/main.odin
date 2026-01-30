@@ -1,6 +1,5 @@
 package main
 
-import "core:fmt"
 import "core:time"
 import "vendor:sdl3/ttf"
 
