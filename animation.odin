@@ -9,7 +9,7 @@ Widget_Comparison :: #type proc(curr, prev: Animation_Data) -> bool
 // Should return a state from where the animation will start. Inputs are from current frame.
 Widget_Created :: #type proc(info: Info, style: Style) -> (start: Animation_Data)
 
-// Should return a state at which animation will conclude. Inputs are from last frame. 
+// Should return a state at which animation will conclude. Inputs are from last frame.
 Widget_Destroy :: #type proc(info: Info, style: Style) -> (end: Animation_Data)
 
 // Animation Update mechanism
@@ -40,25 +40,27 @@ Animation_Data :: struct {
 }
 
 Animation_State :: struct {
-	set:		 bool,
+	set:         bool,
 	animation:   Animation,
 	type:        Animation_Type,
 	target_info: Info,
+	target_form: Form,
 	start:       Animation_Data,
 	end:         Animation_Data,
 	now:         Animation_Data,
 	elapsed:     time.Duration,
+	duration:	 time.Duration,
 }
 
 DEFAULT_HOOKS :: Animation_Hooks {
 	update = proc(state: ^Animation_State, deltatime: time.Duration) -> bool {
 		state.elapsed += deltatime
 
-		if state.elapsed >= state.animation.duration {
-			return true 
+		if state.elapsed >= state.duration {
+			return true
 		}
 
-		e_o := (f32(state.elapsed) / f32(state.animation.duration))
+		e_o := (f32(state.elapsed) / f32(state.duration))
 		e_rect := ease.ease(.Elastic_In_Out, e_o)
 		e_color := ease.ease(.Exponential_In_Out, e_o)
 
@@ -67,28 +69,28 @@ DEFAULT_HOOKS :: Animation_Hooks {
 		state.now.rect.position = state.start.rect.position + e_rect * (state.end.rect.position - state.start.rect.position)
 		state.now.rect.size = state.start.rect.size + e_color * (state.end.rect.size - state.start.rect.size)
 		state.now.style.color = state.start.style.color + e_color * (state.end.style.color - state.start.style.color)
-		return false 
+		return false
 	},
 	compare = proc(curr, prev: Animation_Data) -> bool {
 		if curr.rect.position != prev.rect.position {
-			return true 
+			return true
 		}
 		if curr.rect.size != prev.rect.size {
-			return true 
+			return true
 		}
 		if curr.style.color != prev.style.color {
-			return true 
+			return true
 		}
-		return false 
+		return false
 	},
 	on_created = proc(info: Info, style: Style) -> (start: Animation_Data) {
 		rect := Rect{}
 		rect.position = info.rect.position + info.rect.size / 2
 		rect.size = {}
 		rect.content_size = {}
-		return {rect = rect, style = style}	
+		return {rect = rect, style = style}
 	},
 	on_destroyed = proc(info: Info, style: Style) -> (end: Animation_Data) {
-		return {rect = {}, style = style}
+		return {rect = {position = info.rect.position + info.rect.size / 2}, style = style}
 	},
 }

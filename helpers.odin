@@ -83,8 +83,8 @@ text_style :: proc "contextless" (
 	return {color = color, font_size = font_size, letter_spacing = letter_spacing, line_spacing = line_spacing, font = font, font_name = font_name, font_id = font_id}
 }
 
-style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, padding: [2]Vec2f32 = {}, border: Border_Style = {}, text: Text_Style = {}) -> Style {
-	return {color = color, border = border, padding = padding, text = text}
+style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, border: Border_Style = {}, text: Text_Style = {}) -> Style {
+	return {color = color, border = border, text = text}
 }
 
 border :: proc "contextless" (color: [4]Color = 0, radius: Vec4f32 = 0, thickness: [2]Vec2f32 = {}) -> Border_Style {
@@ -188,6 +188,12 @@ create_override :: proc(ctx: ^Core_Context, override: Override) -> Override_Inde
 	return override_index
 }
 
+create_text :: proc(ctx: ^Core_Context, text: Text) -> Text_Index {
+	text_index := Text_Index(len(ctx.text))
+	append(&ctx.text, text)
+	return text_index
+}
+
 get_animation :: #force_inline proc(ctx: ^Core_Context, index: Animation_Index) -> ^Animation #no_bounds_check {
 	return &ctx.animations[index]
 }
@@ -206,6 +212,10 @@ get_widget :: #force_inline proc(ctx: ^Core_Context, index: Widget_Index) -> ^Wi
 
 get_override :: #force_inline proc(ctx: ^Core_Context, index: Override_Index) -> ^Override #no_bounds_check {
 	return &ctx.overrides[index]
+}
+
+get_text :: #force_inline proc(ctx: ^Core_Context, index: Text_Index) -> ^Text #no_bounds_check {
+	return &ctx.text[index]
 }
 
 copy_style :: proc(ctx: ^Core_Context, style: Style_Index) -> Style_Index {
@@ -255,10 +265,10 @@ _get_override_transform_value :: proc(transform: [Axis]Override_Transform, widge
 }
 
 _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 #no_bounds_check {
-	if widget.rect.size[axis] > widget.info.rect.content_size[axis] || widget.clip == 0 {
+	if widget.rect.size[axis] > widget.info.rect.content_size[axis] || widget.form.clip == 0 {
 		return 0
 	}
-	clip := &ctx.clips[widget.clip]
+	clip := &ctx.clips[widget.form.clip]
 	return clip.value[axis]
 }
 
@@ -271,67 +281,12 @@ _get_axis_padding :: proc(axis: Axis, padding: [2]Vec2f32) -> f32 #no_bounds_che
 }
 
 _get_child_gap :: proc(widget: ^Widget, axis: Axis) -> f32 {
-	return max(0, f32(widget.total_children - 1 - widget.detached_children[axis])) * widget.kind.(Layout).child_gap
+	return max(0, f32(widget.total_children - 1 - widget.detached_children[axis])) * widget.form.layout.child_gap
 }
 
 _clamp_border_radius :: proc(widget: ^Widget, style: ^Style) {
 	comp := min(widget.rect.size.x, widget.rect.size.y)
 	for &r in style.border.radius {
 		r = min(comp / 2, r)
-	}
-}
-
-_build_stacks :: proc(ctx: ^Core_Context) #no_bounds_check {
-	required_length := len(ctx.widgets)
-	resize(&ctx.pre, required_length)
-	resize(&ctx.temp, required_length)
-	resize(&ctx.post_r, required_length)
-
-	ctx.temp[0] = &ctx.widgets[0]
-
-	temp_cursor: int
-	buffer_cursor: int
-
-	for temp_cursor >= 0 {
-		widget := ctx.temp[temp_cursor]
-		temp_cursor -= 1
-
-		ctx.post_r[buffer_cursor] = widget
-		buffer_cursor += 1
-
-		for child_index := widget.first; child_index != -1; {
-			child := &ctx.widgets[child_index]
-
-			child_override_flags := child.layout_flags
-
-			for axis in Axis {
-				if .No_Positioning in child_override_flags[axis] || .No_Positioning_Relative in child_override_flags[axis] {
-					widget.detached_children[axis] += 1
-				}
-			}
-
-			child_index = child.next
-			temp_cursor += 1
-			ctx.temp[temp_cursor] = child
-		}
-	}
-
-	temp_cursor = 0
-	buffer_cursor = 0
-	ctx.temp[0] = &ctx.widgets[0]
-
-	for temp_cursor >= 0 {
-		widget := ctx.temp[temp_cursor]
-		temp_cursor -= 1
-
-		ctx.pre[buffer_cursor] = widget
-		buffer_cursor += 1
-
-		for child_index := widget.last; child_index != -1; {
-			child := &ctx.widgets[child_index]
-			child_index = child.prev
-			temp_cursor += 1
-			ctx.temp[temp_cursor] = child
-		}
 	}
 }

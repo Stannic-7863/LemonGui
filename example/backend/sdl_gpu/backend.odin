@@ -5,7 +5,7 @@ import "vendor:sdl3/ttf"
 
 import "core:fmt"
 import "core:mem"
-import "core:os/os2"
+import "core:os"
 import sdl "vendor:sdl3"
 
 Vec2f32 :: [2]f32
@@ -466,7 +466,7 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 
 load_shader :: proc(gpu: ^sdl.GPUDevice, path: string, stage: sdl.GPUShaderStage, format: sdl.GPUShaderFormat, num_ubo, num_samplers, num_storage_buffers: u32) -> ^sdl.GPUShader {
 
-	source, read_err := os2.read_entire_file_from_path(path, context.allocator)
+	source, read_err := os.read_entire_file_from_path(path, context.allocator)
 	defer delete(source, context.allocator)
 
 	if read_err != nil {

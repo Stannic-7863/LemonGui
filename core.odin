@@ -3,9 +3,10 @@ package core_ui
 import "core:hash"
 import "core:time"
 
-Widget_Index :: distinct i32
-Style_Index :: distinct i32
+Text_Index :: distinct i32
 Clip_Index :: distinct i32
+Style_Index :: distinct i32
+Widget_Index :: distinct i32
 Override_Index :: distinct i32
 Animation_Index :: distinct i32
 
@@ -22,11 +23,13 @@ Rect :: struct {
 }
 
 Layout :: struct {
+	padding:		  [2]Vec2f32,
 	sizing:           [2]Sizing,
 	accumulating_min: [2]f32,
-	alignment:        [2]Alignment,
-	direction:        Axis,
 	child_gap:        f32,
+	alignment:        [2]Alignment,
+	flags:            [2]Layout_Flags,
+	direction:        Axis,
 }
 
 Text_Wrap_Mode :: enum u8 {
@@ -47,7 +50,6 @@ Style :: struct {
 	border:     Border_Style,
 	color:      Color,
 	image_tint: Color,
-	padding:    [2]Vec2f32,
 }
 
 Text_Style :: struct {
@@ -64,11 +66,6 @@ Border_Style :: struct {
 	color:     [4]Color,
 	thickness: [2]Vec2f32,
 	radius:    Vec4f32,
-}
-
-Widget_Kind :: union {
-	Layout,
-	Text,
 }
 
 Key :: union {
@@ -92,29 +89,23 @@ Clip_Kind :: enum u8 {
 }
 
 Widget :: struct {
-	kind:                            Widget_Kind,
 	info:                            Info, // This will contain a Rect from previous frame.
+	form:                            Form,
 	rect:                            Rect, // Info about current frame processed rect
-	image:                           rawptr,
 	total_children, z_index:         int,
-	detached_children:               [Axis]int,
-	clip:                            Clip_Index,
-	style:                           Style_Index,
-	animation:                       Animation_Index,
-	override:                        Override_Index,
+	detached_children:               [2]int,
 	first, last, prev, next, parent: Widget_Index,
-	layout_flags:                    [Axis]Layout_Flags,
-	event_flags:                     Event_Flags,
 }
 
 Form :: struct {
-	image:       rawptr,
-	kind:        Widget_Kind,
-	event_flags: Event_Flags,
-	clip:        Clip_Index,
-	style:       Style_Index,
-	override:    Override_Index,
-	animation:   Animation_Index,
+	image:        rawptr,
+	layout:       Layout,
+	event_flags:  Event_Flags,
+	text: 		  Text_Index,
+	clip:         Clip_Index,
+	style:        Style_Index,
+	override:     Override_Index,
+	animation:    Animation_Index,
 }
 
 Info :: struct {
@@ -130,9 +121,10 @@ Core_Context :: struct {
 	active_parent:       Widget_Index,
 	overrides:           [dynamic]Override,
 	clips:               [dynamic]Clip,
+	text:				 [dynamic]Text,
 	animations:          [dynamic]Animation,
 	styles:              [dynamic]Style,
-	temp, post_r, pre:   [dynamic]^Widget,
+	temp:                [dynamic]^Widget,
 	growable:            [dynamic]Growable,
 	widgets:             [dynamic]Widget,
 	lines:               [dynamic]string,
@@ -172,12 +164,10 @@ init_context :: proc(size: int) -> Core_Context {
 }
 
 deinit_context :: proc(ctx: ^Core_Context) {
-	delete(ctx.pre)
 	delete(ctx.temp)
 	delete(ctx.lines)
 	delete(ctx.clips)
 	delete(ctx.styles)
-	delete(ctx.post_r)
 	delete(ctx.widgets)
 	delete(ctx.growable)
 	delete(ctx.overrides)
@@ -215,13 +205,7 @@ submit_widget :: proc(ctx: ^Core_Context, info: Info, form: Form) {
 		form = form,
 	}
 
-	widget.clip = form.clip
-	widget.kind = form.kind
-	widget.image = form.image
-	widget.style = form.style
-	widget.override = form.override
-	widget.event_flags = form.event_flags
-	widget.animation = form.animation
+	widget.form = form
 }
 
 _get_new_widget :: proc(ctx: ^Core_Context) -> ^Widget {
@@ -301,12 +285,14 @@ begin :: proc(ctx: ^Core_Context) {
 	clear(&ctx.widgets)
 	clear(&ctx.render_commands)
 
+	clear(&ctx.text)
 	clear(&ctx.clips)
 	clear(&ctx.styles)
 	clear(&ctx.overrides)
 	clear(&ctx.animations)
 
 	// Valid 0 states
+	append(&ctx.text, Text{})
 	append(&ctx.clips, Clip{})
 	append(&ctx.styles, Style{})
 	append(&ctx.overrides, Override{})
@@ -315,9 +301,6 @@ begin :: proc(ctx: ^Core_Context) {
 	append(&ctx.persistant.prev_animations, Animation{})
 
 	clear(&ctx.temp)
-	clear(&ctx.pre)
-	clear(&ctx.post_r)
-
 
 	clear(&ctx.persistant.curr_lookup)
 
@@ -327,7 +310,6 @@ begin :: proc(ctx: ^Core_Context) {
 }
 
 end :: proc(ctx: ^Core_Context) {
-	_build_stacks(ctx)
 	_sizing_pass(ctx)
 	_positioning_pass(ctx)
 	_post_layout_pass(ctx)

@@ -47,7 +47,7 @@ Command_Custom :: struct {
 _emit_render_commands :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int, style: ^Style) {
 	clear(&ctx.temp)
 	active_clip : ^Widget
-	widget_clip := ctx.clips[widget.clip]
+	widget_clip := ctx.clips[widget.form.clip]
 	emitted: bool
 	if widget_clip.kind.x != .None || widget_clip.kind.x != .None {
 		if active_clip != nil {
@@ -97,15 +97,16 @@ _emit_clip_start_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^
 }
 
 _emit_text_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int, style: ^Style) {
-	if text, ok := widget.kind.(Text); ok {
+	if widget.form.text != 0 {
+		text := get_text(ctx, widget.form.text)
 		command_text: Command_Text
-		widget.rect.position.x += style.padding.x.x
-		widget.rect.position.y += style.padding.y.x 
-		command_text.style = ctx.styles[widget.style].text
+		widget.rect.position.x += widget.form.layout.padding.x.x
+		widget.rect.position.y += widget.form.layout.padding.y.x
+		command_text.style = ctx.styles[widget.form.style].text
 		command_text.lines = ctx.lines[text.start:text.end]
 		_add_render_command(ctx, widget, command_text, z_index)
-		widget.rect.position.x -= style.padding.x.x
-		widget.rect.position.y -= style.padding.y.x 
+		widget.rect.position.x -= widget.form.layout.padding.x.x
+		widget.rect.position.y -= widget.form.layout.padding.y.x
 	}
 }
 
@@ -117,16 +118,10 @@ _emit_rect_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int, s
 }
 
 _emit_image_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int, style: ^Style) {
-	if widget.image != nil {
-		_add_render_command(ctx, widget, Command_Image{data = widget.image, tint = style.image_tint}, z_index)
+	if widget.form.image != nil {
+		_add_render_command(ctx, widget, Command_Image{data = widget.form.image, tint = style.image_tint}, z_index)
 	}
 }
-
-// _emit_custom_command :: proc(ctx: ^Core_Context, widget: ^Widget, z_index: ^int, style: ^Style) {
-// 	if widget.custom_data != nil {
-// 		_add_render_command(ctx, widget, Command_Custom{data = widget.custom_data}, z_index)
-// 	}
-// }
 
 _add_render_command :: proc(ctx: ^Core_Context, widget: ^Widget, kind: Render_Command_Kind, z_index: ^int) {
 	append(

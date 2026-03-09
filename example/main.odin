@@ -1,5 +1,6 @@
 package main
 
+import "core:prof/spall"
 import "core:time"
 import "vendor:sdl3/ttf"
 
@@ -27,7 +28,36 @@ INFO_COLOR :: ui.Color{117, 203, 253, 255} // #75cbfd
 BORDER_COLOR :: ui.Color{68, 74, 80, 255} // #444a50
 DIVIDER_COLOR :: ui.Color{35, 40, 45, 255} // #23282d
 
+import "base:runtime"
+import "core:sync"
+
+when ODIN_DEBUG {
+	spall_ctx: spall.Context
+	@(thread_local) spall_buffer: spall.Buffer
+	@(instrumentation_enter)
+	spall_enter :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc: runtime.Source_Code_Location) {
+		spall._buffer_begin(&spall_ctx, &spall_buffer, "", "", loc)
+	}
+
+	@(instrumentation_exit)
+	spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc: runtime.Source_Code_Location) {
+		spall._buffer_end(&spall_ctx, &spall_buffer)
+	}
+}
+
 main :: proc() {
+
+	when ODIN_DEBUG {
+		spall_ctx = spall.context_create("trace_test.spall")
+		defer spall.context_destroy(&spall_ctx)
+
+		buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
+		defer delete(buffer_backing)
+
+		spall_buffer = spall.buffer_create(buffer_backing, u32(sync.current_thread_id()))
+		defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
+	}
+
 	backend_ctx := sdl_backend.init(
 		"Window",
 		"./backend/sdl_gpu/shaders/compiled/main.vert.sprv",
@@ -63,7 +93,18 @@ main :: proc() {
 	radio_labels: []string = {"Radio 1", "Radio 2", "Radio 3"}
 	dropdown_labels: []string = {"Dropdown item 1 long", "Dropdown item 2", "Dropdown item 3", "Dropdown item 4"}
 
-	containers := make([dynamic]int) 
+	Container :: struct {
+		id: int,
+		count: int,
+	}
+
+	containers_id := int(0)
+	containers := make([dynamic]Container)
+	defer delete(containers)
+
+	for i in 0..<100 {
+		append(&containers, Container{id=i, count=10})
+	}
 
 	for handle_events(ctp, &backend_ctx) {
 		defer free_all(context.temp_allocator)
@@ -73,7 +114,6 @@ main :: proc() {
 			ctp,
 			{
 				color = SURFACE_COLOR,
-				padding = {8, 8},
 				border = {color = BORDER_COLOR, radius = 12, thickness = 2},
 				text = {font = jetbrainsmono, color = TEXT_PRIMARY_COLOR, font_size = 20},
 			},
@@ -82,7 +122,6 @@ main :: proc() {
 			ctp,
 			{
 				color = ELEVATED_SURFACE_COLOR,
-				padding = {8, 8},
 				border = {color = BORDER_COLOR, radius = 12, thickness = 2},
 				text = {font = jetbrainsmono, color = TEXT_PRIMARY_COLOR, font_size = 20},
 			},
@@ -92,7 +131,6 @@ main :: proc() {
 			ctp,
 			{
 				color = SUCCESS_COLOR,
-				padding = {8, 8},
 				border = {color = BORDER_COLOR, radius = 12, thickness = 2},
 				text = {font = jetbrainsmono, color = TEXT_PRIMARY_COLOR, font_size = 20},
 			},
@@ -102,16 +140,15 @@ main :: proc() {
 			ctp,
 			{
 				color = ERROR_COLOR,
-				padding = {8, 8},
 				border = {color = BORDER_COLOR, radius = 12, thickness = 2},
 				text = {font = jetbrainsmono, color = TEXT_PRIMARY_COLOR, font_size = 20},
 			},
 		)
 
 		anim := ui.create_animation(ctp)
-		
+
 		root_form := ui.Form {
-			kind = ui.Layout{sizing = {ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)}, alignment = {.Center, .Negative}, child_gap = 16, direction = .Y},
+			layout = ui.Layout{sizing = {ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)}, alignment = {.Center, .Negative}, child_gap = 16, direction = .Y},
 			style = style_base,
 			animation = anim
 		}
@@ -120,34 +157,37 @@ main :: proc() {
 		root_info := ui.reserve_widget(ctp, "root")
 		ui.submit_widget(ctp, root_info, root_form)
 		ui.push_parent(ctp, root_info)
-	
-		test_form := ui.Form{kind = ui.Layout{sizing = {ui.fixed(90), ui.fixed(90)}, alignment = {.Center, .Center}}, style = style_elevated, animation = anim}
-		container_form := ui.Form{kind = ui.Layout{sizing = {ui.grow(min = 200), ui.fixed(100)}, alignment = {.Center, .Center}, child_gap = 16}, style = style_base, animation = anim}
-		add_form := ui.Form{kind = ui.text("Add", .None), style = style_green, animation = anim}
-		remove_form := ui.Form{kind = ui.text("Remove", .None), style = style_red, animation = anim}
-		
+
+		text_add := ui.create_text(ctp, ui.text("Add", .None))
+		text_remove := ui.create_text(ctp, ui.text("Remove", .None))
+
+		test_form := ui.Form{layout = ui.Layout{sizing = {ui.fixed(90), ui.fixed(90)}, alignment = {.Center, .Center}}, style = style_elevated, animation = anim}
+		container_form := ui.Form{layout = ui.Layout{sizing = {ui.grow(min = 200), ui.fixed(100)}, alignment = {.Center, .Center}, child_gap = 16}, style = style_base, animation = anim}
+		add_form := ui.Form{text = text_add, style = style_green, animation = anim}
+		remove_form := ui.Form{text = text_remove, style = style_red, animation = anim}
+
 		add_info := ui.reserve_widget(ctp, "add button")
 		ui.submit_widget(ctp, add_info, add_form)
-		if .Clicked in ui.get_widget_mouse_events(ctp, add_info, .Left) {append(&containers, 5)}
+		if .Clicked in ui.get_widget_mouse_events(ctp, add_info, .Left) {append(&containers, Container{id = containers_id, count = 5}); containers_id += 1}
 
 		#reverse for c, i in containers {
-			container_info := ui.reserve_widget(ctp, i)
+			container_info := ui.reserve_widget(ctp, c.id)
 
 			ui.push_parent(ctp, container_info)
 
-			add_info := ui.reserve_widget(ctp, i)
-			
-			for j in 0..<c {
-				test_container := ui.reserve_widget(ctp, (100 + i + j))
+			add_info := ui.reserve_widget(ctp, c.id)
+
+			for j in 0..<c.count {
+				test_container := ui.reserve_widget(ctp, (100 + c.id + j))
 				if ui.is_widget_hovered(ctp, test_container) {
 					test_form.style = style_green
 				}
-				if .Clicked in ui.get_widget_mouse_events(ctp, test_container, .Left) {containers[i] -= 1}
+				if .Clicked in ui.get_widget_mouse_events(ctp, test_container, .Left) {containers[i].count -= 1}
 				ui.submit_widget(ctp, test_container, test_form)
 				test_form.style = style_elevated
 			}
 
-			remove_info := ui.reserve_widget(ctp, i + 500)
+			remove_info := ui.reserve_widget(ctp, c.id + 500)
 
 			ui.pop_parent(ctp)
 
@@ -156,21 +196,12 @@ main :: proc() {
 			ui.submit_widget(ctp, remove_info, remove_form)
 
 			if .Clicked in ui.get_widget_mouse_events(ctp, remove_info, .Left) {ordered_remove(&containers, i)}
-			if .Clicked in ui.get_widget_mouse_events(ctp, add_info, .Left) {containers[i] += 1}
+			if .Clicked in ui.get_widget_mouse_events(ctp, add_info, .Left) {containers[i].count += 1}
 		}
 
 		ui.pop_parent(ctp)
 		ui.end(ctp)
 
-		// if len(ctp.new) > 0 {
-		// 	fmt.println(ctp.new)
-		// }
-		
-		// if len(ctp.dead) > 0 {
-		// 	fmt.println(ctp.dead)
-		// }
-
-			
 		sdl_backend.render(&backend_ctx, &ctx)
 	}
 }
