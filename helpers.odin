@@ -182,10 +182,12 @@ create_animation :: proc(ctx: ^Core_Context, hooks: Animation_Hooks = DEFAULT_HO
 	return Animation_Index(len(ctx.animations) - 1)
 }
 
-create_override :: proc(ctx: ^Core_Context, override: Override) -> Override_Index {
-	override_index := Override_Index(len(ctx.overrides))
-	append(&ctx.overrides, override)
-	return override_index
+create_override :: proc(ctx: ^Core_Context, overrides: ..Override) -> Override_Range {
+	start := cast(i32)len(ctx.overrides)
+	for o in overrides {
+		append(&ctx.overrides, o)
+	}
+	return Override_Range{start, cast(i32)len(ctx.overrides)}
 }
 
 create_text :: proc(ctx: ^Core_Context, text: Text) -> Text_Index {
@@ -210,8 +212,8 @@ get_widget :: #force_inline proc(ctx: ^Core_Context, index: Widget_Index) -> ^Wi
 	return &ctx.widgets[index]
 }
 
-get_override :: #force_inline proc(ctx: ^Core_Context, index: Override_Index) -> ^Override #no_bounds_check {
-	return &ctx.overrides[index]
+get_override :: #force_inline proc(ctx: ^Core_Context, range: Override_Range) -> []Override #no_bounds_check {
+	return ctx.overrides[range.start:range.end]
 }
 
 get_text :: #force_inline proc(ctx: ^Core_Context, index: Text_Index) -> ^Text #no_bounds_check {

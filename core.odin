@@ -3,11 +3,15 @@ package core_ui
 import "core:hash"
 import "core:time"
 
+Range :: struct {
+	start, end: i32,
+}
+
 Text_Index :: distinct i32
 Clip_Index :: distinct i32
 Style_Index :: distinct i32
 Widget_Index :: distinct i32
-Override_Index :: distinct i32
+Override_Range :: distinct Range
 Animation_Index :: distinct i32
 
 Vec2f32 :: [2]f32
@@ -104,7 +108,7 @@ Form :: struct {
 	text: 		  Text_Index,
 	clip:         Clip_Index,
 	style:        Style_Index,
-	override:     Override_Index,
+	override:     Override_Range,
 	animation:    Animation_Index,
 }
 

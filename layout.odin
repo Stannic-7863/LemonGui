@@ -3,8 +3,6 @@ package core_ui
 import "core:time"
 import "core:unicode/utf8"
 
-// BOG: The max size in grow sizing is not respected. Figure that out.
-
 Axis :: enum {
 	X,
 	Y,
@@ -64,7 +62,6 @@ Growable :: struct {
 	size:       ^f32,
 	min, max:   f32,
 	is_text:    bool,
-	contribute: bool,
 }
 
 Measured_Word :: struct {
@@ -97,13 +94,17 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	hovered_z_index: int = -1
 
 	root := get_widget(ctx, 0)
-	root_override := get_override(ctx, root.form.override)
+	root_overrides := get_override(ctx, root.form.override)
+	root_expand_x, root_expand_y, root_offset_x, root_offset_y := f32(0), f32(0), f32(0), f32(0)
 
-	root_offset_x := _get_override_transform_value(root_override.offset, root.rect.size, 0, .X)
-	root_offset_y := _get_override_transform_value(root_override.offset, root.rect.size, 0, .Y)
+	for root_override in root_overrides {
+		root_offset_x += _get_override_transform_value(root_override.offset, root.rect.size, 0, .X)
+		root_offset_y += _get_override_transform_value(root_override.offset, root.rect.size, 0, .Y)
 
-	root_expand_x := _get_override_transform_value(root_override.expand, root.rect.size, 0, .X)
-	root_expand_y := _get_override_transform_value(root_override.expand, root.rect.size, 0, .Y)
+		root_expand_x += _get_override_transform_value(root_override.expand, root.rect.size, 0, .X)
+		root_expand_y += _get_override_transform_value(root_override.expand, root.rect.size, 0, .Y)
+	}
+
 
 	root_clip_x := _get_clip_value(ctx, root, .X)
 	root_clip_y := _get_clip_value(ctx, root, .Y)
@@ -179,7 +180,7 @@ _post_layout_pass :: proc(ctx: ^Core_Context) {
 
 _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 	#reverse for &widget in ctx.widgets {
-		widget_layout := widget.form.layout
+		widget_layout := &widget.form.layout
 		#partial switch kind in widget.form.layout.sizing[axis] {
 		case Fit:
 			widget_layout.accumulating_min[axis] += _get_axis_padding(axis, widget_layout.padding)
@@ -251,17 +252,20 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 				child_layout_flag := child_layout.flags[axis]
 				#partial switch kind in child_layout.sizing[axis] {
 				case Grow:
-					contribute := .No_Size_Propagation not_in child_layout_flag
 					child.rect.size[axis] = min(child.rect.size[axis], kind.max)
-					append(&ctx.growable, Growable{&child.rect.size[axis], child.rect.size[axis], kind.max, false, contribute})
+					if .No_Size_Propagation not_in child_layout_flag {
+						append(&ctx.growable, Growable{&child.rect.size[axis], child.rect.size[axis], kind.max, false})
+					}
 				case Percent:
 					child.rect.size[axis] = (widget.rect.size[axis] - total_child_gap - total_padding) * kind.value
 				}
 				if axis == .X && child.form.text != 0 {
 					text := get_text(ctx, child.form.text)
-					contribute := .No_Size_Propagation not_in child_layout_flag
 					child.rect.size[axis] = min(child.info.text_extent.y, text.preferred_max)
-					append(&ctx.growable, Growable{&child.rect.size[axis], child.info.text_extent.x, child.rect.size[axis], true, contribute})
+					contribute := .No_Size_Propagation not_in child_layout_flag
+					if .No_Size_Propagation not_in child_layout_flag {
+						append(&ctx.growable, Growable{&child.rect.size[axis], child.info.text_extent.x, child.rect.size[axis], true})
+					}
 				}
 
 				if .No_Size_Propagation not_in child_layout_flag {
@@ -322,17 +326,13 @@ _resolve_grow :: proc(ctx: ^Core_Context, available: f32) {
 		#reverse for g, i in ctx.growable {
 			if g.size^ == smallest {
 				g.size^ += to_add
-				if g.contribute {
-					available -= to_add
-				}
+				available -= to_add
 			}
 
 			if g.size^ >= g.max {
-				ordered_remove(&ctx.growable, i)
+				unordered_remove(&ctx.growable, i)
 				difference := abs(g.size^ - g.max)
-				if g.contribute {
-					available += difference
-				}
+				available += difference
 				g.size^ = g.max
 			}
 		}
@@ -361,17 +361,13 @@ _resolve_shrink :: proc(ctx: ^Core_Context, available: f32) {
 		#reverse for g, i in ctx.growable {
 			if g.size^ == largest {
 				g.size^ -= to_subtract
-				if g.contribute {
-					available -= to_subtract
-				}
+				available -= to_subtract
 			}
 			if g.size^ <= g.min {
 				difference := abs(g.size^ - g.min)
-				if g.contribute {
-					available += difference
-				}
+				available += difference
 				g.size^ = g.min
-				ordered_remove(&ctx.growable, i)
+				unordered_remove(&ctx.growable, i)
 			}
 		}
 	}
@@ -501,10 +497,14 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 	for child_index := widget.first; child_index != -1; {
 		child := get_widget(ctx, child_index)
 		child_index = child.next
-		child_override := get_override(ctx, child.form.override)
 
-		expand_axis := _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, axis)
-		expand_other_axis := _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, other_axis)
+		child_overrides := get_override(ctx, child.form.override)
+		expand_axis, expand_other_axis := f32(0), f32(0)
+
+		for child_override in child_overrides {
+			expand_axis += _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, axis)
+			expand_other_axis += _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, other_axis)
+		}
 
 		child.rect.size[axis] += expand_axis
 		child.rect.size[other_axis] += expand_other_axis
@@ -551,10 +551,14 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 	for child_index := widget.first; child_index != -1; {
 		child := get_widget(ctx, child_index)
 		child_index = child.next
-		child_override := get_override(ctx, child.form.override)
 
-		offset_axis := _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, axis)
-		offset_other_axis := _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, other_axis)
+		child_overrides := get_override(ctx, child.form.override)
+		offset_axis, offset_other_axis := f32(0), f32(0)
+
+		for child_override in child_overrides {
+			offset_axis += _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, axis)
+			offset_other_axis += _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, other_axis)
+		}
 
 		IGNORE_FLAGS :: Layout_Flags{.No_Positioning, .No_Positioning_Relative}
 
