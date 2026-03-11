@@ -3,6 +3,8 @@ package core_ui
 import "core:hash"
 import "core:time"
 
+import "core:container/lru"
+
 Range :: struct {
 	start, end: i32,
 }
@@ -24,16 +26,6 @@ Rect :: struct {
 	position:     Vec2f32,
 	size:         Vec2f32,
 	content_size: Vec2f32,
-}
-
-Layout :: struct {
-	padding:		  [2]Vec2f32,
-	sizing:           [2]Sizing,
-	accumulating_min: [2]f32,
-	child_gap:        f32,
-	alignment:        [2]Alignment,
-	flags:            [2]Layout_Flags,
-	direction:        Axis,
 }
 
 Text_Wrap_Mode :: enum u8 {
@@ -102,14 +94,14 @@ Widget :: struct {
 }
 
 Form :: struct {
-	image:        rawptr,
-	layout:       Layout,
-	event_flags:  Event_Flags,
-	text: 		  Text_Index,
-	clip:         Clip_Index,
-	style:        Style_Index,
-	override:     Override_Range,
-	animation:    Animation_Index,
+	image:       rawptr,
+	layout:      Layout,
+	event_flags: Event_Flags,
+	text:        Text_Index,
+	clip:        Clip_Index,
+	style:       Style_Index,
+	override:    Override_Range,
+	animation:   Animation_Index,
 }
 
 Info :: struct {
@@ -125,7 +117,7 @@ Core_Context :: struct {
 	active_parent:       Widget_Index,
 	overrides:           [dynamic]Override,
 	clips:               [dynamic]Clip,
-	text:				 [dynamic]Text,
+	text:                [dynamic]Text,
 	animations:          [dynamic]Animation,
 	styles:              [dynamic]Style,
 	temp:                [dynamic]^Widget,
@@ -144,8 +136,8 @@ Core_Context :: struct {
 	window_size:         Vec2f32,
 	frame_start:         time.Time,
 	layout_start:        time.Time,
-	frametime:           time.Duration,
-	layouttime:          time.Duration,
+	frame_time:          time.Duration,
+	layout_time:         time.Duration,
 }
 
 Lookup_Data :: struct {
@@ -308,7 +300,7 @@ begin :: proc(ctx: ^Core_Context) {
 
 	clear(&ctx.persistant.curr_lookup)
 
-	ctx.frametime = time.diff(ctx.frame_start, time.now())
+	ctx.frame_time = time.diff(ctx.frame_start, time.now())
 	ctx.frame_start = time.now()
 	ctx.layout_start = time.now()
 }

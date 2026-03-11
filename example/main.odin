@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:prof/spall"
 import "core:time"
 import "vendor:sdl3/ttf"
@@ -103,7 +104,7 @@ main :: proc() {
 	defer delete(containers)
 
 	for i in 0..<100 {
-		append(&containers, Container{id=i, count=10})
+		append(&containers, Container{id=i, count=8})
 	}
 
 	for handle_events(ctp, &backend_ctx) {
@@ -148,7 +149,7 @@ main :: proc() {
 		anim := ui.create_animation(ctp)
 
 		root_form := ui.Form {
-			layout = ui.Layout{sizing = {ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)}, alignment = {.Center, .Negative}, child_gap = 16, direction = .Y},
+			layout = ui.Layout{sizing = {ui.fixed(ctx.window_size.x), ui.fixed(ctx.window_size.y)}, placement = {.Center, .Negative}, child_gap = 16, direction = .Y},
 			style = style_base,
 			animation = anim
 		}
@@ -161,10 +162,15 @@ main :: proc() {
 		text_add := ui.create_text(ctp, ui.text("Add", .None))
 		text_remove := ui.create_text(ctp, ui.text("Remove", .None))
 
-		test_form := ui.Form{layout = ui.Layout{sizing = {ui.fixed(90), ui.fixed(90)}, alignment = {.Center, .Center}}, style = style_elevated, animation = anim}
-		container_form := ui.Form{layout = ui.Layout{sizing = {ui.grow(min = 200), ui.fixed(100)}, alignment = {.Center, .Center}, child_gap = 16}, style = style_base, animation = anim}
+		test_form := ui.Form{layout = ui.Layout{sizing = {ui.fixed(90), ui.fixed(90)}, placement = {.Center, .Center}}, style = style_elevated, animation = anim}
+		container_form := ui.Form{layout = ui.Layout{sizing = {ui.grow(min = 200), ui.fit(100)}, placement = {.Evenly, .Center}, child_gap = 16, padding = 16}, style = style_base, animation = anim}
 		add_form := ui.Form{text = text_add, style = style_green, animation = anim}
 		remove_form := ui.Form{text = text_remove, style = style_red, animation = anim}
+
+		text_perf := ui.create_text(ctp, ui.text(fmt.tprint(ctp.layout_time), .None))
+		timer_container_form := ui.Form{layout = {padding = 16}, text = text_perf, style = style_red}
+		timer_contianer := ui.reserve_widget(ctp, "timer container")
+		ui.submit_widget(ctp, timer_contianer, timer_container_form)
 
 		add_info := ui.reserve_widget(ctp, "add button")
 		ui.submit_widget(ctp, add_info, add_form)
@@ -180,11 +186,13 @@ main :: proc() {
 			for j in 0..<c.count {
 				test_container := ui.reserve_widget(ctp, (100 + c.id + j))
 				if ui.is_widget_hovered(ctp, test_container) {
+					test_form.layout.margin = 24
 					test_form.style = style_green
 				}
 				if .Clicked in ui.get_widget_mouse_events(ctp, test_container, .Left) {containers[i].count -= 1}
 				ui.submit_widget(ctp, test_container, test_form)
 				test_form.style = style_elevated
+				test_form.layout.margin = 0
 			}
 
 			remove_info := ui.reserve_widget(ctp, c.id + 500)

@@ -30,10 +30,21 @@ Sizing :: union #no_nil {
 	Ratio,
 }
 
-Alignment :: enum u8 {
+Space :: enum u8 {
+	Between, // equal spacing between children excluding the edges
+	Around, // equal amount of space on both sides of a child
+	Evenly, // space is shared equally around borders and between children
+}
+
+Align :: enum u8 {
 	Negative, // -y, -x, left, up
 	Center, // 0, 0
 	Positive, // +x, +y, right, down
+}
+
+Placement :: union #no_nil {
+	Align,
+	Space
 }
 
 Percent_Self :: distinct Value
@@ -58,10 +69,20 @@ Override :: struct {
 	expand: [Axis]Override_Transform,
 }
 
+Layout :: struct {
+	padding:          [2]Vec2f32,
+	margin:           [2]Vec2f32,
+	sizing:           [2]Sizing,
+	accumulating_min: [2]f32,
+	child_gap:        f32,
+	placement:        [2]Placement,
+	flags:            [2]Layout_Flags,
+	direction:        Axis,
+}
+
 Growable :: struct {
-	size:       ^f32,
-	min, max:   f32,
-	is_text:    bool,
+	size:     ^f32,
+	min, max: f32,
 }
 
 Measured_Word :: struct {
@@ -105,7 +126,6 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		root_expand_y += _get_override_transform_value(root_override.expand, root.rect.size, 0, .Y)
 	}
 
-
 	root_clip_x := _get_clip_value(ctx, root, .X)
 	root_clip_y := _get_clip_value(ctx, root, .Y)
 
@@ -113,8 +133,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	root.rect.size += {root_expand_x, root_expand_y}
 
 	for &widget in ctx.widgets {
-		layout := widget.form.layout
-		_position_layout_widget_children(ctx, &widget, layout)
+		_position_layout_widget_children(ctx, &widget)
 
 		widget_style := get_style(ctx, widget.form.style)
 		_write_widget_persistant_data(ctx, &widget)
@@ -154,9 +173,29 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	}
 
 	z_index_offset := int(0)
-	for &widget in ctx.widgets {
+	for i := 0; i < len(ctx.widgets); {
+		if i == -1 {break}
+		widget := get_widget(ctx, Widget_Index(i))
+
+		if widget.rect.position.x + widget.rect.size.x < 0 ||
+		   widget.rect.position.y + widget.rect.size.y < 0 ||
+		   widget.rect.position.x > ctx.window_size.x ||
+		   widget.rect.position.y > ctx.window_size.y {
+			j := widget.next
+			p: ^Widget
+			if widget.parent != -1 {p = get_widget(ctx, widget.parent)}
+			for (j == -1 && p != nil) {
+				j = p.next
+				if p.parent == -1 {break}
+				p = get_widget(ctx, p.parent)
+			}
+			i = int(j)
+			continue
+		}
+
 		widget_style := get_style(ctx, widget.form.style)
-		_emit_render_commands(ctx, &widget, &z_index_offset, widget_style)
+		_emit_render_commands(ctx, widget, &z_index_offset, widget_style)
+		i += 1
 	}
 
 	sort_render_commands(ctx.render_commands[:])
@@ -171,7 +210,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 }
 
 _post_layout_pass :: proc(ctx: ^Core_Context) {
-	ctx.layouttime = time.diff(ctx.frame_start, time.now())
+	ctx.layout_time = time.diff(ctx.frame_start, time.now())
 
 	ctx.persistant.prev_styles, ctx.styles = ctx.styles, ctx.persistant.prev_styles
 	ctx.persistant.prev_lookup, ctx.persistant.curr_lookup = ctx.persistant.curr_lookup, ctx.persistant.prev_lookup
@@ -180,27 +219,20 @@ _post_layout_pass :: proc(ctx: ^Core_Context) {
 
 _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 	#reverse for &widget in ctx.widgets {
-		widget_layout := &widget.form.layout
 		#partial switch kind in widget.form.layout.sizing[axis] {
 		case Fit:
-			widget_layout.accumulating_min[axis] += _get_axis_padding(axis, widget_layout.padding)
-			if widget_layout.direction == axis {
-				widget_layout.accumulating_min[axis] += _get_child_gap(&widget, axis)
-			}
-			widget_layout.accumulating_min[axis] = max(widget_layout.accumulating_min[axis], kind.min)
-			widget_layout.accumulating_min[axis] = min(widget_layout.accumulating_min[axis], kind.max)
+			widget.form.layout.accumulating_min[axis] += _get_axis_spacing(axis, widget.form.layout.padding)
+			widget.form.layout.accumulating_min[axis] += widget.form.layout.direction == axis ? _get_child_gap(&widget, axis) : 0
+			widget.form.layout.accumulating_min[axis] = max(widget.form.layout.accumulating_min[axis], kind.min)
+			widget.form.layout.accumulating_min[axis] = min(widget.form.layout.accumulating_min[axis], kind.max)
 		case Grow:
-			widget_layout.accumulating_min[axis] = max(widget_layout.accumulating_min[axis], kind.min)
-			if widget_layout.direction == axis {
-				widget_layout.accumulating_min[axis] += _get_child_gap(&widget, axis)
-			}
-			widget_layout.accumulating_min[axis] += _get_axis_padding(axis, widget_layout.padding)
-		case Fixed:
-			widget_layout.accumulating_min[axis] = kind.value
-		case Ratio:
-			widget_layout.accumulating_min[axis] = kind.value * widget.info.rect.size[_get_other_axis(axis)]
+			widget.form.layout.accumulating_min[axis] = max(widget.form.layout.accumulating_min[axis], kind.min)
+			widget.form.layout.accumulating_min[axis] += widget.form.layout.direction == axis ? _get_child_gap(&widget, axis) : 0
+			widget.form.layout.accumulating_min[axis] += _get_axis_spacing(axis, widget.form.layout.padding)
+		case Fixed: widget.form.layout.accumulating_min[axis] = kind.value
+		case Ratio: widget.form.layout.accumulating_min[axis] = kind.value * widget.info.rect.size[_get_other_axis(axis)]
 		}
-		widget.rect.size[axis] = max(widget_layout.accumulating_min[axis], widget.rect.size[axis])
+		widget.rect.size[axis] = max(widget.form.layout.accumulating_min[axis], widget.rect.size[axis])
 		if axis == .X && widget.form.text != 0 {
 			text := get_text(ctx, widget.form.text)^
 			if widget.info.text_extent.x == 0 {
@@ -223,9 +255,9 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 		if .No_Size_Propagation not_in widget_override_flag && parent_clip_kind == .None {
 			parent_kind := &parent.form.layout
 			if parent_kind.direction == axis {
-				parent_kind.accumulating_min[axis] += widget.rect.size[axis]
+				parent_kind.accumulating_min[axis] += widget.rect.size[axis] + _get_axis_spacing(axis, widget.form.layout.margin)
 			} else {
-				parent_kind.accumulating_min[axis] = max(parent_kind.accumulating_min[axis], widget.rect.size[axis])
+				parent_kind.accumulating_min[axis] = max(parent_kind.accumulating_min[axis], widget.rect.size[axis] + _get_axis_spacing(axis, widget.form.layout.margin))
 			}
 		}
 	}
@@ -233,13 +265,12 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 
 _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 	for &widget in ctx.widgets {
-		layout := widget.form.layout
 		if widget.first == -1 {continue}
 
 		total_child_gap := _get_child_gap(&widget, axis)
-		total_padding := _get_axis_padding(axis, layout.padding)
+		total_padding := _get_axis_spacing(axis, widget.form.layout.padding)
 
-		if layout.direction == axis {
+		if widget.form.layout.direction == axis {
 			clear(&ctx.growable)
 			defer clear(&ctx.growable)
 
@@ -248,28 +279,23 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 			for child_index := widget.first; child_index != -1; {
 				child := get_widget(ctx, child_index)
 				child_index = child.next
-				child_layout := child.form.layout
-				child_layout_flag := child_layout.flags[axis]
-				#partial switch kind in child_layout.sizing[axis] {
+				#partial switch kind in child.form.layout.sizing[axis] {
 				case Grow:
 					child.rect.size[axis] = min(child.rect.size[axis], kind.max)
-					if .No_Size_Propagation not_in child_layout_flag {
-						append(&ctx.growable, Growable{&child.rect.size[axis], child.rect.size[axis], kind.max, false})
+					if .No_Size_Propagation not_in child.form.layout.flags[axis] {
+						append(&ctx.growable, Growable{&child.rect.size[axis], child.rect.size[axis], kind.max})
 					}
 				case Percent:
 					child.rect.size[axis] = (widget.rect.size[axis] - total_child_gap - total_padding) * kind.value
 				}
+
 				if axis == .X && child.form.text != 0 {
 					text := get_text(ctx, child.form.text)
 					child.rect.size[axis] = min(child.info.text_extent.y, text.preferred_max)
-					contribute := .No_Size_Propagation not_in child_layout_flag
-					if .No_Size_Propagation not_in child_layout_flag {
-						append(&ctx.growable, Growable{&child.rect.size[axis], child.info.text_extent.x, child.rect.size[axis], true})
-					}
 				}
 
-				if .No_Size_Propagation not_in child_layout_flag {
-					available -= child.rect.size[axis]
+				if .No_Size_Propagation not_in child.form.layout.flags[axis] {
+					available -= child.rect.size[axis] + _get_axis_spacing(axis, child.form.layout.margin)
 				}
 			}
 
@@ -287,7 +313,7 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 				child_layout := child.form.layout
 				#partial switch kind in child_layout.sizing[axis] {
 				case Grow:
-					child.rect.size[axis] = widget.rect.size[axis] - total_padding
+					child.rect.size[axis] = widget.rect.size[axis] - total_padding - _get_axis_spacing(axis, child.form.layout.margin)
 					child.rect.size[axis] = max(child.rect.size[axis], child_layout.accumulating_min[axis])
 					child.rect.size[axis] = min(child.rect.size[axis], kind.max)
 				case Percent:
@@ -307,10 +333,6 @@ _resolve_grow :: proc(ctx: ^Core_Context, available: f32) {
 	for available > 1e-4 && len(ctx.growable) > 0 {
 		smallest, second_smallest, to_add: f32 = max(f32), max(f32), 0
 		for g, i in ctx.growable {
-			if g.is_text {
-				ordered_remove(&ctx.growable, i)
-				continue
-			}
 			if g.size^ < smallest {
 				second_smallest = smallest
 				smallest = g.size^
@@ -375,6 +397,7 @@ _resolve_shrink :: proc(ctx: ^Core_Context, available: f32) {
 
 _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 	for &widget in ctx.widgets {
+		if widget.form.text == 0 {continue}
 		text := get_text(ctx, widget.form.text)
 		switch text.wrap_mode {
 		case .Words:
@@ -420,15 +443,15 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 
 			text.start = start
 			text.end = len(ctx.lines)
-			widget.rect.size.y = f32(text.end - text.start) * (text_height + style.text.line_spacing) + accumulated_height + _get_axis_padding(.Y, widget.form.layout.padding)
+			widget.rect.size.y = f32(text.end - text.start) * (text_height + style.text.line_spacing) + accumulated_height + _get_axis_spacing(.Y, widget.form.layout.padding)
 			widget.info.text_extent = {minimum_width + padding, maximum_width + padding}
 		case .None:
 			style := ctx.styles[widget.form.style]
 			append(&ctx.lines, text.text)
 			text.start = len(ctx.lines) - 1
 			text.end = len(ctx.lines)
-			padding_x := _get_axis_padding(.X, widget.form.layout.padding)
-			padding_y := _get_axis_padding(.Y, widget.form.layout.padding)
+			padding_x := _get_axis_spacing(.X, widget.form.layout.padding)
+			padding_y := _get_axis_spacing(.Y, widget.form.layout.padding)
 			widget.rect.size.y = ctx.measure_text_height(style.text) + padding_y
 			widget.info.text_extent = ctx.measure_text_width(text.text, style.text) + padding_x
 		}
@@ -489,8 +512,9 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, style: Text_Style) {
 	}
 }
 
-_position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, layout: Layout) #no_bounds_check {
+_position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #no_bounds_check {
 	total_size: [Axis]f32
+	layout := widget.form.layout
 	axis := layout.direction
 	other_axis := _get_other_axis(axis)
 
@@ -498,50 +522,51 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 		child := get_widget(ctx, child_index)
 		child_index = child.next
 
-		child_overrides := get_override(ctx, child.form.override)
-		expand_axis, expand_other_axis := f32(0), f32(0)
-
-		for child_override in child_overrides {
-			expand_axis += _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, axis)
-			expand_other_axis += _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, other_axis)
-		}
-
-		child.rect.size[axis] += expand_axis
-		child.rect.size[other_axis] += expand_other_axis
-
 		IGNORE_FLAGS :: Layout_Flags{.No_Positioning, .No_Clip_Offset, .No_Positioning_Relative}
 
 		if IGNORE_FLAGS & child.form.layout.flags[axis] == {} {
-			total_size[axis] += child.rect.size[axis]
+			total_size[axis] += child.rect.size[axis] + _get_axis_spacing(axis, child.form.layout.margin)
 		} else {
 			total_size[axis] -= layout.child_gap
 		}
+
 		if IGNORE_FLAGS & child.form.layout.flags[other_axis] == {} {
-			total_size[other_axis] = max(total_size[other_axis], child.rect.size[other_axis])
+			total_size[other_axis] = max(total_size[other_axis], child.rect.size[other_axis] + _get_axis_spacing(other_axis, child.form.layout.margin))
 		}
 	}
 
 	total_size[axis] += _get_child_gap(widget, axis)
-	widget.info.rect.content_size[axis] = total_size[axis] + _get_axis_padding(axis, widget.form.layout.padding)
-	widget.info.rect.content_size[other_axis] = total_size[other_axis] + _get_axis_padding(other_axis, widget.form.layout.padding)
+	available_size := widget.rect.size[axis] - _get_axis_spacing(axis, widget.form.layout.padding) - total_size[axis] + _get_child_gap(widget, axis)
+	widget.info.rect.content_size[axis] = total_size[axis] + _get_axis_spacing(axis, widget.form.layout.padding)
+	widget.info.rect.content_size[other_axis] = total_size[other_axis] + _get_axis_spacing(other_axis, widget.form.layout.padding)
 
 	increment: Vec2f32
+	computed_child_gap := layout.child_gap
 
-	switch layout.alignment[axis] {
+	switch layout.placement[axis] {
 	case .Negative:
 		increment[axis] = widget.rect.position[axis] + widget.form.layout.padding[axis][0]
 	case .Positive:
 		increment[axis] = widget.rect.position[axis] + widget.rect.size[axis] - widget.form.layout.padding[axis][1] - total_size[axis]
 	case .Center:
 		increment[axis] = widget.rect.position[axis] + (widget.rect.size[axis] - total_size[axis]) / 2
+	case .Around:
+		computed_child_gap = available_size / f32(widget.total_children - widget.detached_children[axis])
+		increment[axis] = widget.rect.position[axis] + widget.form.layout.padding[axis].x + computed_child_gap / 2
+	case .Evenly:
+		computed_child_gap = available_size / f32(widget.total_children + 1 - widget.detached_children[axis])
+		increment[axis] = widget.rect.position[axis] + widget.form.layout.padding[axis].x + computed_child_gap
+	case .Between:
+		computed_child_gap = available_size / f32(widget.total_children - 1 - widget.detached_children[axis])
+		increment[axis] = widget.rect.position[axis] + widget.form.layout.padding[axis].x
 	}
 
-	switch layout.alignment[other_axis] {
+	switch layout.placement[other_axis] {
 	case .Negative:
-		increment[other_axis] = widget.rect.position[other_axis] + widget.form.layout.padding[other_axis][0]
+		increment[other_axis] = widget.rect.position[other_axis] + widget.form.layout.padding[other_axis].x
 	case .Positive:
-		increment[other_axis] = widget.rect.position[other_axis] + widget.rect.size[other_axis] - widget.form.layout.padding[other_axis][1]
-	case .Center:
+		increment[other_axis] = widget.rect.position[other_axis] + widget.rect.size[other_axis] - widget.form.layout.padding[other_axis].y
+	case .Center, .Between, .Around, .Evenly:
 		increment[other_axis] = widget.rect.position[other_axis] + widget.rect.size[other_axis] / 2
 	}
 
@@ -552,19 +577,12 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 		child := get_widget(ctx, child_index)
 		child_index = child.next
 
-		child_overrides := get_override(ctx, child.form.override)
-		offset_axis, offset_other_axis := f32(0), f32(0)
-
-		for child_override in child_overrides {
-			offset_axis += _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, axis)
-			offset_other_axis += _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, other_axis)
-		}
-
 		IGNORE_FLAGS :: Layout_Flags{.No_Positioning, .No_Positioning_Relative}
 
 		if IGNORE_FLAGS & child.form.layout.flags[axis] == {} {
+			increment[axis] += child.form.layout.margin[axis].x
 			child.rect.position[axis] = increment[axis]
-			increment[axis] += child.rect.size[axis] + layout.child_gap + offset_axis
+			increment[axis] += child.rect.size[axis] + computed_child_gap + child.form.layout.margin[axis].y
 		} else {
 			child.rect.position[axis] = 0
 			if .No_Positioning_Relative in child.form.layout.flags[axis] {
@@ -573,12 +591,12 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 		}
 
 		if IGNORE_FLAGS & child.form.layout.flags[other_axis] == {} {
-			switch layout.alignment[other_axis] {
+			switch layout.placement[other_axis] {
 			case .Negative:
-				child.rect.position[other_axis] = increment[other_axis]
+				child.rect.position[other_axis] = increment[other_axis] + child.form.layout.margin[other_axis].x
 			case .Positive:
-				child.rect.position[other_axis] = increment[other_axis] - child.rect.size[other_axis]
-			case .Center:
+				child.rect.position[other_axis] = increment[other_axis] - child.rect.size[other_axis] - child.form.layout.margin[other_axis].y
+			case .Center, .Between, .Around, .Evenly:
 				child.rect.position[other_axis] = increment[other_axis] - child.rect.size[other_axis] / 2
 			}
 		} else {
@@ -588,9 +606,6 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 			}
 		}
 
-		child.rect.position[axis] += offset_axis
-		child.rect.position[other_axis] += offset_other_axis
-
 		if .No_Clip_Offset not_in child.form.layout.flags[axis] {
 			child.rect.position[axis] -= clip_axis
 		}
@@ -598,5 +613,21 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget, la
 		if .No_Clip_Offset not_in child.form.layout.flags[other_axis] {
 			child.rect.position[other_axis] -= clip_other_axis
 		}
+
+		child_overrides := get_override(ctx, child.form.override)
+		offset_axis, offset_other_axis := f32(0), f32(0)
+		expand_axis, expand_other_axis := f32(0), f32(0)
+
+		for child_override in child_overrides {
+			expand_axis += _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, axis)
+			expand_other_axis += _get_override_transform_value(child_override.expand, child.rect.size, widget.rect.size, other_axis)
+			offset_axis += _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, axis)
+			offset_other_axis += _get_override_transform_value(child_override.offset, child.rect.size, widget.rect.size, other_axis)
+		}
+
+		child.rect.position[axis] += offset_axis
+		child.rect.position[other_axis] += offset_other_axis
+		child.rect.size[axis] += expand_axis
+		child.rect.size[other_axis] += expand_other_axis
 	}
 }

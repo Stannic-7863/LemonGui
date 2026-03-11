@@ -39,15 +39,15 @@ text :: proc "contextless" (text: string, wrap_mode: Text_Wrap_Mode = .Words, pr
 	return Text{text = text, preferred_min = preferred_min, preferred_max = preferred_max, wrap_mode = wrap_mode}
 }
 
-layout :: proc "contextless" (sizing: [2]Sizing, alignment: [2]Alignment = {}, child_gap: f32 = 0, direction: Axis = .X) -> Layout {
-	return {sizing = sizing, alignment = alignment, direction = direction, child_gap = child_gap}
+layout :: proc "contextless" (sizing: [2]Sizing, placement: [2]Placement = {}, child_gap: f32 = 0, direction: Axis = .X) -> Layout {
+	return {sizing = sizing, placement = placement, direction = direction, child_gap = child_gap}
 }
 
 sizing :: proc "contextless" (x: Sizing = Fit{0, max(f32)}, y: Sizing = Fit{0, max(f32)}) -> [2]Sizing {
 	return {x, y}
 }
 
-alignment :: proc "contextless" (x: Alignment = .Negative, y: Alignment = .Negative) -> [2]Alignment {
+alignment :: proc "contextless" (x: Align = .Negative, y: Align = .Negative) -> [2]Align {
 	return {x, y}
 }
 
@@ -278,7 +278,7 @@ _get_other_axis :: proc(axis: Axis) -> Axis {
 	return .X if axis == .Y else .Y
 }
 
-_get_axis_padding :: proc(axis: Axis, padding: [2]Vec2f32) -> f32 #no_bounds_check {
+_get_axis_spacing :: proc(axis: Axis, padding: [2]Vec2f32) -> f32 #no_bounds_check {
 	return padding[axis].x + padding[axis].y
 }
 
