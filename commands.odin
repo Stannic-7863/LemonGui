@@ -122,7 +122,7 @@ _add_render_command :: proc(ctx: ^Core_Context, widget: ^Widget, kind: Render_Co
 		Render_Command {
 			kind = kind,
 			z_index = z_index^ + widget.z_index,
-			rect = {linalg.round(widget.rect.position), linalg.round(widget.rect.size), linalg.round(widget.rect.content_size)},
+			rect = {widget.rect.position, widget.rect.size, widget.rect.content_size},
 			emitter_hash = widget.info.hash,
 			emitter_string_id = widget.info.key,
 		},

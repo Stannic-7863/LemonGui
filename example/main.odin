@@ -200,7 +200,7 @@ main :: proc() {
                 tf.layout.sizing.x = ui.fit()
                 tf.layout.sizing.y = ui.fit()
                 tf.style = s_title
-                tf.text = ui.create_text(ctp, ui.text("todos", .None))
+                tf.text = ui.create_text(ctp, ui.text("Todos", .None))
                 tf.event_flags = {.Disable_Hover}
                 ui.submit_widget(ctp, title, tf)
 
@@ -299,7 +299,8 @@ main :: proc() {
                 summf := ui.Form{}
                 summf.layout.sizing.x = ui.fit()
                 summf.layout.sizing.y = ui.fit()
-                summf.style = s_dim
+                summf.layout.padding = {8, 4}
+                summf.style = s_ghost
                 summf.text = ui.create_text(ctp, ui.text(fmt.tprintf("{}/{} done", done_count, total), .None))
                 summf.event_flags = {.Disable_Hover}
                 ui.submit_widget(ctp, summ, summf)

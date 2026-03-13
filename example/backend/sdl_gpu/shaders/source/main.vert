@@ -49,6 +49,6 @@ void main() {
 	  out_uv = vec2(cmd.f1[uv_map[gl_VertexIndex]], cmd.f2[uv_map[gl_VertexIndex]]);
   }
 
-  gl_Position = proj * vec4(vert_pos * size + pos + size / 2,
+  gl_Position = proj * vec4(vert_pos * (size) + pos + size / 2,
                             0.0, 1.0);
 }

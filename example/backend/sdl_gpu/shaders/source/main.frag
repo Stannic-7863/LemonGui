@@ -58,27 +58,29 @@ float sdf_inner_rect(vec2 pos, vec2 half_size, vec4 thickness,
 
     return sdf_rect(pos - offset, inner_half, rad_inner);
 }
-
 void main() {
     if (in_flags.x == 0) {
         vec2 h_size = in_size * 0.5;
         vec2 s_pos = in_uv * in_size - h_size;
         float rad = rect_select_side(s_pos, in_radius);
+        float aa = 1.0;
 
         float sdf_outer = sdf_rect(s_pos, h_size, rad);
-        float aa = 1.0;
-        float outer_mask = smoothstep(aa, -aa, sdf_outer);
-
-        float fill = outer_mask;
-        out_color = in_color * fill;
-
-        float max_thickness = max(max(in_border_thickness.x, in_border_thickness.y),
-                max(in_border_thickness.z, in_border_thickness.w));
         float sdf_inner = sdf_inner_rect(s_pos, h_size, in_border_thickness, rad);
-        float inner_mask = smoothstep(-aa, aa, sdf_inner);
-        vec4 border_color_blended = rect_get_blended_border_color(s_pos, h_size);
-        out_color += border_color_blended * outer_mask * inner_mask;
+        float outer_mask = smoothstep(aa, -aa, sdf_outer);
+        float fill_mask = smoothstep(aa, -aa, sdf_inner);
+        float border_mask = smoothstep(-aa, aa, sdf_inner);
+
+        // premultiply
+        vec4 fill_col = vec4(in_color.rgb * in_color.a, in_color.a);
+
+        vec4 border_col = rect_get_blended_border_color(s_pos, h_size);
+        vec4 border_col_premul = vec4(border_col.rgb * border_col.a, border_col.a);
+
+        out_color = fill_col * fill_mask;
+        out_color += border_col_premul * outer_mask * border_mask;
     } else {
-        out_color = texture(font_sampler, in_uv) * in_color;
+        vec4 t = texture(font_sampler, in_uv);
+        out_color = vec4(in_color.rgb * in_color.a, in_color.a) * t.a;
     }
 }

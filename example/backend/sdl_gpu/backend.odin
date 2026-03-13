@@ -125,10 +125,10 @@ init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, ste
 				color_target_descriptions = &sdl.GPUColorTargetDescription {
 					format = sdl.GetGPUSwapchainTextureFormat(gpu, window),
 					blend_state = {
+						alpha_blend_op = .ADD,
 						src_alpha_blendfactor = .ONE,
 						dst_alpha_blendfactor = .ONE_MINUS_SRC_ALPHA,
-						alpha_blend_op = .ADD,
-						src_color_blendfactor = .SRC_ALPHA,
+						src_color_blendfactor = .ONE,
 						dst_color_blendfactor = .ONE_MINUS_SRC_ALPHA,
 						color_blend_op = .ADD,
 						enable_blend = true,
