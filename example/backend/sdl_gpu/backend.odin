@@ -167,7 +167,7 @@ init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, ste
 	backend_ctx.render_commands_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.dummy_texture = sdl.CreateGPUTexture(gpu, {height = 1, width = 1, format = .R8G8B8A8_UNORM, usage = {.SAMPLER}, layer_count_or_depth = 1, num_levels = 1})
 
-	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .VSYNC))
+	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .IMMEDIATE))
 	return backend_ctx
 }
 
@@ -392,7 +392,6 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 		case ui.Command_Text:
 			line_offset: f32
 			text_height := measure_text_height(cmd_kind.style)
-			ttf.SetFontSize(cast(^ttf.Font)cmd_kind.style.font, cmd_kind.style.font_size)
 			for line in cmd_kind.lines {
 				defer line_offset += text_height + cmd_kind.style.line_spacing
 
@@ -492,16 +491,12 @@ load_shader :: proc(gpu: ^sdl.GPUDevice, path: string, stage: sdl.GPUShaderStage
 
 measure_text_width :: proc(text: string, style: ui.Text_Style) -> f32 {
 	font := cast(^ttf.Font)(style.font)
-	ttf.SetFontSize(font, style.font_size)
-
 	w, h: i32
 	ttf.GetStringSize(font, cast(cstring)raw_data(text), len(text), &w, &h)
-
 	return f32(w)
 }
 
 measure_text_height :: proc(style: ui.Text_Style) -> f32 {
 	font := cast(^ttf.Font)(style.font)
-	ttf.SetFontSize(font, style.font_size)
 	return f32(ttf.GetFontHeight(font))
 }

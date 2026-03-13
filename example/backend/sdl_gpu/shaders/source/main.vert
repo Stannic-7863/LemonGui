@@ -50,5 +50,5 @@ void main() {
   }
 
   gl_Position = proj * vec4(vert_pos * size + pos + size / 2,
-                            1.0, 1.0);
+                            0.0, 1.0);
 }

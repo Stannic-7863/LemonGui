@@ -19,7 +19,7 @@ clip_auto :: proc "contextless" (scale: f32, min: f32 = min(f32), max: f32 = max
 	return .Auto, 0, scale, min, max
 }
 
-override :: proc "contextless" (offset: [Axis]Override_Transform, expand: [Axis]Override_Transform) -> Override {
+override :: proc "contextless" (offset: [2]Override_Transform, expand: [2]Override_Transform) -> Override {
 	return {offset = offset, expand = expand}
 }
 
@@ -254,7 +254,7 @@ sort_render_commands :: proc(commands: []Render_Command) #no_bounds_check {
 
 // INTERNALS
 
-_get_override_transform_value :: proc(transform: [Axis]Override_Transform, widget_size: Vec2f32, parent_size: Vec2f32, axis: Axis) -> (offset_value: f32) #no_bounds_check {
+_get_override_transform_value :: proc(transform: [2]Override_Transform, widget_size: Vec2f32, parent_size: Vec2f32, axis: Axis) -> (offset_value: f32) #no_bounds_check {
 	switch kind in transform[axis] {
 	case Percent_Self:
 		offset_value = widget_size[axis] * kind.value

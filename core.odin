@@ -3,8 +3,6 @@ package core_ui
 import "core:hash"
 import "core:time"
 
-import "core:container/lru"
-
 Range :: struct {
 	start, end: i32,
 }
@@ -35,7 +33,6 @@ Text_Wrap_Mode :: enum u8 {
 
 Text :: struct {
 	text:          string,
-	start, end:    int, // Use to slice Core_Context.lines
 	preferred_min: f32,
 	preferred_max: f32,
 	wrap_mode:     Text_Wrap_Mode,
@@ -105,12 +102,17 @@ Form :: struct {
 }
 
 Info :: struct {
-	rect:        Rect,
-	text_extent: Vec2f32,
-	index:       Widget_Index,
-	key:         Key,
-	hash:        Hash,
-	parent_hash: Hash,
+	rect:             Rect,
+	index:            Widget_Index,
+	key:              Key,
+	text_size:        Vec2f32, // We use previous frame x size, and current frame y size during sizing passes
+	hash:             Hash,
+	parent_hash:      Hash,
+	text_min_width:   f32,
+	text_max_width:   f32,
+	text_wrap_width:  f32,
+	text_lines_range: Range,
+	text_position:    Vec2f32
 }
 
 Core_Context :: struct {
@@ -171,6 +173,7 @@ deinit_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.render_commands)
 	delete(ctx.animation_states)
 	delete(ctx.animations)
+	delete(ctx.text)
 
 	delete(ctx.new)
 	delete(ctx.dead)
@@ -254,17 +257,18 @@ _generate_widget_hash :: proc(info: ^Info) {
 
 _read_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	data, ok := ctx.persistant.prev_lookup[widget.info.hash]
-
-	if !ok {return}
-
 	widget.info.rect = data.info.rect
-	widget.info.text_extent = data.info.text_extent
+	widget.info.text_size = data.info.text_size
+	widget.info.text_min_width = data.info.text_min_width
+	widget.info.text_max_width = data.info.text_max_width
 }
 
 _write_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	data := &ctx.persistant.curr_lookup[widget.info.hash]
 	data.info.rect = widget.rect
-	data.info.text_extent = widget.info.text_extent
+	data.info.text_size = widget.info.text_size
+	data.info.text_min_width = widget.info.text_min_width
+	data.info.text_max_width = widget.info.text_max_width
 }
 
 push_parent :: proc(ctx: ^Core_Context, info: Info) {
