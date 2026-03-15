@@ -11,9 +11,17 @@ import sdl "vendor:sdl3"
 Vec2f32 :: [2]f32
 Vec4f32 :: [4]f32
 
+Batch_Kind :: enum {
+	Geometry,
+	Clip_Enter,
+	Clip_Exit,
+}
+
 Gpu_Batch :: struct {
+	kind:       Batch_Kind,
 	start, end: int,
 	clip_ref:   u8,
+	clip_idx:   int,
 	texture:    ^sdl.GPUTexture,
 }
 
@@ -55,6 +63,7 @@ Backend_Context :: struct {
 	dummy_texture:       ^sdl.GPUTexture,
 	pipeline:            ^sdl.GPUGraphicsPipeline,
 	stencil_pipeline:    ^sdl.GPUGraphicsPipeline,
+	stencil_exit_pipeline: ^sdl.GPUGraphicsPipeline,
 	render_commands_buf: Gpu_Dynamic_Buffer,
 	clips:               [dynamic]Clip,
 	fonts:               [dynamic]^ttf.Font,
@@ -98,13 +107,54 @@ init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, ste
 		front_stencil_state = masker_stencil_op,
 	}
 
+	exit_stencil_op := sdl.GPUStencilOpState {
+		compare_op    = .EQUAL,
+		fail_op       = .KEEP,
+		depth_fail_op = .KEEP,
+		pass_op       = .DECREMENT_AND_CLAMP,
+	}
+
+	exit_depth_stencil_state := sdl.GPUDepthStencilState {
+		compare_mask        = 0xFF,
+		write_mask          = 0xFF,
+		enable_stencil_test = true,
+		back_stencil_state  = exit_stencil_op,
+		front_stencil_state = exit_stencil_op,
+	}
+
+	stencil_color_target := sdl.GPUColorTargetDescription {
+		format      = sdl.GetGPUSwapchainTextureFormat(gpu, window),
+		blend_state = {enable_color_write_mask = true, color_write_mask = {}},
+	}
+
 	stencil_pipeline := sdl.CreateGPUGraphicsPipeline(
 		gpu,
 		{
-			vertex_shader = stencil_vert_shader,
-			fragment_shader = stencil_frag_shader,
+			vertex_shader       = stencil_vert_shader,
+			fragment_shader     = stencil_frag_shader,
 			depth_stencil_state = depth_stencil_state,
-			target_info = {depth_stencil_format = .D32_FLOAT_S8_UINT, has_depth_stencil_target = true},
+			target_info         = {
+				depth_stencil_format      = .D32_FLOAT_S8_UINT,
+				has_depth_stencil_target  = true,
+				num_color_targets         = 1,
+				color_target_descriptions = &stencil_color_target,
+			},
+		},
+	)
+
+
+	stencil_exit_pipeline := sdl.CreateGPUGraphicsPipeline(
+		gpu,
+		{
+			vertex_shader       = stencil_vert_shader,
+			fragment_shader     = stencil_frag_shader,
+			depth_stencil_state = exit_depth_stencil_state,
+			target_info         = {
+				depth_stencil_format      = .D32_FLOAT_S8_UINT,
+				has_depth_stencil_target  = true,
+				num_color_targets         = 1,
+				color_target_descriptions = &stencil_color_target,
+			},
 		},
 	)
 
@@ -160,6 +210,7 @@ init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, ste
 	backend_ctx.window = window
 	backend_ctx.pipeline = pipeline
 	backend_ctx.stencil_pipeline = stencil_pipeline
+	backend_ctx.stencil_exit_pipeline = stencil_exit_pipeline
 	backend_ctx.batch = make([dynamic]Gpu_Batch)
 	backend_ctx.fonts = make([dynamic]^ttf.Font)
 	backend_ctx.render_commands = make([dynamic]Gpu_Render_Command)
@@ -167,7 +218,7 @@ init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, ste
 	backend_ctx.render_commands_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.dummy_texture = sdl.CreateGPUTexture(gpu, {height = 1, width = 1, format = .R8G8B8A8_UNORM, usage = {.SAMPLER}, layer_count_or_depth = 1, num_levels = 1})
 
-	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .IMMEDIATE))
+	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .VSYNC))
 	return backend_ctx
 }
 
@@ -211,6 +262,7 @@ de_init :: proc(backend_ctx: ^Backend_Context) {
 
 	sdl.ReleaseGPUTexture(backend_ctx.gpu, backend_ctx.dummy_texture)
 	sdl.ReleaseGPUTexture(backend_ctx.gpu, backend_ctx.stencil_texture)
+	sdl.ReleaseGPUGraphicsPipeline(backend_ctx.gpu, backend_ctx.stencil_exit_pipeline)
 	sdl.ReleaseGPUGraphicsPipeline(backend_ctx.gpu, backend_ctx.stencil_pipeline)
 	sdl.ReleaseGPUGraphicsPipeline(backend_ctx.gpu, backend_ctx.pipeline)
 	sdl.ReleaseWindowFromGPUDevice(backend_ctx.gpu, backend_ctx.window)
@@ -303,31 +355,11 @@ render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
 		clear_stencil    = 0,
 	}
 
-	stencil_render_pass := sdl.BeginGPURenderPass(command_buf, nil, 0, &stencil_target)
-	stencil_pass(backend_ctx, core_ctx, stencil_render_pass, command_buf, projection_mat)
-	sdl.EndGPURenderPass(stencil_render_pass)
-
-	stencil_target.stencil_load_op = .LOAD
-
-	geometry_render_pass := sdl.BeginGPURenderPass(command_buf, &swapchain_target, 1, &stencil_target)
-	geometry_pass(backend_ctx, core_ctx, geometry_render_pass, command_buf, &projection_mat)
-	sdl.EndGPURenderPass(geometry_render_pass)
+	render_pass := sdl.BeginGPURenderPass(command_buf, &swapchain_target, 1, &stencil_target)
+	geometry_pass(backend_ctx, core_ctx, render_pass, command_buf, &projection_mat)
+	sdl.EndGPURenderPass(render_pass)
 
 	assert(sdl.SubmitGPUCommandBuffer(command_buf))
-}
-
-stencil_pass :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context, render_pass: ^sdl.GPURenderPass, command_buf: ^sdl.GPUCommandBuffer, projection: matrix[4, 4]f32) {
-	sdl.BindGPUGraphicsPipeline(render_pass, backend_ctx.stencil_pipeline)
-	for clip, index in backend_ctx.clips {
-		stencil_uniform: Stencil_Uniform = {
-			position_and_size = {clip.position.x, clip.position.y, clip.size.x, clip.size.y},
-			raidus            = clip.radius,
-			proj              = projection,
-		}
-		sdl.SetGPUStencilReference(render_pass, clip.ref - 1)
-		sdl.PushGPUVertexUniformData(command_buf, 0, &stencil_uniform, size_of(Stencil_Uniform))
-		sdl.DrawGPUPrimitives(render_pass, 6, 1, 0, 0)
-	}
 }
 
 geometry_pass :: proc(
@@ -339,21 +371,60 @@ geometry_pass :: proc(
 ) {
 	storage_bufs := []^sdl.GPUBuffer{backend_ctx.render_commands_buf.data}
 
-	sdl.BindGPUGraphicsPipeline(render_pass, backend_ctx.pipeline)
-	sdl.PushGPUVertexUniformData(command_buf, 0, projection, size_of(projection^))
-	sdl.BindGPUVertexStorageBuffers(render_pass, 0, raw_data(storage_bufs), u32(len(storage_bufs)))
+	bind_geometry_pipeline :: proc(
+		backend_ctx: ^Backend_Context,
+		render_pass: ^sdl.GPURenderPass,
+		command_buf: ^sdl.GPUCommandBuffer,
+		projection: ^matrix[4, 4]f32,
+		storage_bufs: []^sdl.GPUBuffer,
+	) {
+		sdl.BindGPUGraphicsPipeline(render_pass, backend_ctx.pipeline)
+		sdl.PushGPUVertexUniformData(command_buf, 0, projection, size_of(projection^))
+		sdl.BindGPUVertexStorageBuffers(render_pass, 0, raw_data(storage_bufs), u32(len(storage_bufs)))
+	}
 
+	bind_geometry_pipeline(backend_ctx, render_pass, command_buf, projection, storage_bufs)
 	sdl.BindGPUFragmentSamplers(render_pass, 0, &sdl.GPUTextureSamplerBinding{texture = backend_ctx.dummy_texture, sampler = backend_ctx.font_sampler}, 1)
 
 	instance_offset: u32
-	for batch_data, index in backend_ctx.batch {
-		commands := backend_ctx.render_commands[batch_data.start:batch_data.end]
-		if batch_data.texture != nil {
-			sdl.BindGPUFragmentSamplers(render_pass, 0, &sdl.GPUTextureSamplerBinding{texture = batch_data.texture, sampler = backend_ctx.font_sampler}, 1)
+	for batch in backend_ctx.batch {
+		switch batch.kind {
+		case .Geometry:
+			count := u32(batch.end - batch.start)
+			if count == 0 do continue
+			if batch.texture != nil {
+				sdl.BindGPUFragmentSamplers(render_pass, 0, &sdl.GPUTextureSamplerBinding{texture = batch.texture, sampler = backend_ctx.font_sampler}, 1)
+			}
+			sdl.SetGPUStencilReference(render_pass, batch.clip_ref)
+			sdl.DrawGPUPrimitives(render_pass, 6, count, 0, instance_offset)
+			instance_offset += count
+
+		case .Clip_Enter:
+			clip := backend_ctx.clips[batch.clip_idx]
+			stencil_uniform := Stencil_Uniform {
+				position_and_size = {clip.position.x, clip.position.y, clip.size.x, clip.size.y},
+				raidus            = clip.radius,
+				proj              = projection^,
+			}
+			sdl.BindGPUGraphicsPipeline(render_pass, backend_ctx.stencil_pipeline)
+			sdl.SetGPUStencilReference(render_pass, clip.ref - 1)
+			sdl.PushGPUVertexUniformData(command_buf, 0, &stencil_uniform, size_of(Stencil_Uniform))
+			sdl.DrawGPUPrimitives(render_pass, 6, 1, 0, 0)
+			bind_geometry_pipeline(backend_ctx, render_pass, command_buf, projection, storage_bufs)
+
+		case .Clip_Exit:
+			clip := backend_ctx.clips[batch.clip_idx]
+			stencil_uniform := Stencil_Uniform {
+				position_and_size = {clip.position.x, clip.position.y, clip.size.x, clip.size.y},
+				raidus            = clip.radius,
+				proj              = projection^,
+			}
+			sdl.BindGPUGraphicsPipeline(render_pass, backend_ctx.stencil_exit_pipeline)
+			sdl.SetGPUStencilReference(render_pass, clip.ref)
+			sdl.PushGPUVertexUniformData(command_buf, 0, &stencil_uniform, size_of(Stencil_Uniform))
+			sdl.DrawGPUPrimitives(render_pass, 6, 1, 0, 0)
+			bind_geometry_pipeline(backend_ctx, render_pass, command_buf, projection, storage_bufs)
 		}
-		sdl.SetGPUStencilReference(render_pass, batch_data.clip_ref)
-		sdl.DrawGPUPrimitives(render_pass, 6, u32(len(commands)), 0, instance_offset)
-		instance_offset += u32(len(commands))
 	}
 }
 
@@ -365,7 +436,8 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 
 	active_atlast_texture: ^sdl.GPUTexture
 
-	for cmd, cmd_index in core_ctx.render_commands {
+	for &cmd, cmd_index in core_ctx.render_commands {
+		cmd.rect.position += cmd.rect.scroll_offset
 		switch cmd_kind in cmd.kind {
 		case ui.Command_Rect:
 			r := Gpu_Render_Command{}
@@ -378,14 +450,21 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 			append(&backend_ctx.render_commands, r)
 		case ui.Command_Clip_Start:
 			index := len(backend_ctx.render_commands)
-			append(&backend_ctx.batch, Gpu_Batch{batch_start, index, clip_ref, active_atlast_texture})
+			append(&backend_ctx.batch, Gpu_Batch{kind = .Geometry, start = batch_start, end = index, clip_ref = clip_ref, texture = active_atlast_texture})
 			clip_ref += 1
-			batch_start = index
+			clip_idx := len(backend_ctx.clips)
 			append(&backend_ctx.clips, Clip{ref = clip_ref, position = cmd.rect.position, size = cmd.rect.size, radius = cmd_kind.border_radius})
+			append(&backend_ctx.batch, Gpu_Batch{kind = .Clip_Enter, clip_ref = clip_ref, clip_idx = clip_idx})
+			batch_start = index
 		case ui.Command_Clip_End:
 			index := len(backend_ctx.render_commands)
-			append(&backend_ctx.batch, Gpu_Batch{batch_start, index, clip_ref, active_atlast_texture})
-			clip_ref = clip_ref - 1
+			clip_idx: int
+			for c, i in backend_ctx.clips {
+				if c.ref == clip_ref {clip_idx = i; break}
+			}
+			append(&backend_ctx.batch, Gpu_Batch{kind = .Geometry, start = batch_start, end = index, clip_ref = clip_ref, texture = active_atlast_texture})
+			append(&backend_ctx.batch, Gpu_Batch{kind = .Clip_Exit, clip_ref = clip_ref, clip_idx = clip_idx})
+			clip_ref -= 1
 			batch_start = index
 		case ui.Command_Image:
 		case ui.Command_Custom:
@@ -448,7 +527,7 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 						}
 
 						if draw_data.next != nil && draw_data.next.atlas_texture != active_atlast_texture {
-							append(&backend_ctx.batch, Gpu_Batch{batch_start, index, clip_ref, active_atlast_texture})
+							append(&backend_ctx.batch, Gpu_Batch{kind = .Geometry, start = batch_start, end = index, clip_ref = clip_ref, texture = active_atlast_texture})
 							active_atlast_texture = draw_data.atlas_texture
 							batch_start = index
 						}
@@ -459,7 +538,7 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 	}
 
 	if batch_start < len(backend_ctx.render_commands) {
-		append(&backend_ctx.batch, Gpu_Batch{batch_start, len(backend_ctx.render_commands), clip_ref, active_atlast_texture})
+		append(&backend_ctx.batch, Gpu_Batch{kind = .Geometry, start = batch_start, end = len(backend_ctx.render_commands), clip_ref = clip_ref, texture = active_atlast_texture})
 	}
 }
 

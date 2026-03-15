@@ -1,22 +1,23 @@
 package core_ui
 
+import "core:fmt"
 import "core:math/linalg"
 import "core:time"
 
-clip :: proc "contextless" (x_kind: Clip_Kind, x_value, x_scale, x_min, x_max: f32, y_kind: Clip_Kind, y_value, y_scale, y_min, y_max: f32, hash: Hash = 0) -> Clip {
-	return Clip{value = {x_value, y_value}, kind = {x_kind, y_kind}, scale = {x_scale, y_scale}, min = {x_min, y_min}, max = {x_max, y_max}, hash = hash}
+clip :: proc "contextless" (info_x, info_y: Clip_Info, hash: Hash = 0) -> Clip {
+	return Clip{info = {info_x, info_y}, hash = hash}
 }
 
-clip_none :: proc "contextless" () -> (Clip_Kind, f32, f32, f32, f32) {
-	return .None, 0, 0, 0, 0
+clip_none :: proc "contextless" () -> (Clip_Info) {
+	return {}
 }
 
-clip_custom :: proc "contextless" (value: f32, scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> (Clip_Kind, f32, f32, f32, f32) {
-	return .Custom, value, scale, min, max
+clip_custom :: proc "contextless" (value: f32, scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> (Clip_Info) {
+	return {kind=.Custom, max=max, min=min, scale=scale, value=value}
 }
 
-clip_auto :: proc "contextless" (scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> (Clip_Kind, f32, f32, f32, f32) {
-	return .Auto, 0, scale, min, max
+clip_auto :: proc "contextless" (scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> (Clip_Info) {
+	return {kind=.Auto, max=max, min=min, scale=scale}
 }
 
 override :: proc "contextless" (offset: [2]Override_Transform, expand: [2]Override_Transform) -> Override {
@@ -136,6 +137,13 @@ get_widget_mouse_events :: proc(ctx: ^Core_Context, info: Info, button: Mouse_Bu
 	return get_widget_mouse_events_all(ctx, info)[button]
 }
 
+is_widget_on_screen :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
+	return widget.rect.position.x + widget.rect.size.x < 0 ||
+		   widget.rect.position.y + widget.rect.size.y < 0 ||
+		   widget.rect.position.x > ctx.window_size.x ||
+		   widget.rect.position.y > ctx.window_size.y
+}
+
 is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style) -> bool {
 	border_radius := border_style.radius.zywx
 
@@ -161,9 +169,9 @@ create_clip :: proc(ctx: ^Core_Context, clip: Clip) -> Clip_Index {
 
 	if clip.hash != 0 {
 		persistant_clip := ctx.persistant.clip[clip.hash]
-		for clip_kind, axis in clip.kind {
-			if clip_kind == .Auto {
-				clip.value[axis] = persistant_clip[axis]
+		for clip_kind, axis in clip.info {
+			if clip_kind.kind == .Auto {
+				clip.info[axis].value = persistant_clip[axis]
 			}
 		}
 	}
@@ -177,9 +185,9 @@ create_style :: proc(ctx: ^Core_Context, style: Style) -> Style_Index {
 	return Style_Index(len(ctx.styles) - 1)
 }
 
-create_animation :: proc(ctx: ^Core_Context, hooks: Animation_Hooks = DEFAULT_HOOKS, duration: time.Duration = time.Second, delay: time.Duration = 0) -> Animation_Index {
-	append(&ctx.animations, Animation{hooks = hooks, delay = delay, duration = duration})
-	return Animation_Index(len(ctx.animations) - 1)
+create_animation :: proc(ctx: ^Core_Context, hooks: Animation_Hooks = ANIM_ALL, duration: time.Duration = time.Second, delay: time.Duration = 0) -> Animation_Index {
+	append(&ctx.anims, Animation{hooks = hooks, delay = delay, duration = duration})
+	return Animation_Index(len(ctx.anims) - 1)
 }
 
 create_override :: proc(ctx: ^Core_Context, overrides: ..Override) -> Override_Range {
@@ -187,7 +195,7 @@ create_override :: proc(ctx: ^Core_Context, overrides: ..Override) -> Override_R
 	for o in overrides {
 		append(&ctx.overrides, o)
 	}
-	return Override_Range{start, cast(i32)len(ctx.overrides)}
+	return Override_Range{start = start, end = cast(i32)len(ctx.overrides)}
 }
 
 create_text :: proc(ctx: ^Core_Context, text: Text) -> Text_Index {
@@ -197,7 +205,7 @@ create_text :: proc(ctx: ^Core_Context, text: Text) -> Text_Index {
 }
 
 get_animation :: #force_inline proc(ctx: ^Core_Context, index: Animation_Index) -> ^Animation #no_bounds_check {
-	return &ctx.animations[index]
+	return &ctx.anims[index]
 }
 
 get_clip :: #force_inline proc(ctx: ^Core_Context, index: Clip_Index) -> ^Clip #no_bounds_check {
@@ -213,6 +221,7 @@ get_widget :: #force_inline proc(ctx: ^Core_Context, index: Widget_Index) -> ^Wi
 }
 
 get_override :: #force_inline proc(ctx: ^Core_Context, range: Override_Range) -> []Override #no_bounds_check {
+	if range.start != range.end do fmt.println(range)
 	return ctx.overrides[range.start:range.end]
 }
 
@@ -267,11 +276,11 @@ _get_override_transform_value :: proc(transform: [2]Override_Transform, widget_s
 }
 
 _get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 #no_bounds_check {
-	if widget.rect.size[axis] > widget.info.rect.content_size[axis] || widget.form.clip == 0 {
+	if widget.form.clip == 0 {
 		return 0
 	}
 	clip := &ctx.clips[widget.form.clip]
-	return clip.value[axis]
+	return clip.info[axis].value
 }
 
 _get_other_axis :: proc(axis: Axis) -> Axis {

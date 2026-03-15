@@ -101,9 +101,6 @@ _sizing_pass :: proc(ctx: ^Core_Context) {
 }
 
 _positioning_pass :: proc(ctx: ^Core_Context) {
-	clear(&ctx.new)
-	clear(&ctx.dead)
-
 	clear(&ctx.persistant.clip)
 
 	prev_hovered, prev_active := ctx.mouse.hovered, ctx.mouse.active
@@ -148,7 +145,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 			hovered_z_index = widget.z_index
 			widget_clip := ctx.clips[widget.form.clip]
-			if widget_clip.kind.x != .None || widget_clip.kind.y != .None {
+			if widget_clip.info.x.kind != .None || widget_clip.info.y.kind != .None {
 				ctx.mouse.hovered_clip = widget_clip.hash
 			}
 
@@ -161,32 +158,25 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	}
 
 	for &clip in ctx.clips {
-		for axis in Axis {
-			if ctx.mouse.hovered_clip == clip.hash {
-				if clip.kind[axis] == .Auto {
-					clip.value[axis] -= ctx.mouse.scroll * clip.scale[axis]
+		if ctx.mouse.hovered_clip == clip.hash {
+			for &info in clip.info {
+				if info.kind == .Auto {
+					info.value += ctx.mouse.scroll * info.scale
 				}
+				info.value = max(info.min, info.value)
+				info.value = min(info.max, info.value)
 			}
-			clip.value[axis] = max(clip.min[axis], clip.value[axis])
-			clip.value[axis] = min(clip.max[axis], clip.value[axis])
 		}
-
-		if (clip.kind.y == .Auto || clip.kind.x == .Auto) && clip.hash != 0 {
-			clip.value += clip.scale * ctx.mouse.scroll
-			ctx.persistant.clip[clip.hash] = clip.value
-		}
+		ctx.persistant.clip[clip.hash] = {clip.info.x.value, clip.info.y.value}
 	}
 
-	z_index_offset := int(0)
+	_resolve_animations(ctx)
+
 	active_clip: ^Widget
-	for i := 0; i < len(ctx.widgets); {
-		if i == -1 {break}
+	for i := 0; i < len(ctx.widgets) && i != -1; {
 		widget := get_widget(ctx, Widget_Index(i))
 
-		if widget.rect.position.x + widget.rect.size.x < 0 ||
-		   widget.rect.position.y + widget.rect.size.y < 0 ||
-		   widget.rect.position.x > ctx.window_size.x ||
-		   widget.rect.position.y > ctx.window_size.y {
+		if is_widget_on_screen(ctx, widget) {
 			j := widget.next
 			p: ^Widget
 			if widget.parent != -1 {p = get_widget(ctx, widget.parent)}
@@ -198,12 +188,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 			i = int(j)
 			continue
 		}
-
-		widget_style := get_style(ctx, widget.form.style)
-		old := widget_style.border.radius
-		_clamp_border_radius(widget, widget_style)
-		_emit_render_commands(ctx, widget, &z_index_offset, widget_style, &active_clip)
-		widget_style.border.radius = old
+		_emit_render_commands(ctx, widget, &active_clip)
 		i += 1
 	}
 
@@ -214,16 +199,18 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		ctx.mouse.active = prev_active
 	}
 
+	ctx.mouse.hovered_clip = 0
 	ctx.mouse.mapped_events = {}
 	ctx.keyboard.mapped_events = {}
 }
 
 _post_layout_pass :: proc(ctx: ^Core_Context) {
-	ctx.layout_time = time.diff(ctx.frame_start, time.now())
+	ctx.timers.layout_time = time.diff(ctx.timers.frame_start, time.now())
 
 	ctx.persistant.prev_styles, ctx.styles = ctx.styles, ctx.persistant.prev_styles
 	ctx.persistant.prev_lookup, ctx.persistant.curr_lookup = ctx.persistant.curr_lookup, ctx.persistant.prev_lookup
-	ctx.persistant.prev_animations, ctx.animations = ctx.animations, ctx.persistant.prev_animations
+	ctx.persistant.prev_candids, ctx.persistant.curr_candids = ctx.persistant.curr_candids, ctx.persistant.prev_candids
+	ctx.persistant.prev_anims, ctx.anims = ctx.anims, ctx.persistant.prev_anims
 }
 
 _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
@@ -245,9 +232,9 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 
 		#partial switch kind in layout.sizing[axis] {
 		case Fit, Grow:
-			size := Vec2f32{widget.info.text_min_width, widget.info.text_size.y}
+			size := Vec2f32{widget.text_info.min_width, widget.text_info.size.y}
 			padding := _get_axis_spacing(axis, layout.padding)
-			layout.accumulating_min[axis] = layout.direction == axis ? layout.accumulating_min[axis] + size[axis] : max(layout.accumulating_min[axis], size[axis] + padding)
+			layout.accumulating_min[axis] = layout.direction == axis ? layout.accumulating_min[axis] + size[axis]: max(layout.accumulating_min[axis], size[axis] + padding)
 			if widget.form.text != 0 {
 				layout.accumulating_min[axis] += layout.direction == axis ? layout.child_gap : 0
 			}
@@ -257,7 +244,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 
 		if widget.parent == -1 {continue}
 		parent := get_widget(ctx, widget.parent)
-		parent_clip_kind := get_clip(ctx, parent.form.clip).kind[axis]
+		parent_clip_kind := get_clip(ctx, parent.form.clip).info[axis].kind
 
 		if .No_Size_Propagation not_in layout.flags[axis] && parent_clip_kind == .None {
 			parent_layout := &parent.form.layout
@@ -272,7 +259,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 
 _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 	for &widget in ctx.widgets {
-		widget.info.text_wrap_width = axis == .X ? widget.rect.size.x - _get_axis_spacing(.X, widget.form.layout.padding) : 0
+		widget.text_info.wrap_width = axis == .X ? widget.rect.size.x - _get_axis_spacing(.X, widget.form.layout.padding) : 0
 		if widget.first == -1 {continue}
 
 		total_child_gap := _get_child_gap(&widget, axis)
@@ -304,11 +291,11 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 
 			if widget.form.text != 0 {
 				available -= widget.form.layout.child_gap
-				size := Vec2f32{widget.info.text_min_width, widget.info.text_size.y}
+				size := Vec2f32{widget.text_info.min_width, widget.text_info.size.y}
 				available -= size[axis]
 				if axis == .X {
-					widget.info.text_wrap_width = widget.info.text_min_width
-					append(&ctx.growable, Growable{&widget.info.text_wrap_width, widget.info.text_min_width, widget.info.text_max_width})
+					widget.text_info.wrap_width = widget.text_info.min_width
+					append(&ctx.growable, Growable{&widget.text_info.wrap_width, widget.text_info.min_width, widget.text_info.max_width})
 				}
 			}
 
@@ -442,7 +429,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				}
 				minimum_width = max(minimum_width, word.width)
 				accumulated_width += space_width * f32(word.spaces)
-				if accumulated_width + word.width > widget.info.text_wrap_width {
+				if accumulated_width + word.width > widget.text_info.wrap_width {
 					size.x = max(accumulated_width, size.x)
 					accumulated_width = 0
 					append(&ctx.lines, text.text[new_line_index:word.start])
@@ -456,21 +443,21 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				append(&ctx.lines, text.text[new_line_index:])
 			}
 
-			widget.info.text_lines_range.start = i32(start)
-			widget.info.text_lines_range.end = i32(len(ctx.lines))
+			widget.text_info.lines_range.start = i32(start)
+			widget.text_info.lines_range.end = i32(len(ctx.lines))
 			size.y = f32(i32(len(ctx.lines)) - i32(start)) * (text_height + style.text.line_spacing) + accumulated_height
-			widget.info.text_size = size
-			widget.info.text_max_width = m_w
-			widget.info.text_min_width = minimum_width
+			widget.text_info.size = size
+			widget.text_info.max_width = m_w
+			widget.text_info.min_width = minimum_width
 		case .None:
 			style := ctx.styles[widget.form.style]
 			append(&ctx.lines, text.text)
-			widget.info.text_lines_range.start = i32(len(ctx.lines)-1)
-			widget.info.text_lines_range.end = i32(len(ctx.lines))
+			widget.text_info.lines_range.start = i32(len(ctx.lines)-1)
+			widget.text_info.lines_range.end = i32(len(ctx.lines))
 			y := ctx.measure_text_height(style.text)
-			widget.info.text_min_width = ctx.measure_text_width(text.text, style.text)
-			widget.info.text_size = {widget.info.text_min_width, y}
-			widget.info.text_max_width = widget.info.text_min_width
+			widget.text_info.min_width = ctx.measure_text_width(text.text, style.text)
+			widget.text_info.size = {widget.text_info.min_width, y}
+			widget.text_info.max_width = widget.text_info.min_width
 		}
 	}
 }
@@ -552,7 +539,7 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #n
 		}
 	}
 
-	total_size[axis] += _get_child_gap(widget, axis) + widget.info.text_size[axis]
+	total_size[axis] += _get_child_gap(widget, axis) + widget.text_info.size[axis]
 	available_size := widget.rect.size[axis] - _get_axis_spacing(axis, widget.form.layout.padding) - total_size[axis] + _get_child_gap(widget, axis)
 	widget.info.rect.content_size[axis] = total_size[axis] + _get_axis_spacing(axis, widget.form.layout.padding)
 	widget.info.rect.content_size[other_axis] = total_size[other_axis] + _get_axis_spacing(other_axis, widget.form.layout.padding)
@@ -587,15 +574,15 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #n
 		increment[other_axis] = widget.rect.position[other_axis] + widget.rect.size[other_axis] / 2
 	}
 
-	widget.info.text_position = increment
-	increment[axis] += widget.info.text_size[axis]
+	widget.text_info.position = increment
+	increment[axis] += widget.text_info.size[axis]
 
 	if widget.form.text != 0 {
 		increment[axis] += computed_child_gap
 		switch layout.placement[other_axis] {
-			case .Negative: widget.info.text_position[other_axis] += widget.form.layout.margin[other_axis].x
-			case .Positive: widget.info.text_position[other_axis] -= widget.info.text_size[other_axis] + widget.form.layout.margin[other_axis].y
-			case .Center, .Between, .Around, .Evenly: widget.info.text_position[other_axis] -= widget.info.text_size[other_axis] / 2
+			case .Negative: widget.text_info.position[other_axis] += widget.form.layout.margin[other_axis].x
+			case .Positive: widget.text_info.position[other_axis] -= widget.text_info.size[other_axis] + widget.form.layout.margin[other_axis].y
+			case .Center, .Between, .Around, .Evenly: widget.text_info.position[other_axis] -= widget.text_info.size[other_axis] / 2
 		}
 	}
 
@@ -636,11 +623,11 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #n
 		}
 
 		if .No_Clip_Offset not_in child.form.layout.flags[axis] {
-			child.rect.position[axis] -= clip_axis
+			child.rect.scroll_offset = clip_axis
 		}
 
 		if .No_Clip_Offset not_in child.form.layout.flags[other_axis] {
-			child.rect.position[other_axis] -= clip_other_axis
+			child.rect.scroll_offset[other_axis] = clip_other_axis
 		}
 
 		child_overrides := get_override(ctx, child.form.override)

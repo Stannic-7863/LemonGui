@@ -24,6 +24,7 @@ Rect :: struct {
 	position:     Vec2f32,
 	size:         Vec2f32,
 	content_size: Vec2f32,
+	scroll_offset: Vec2f32,
 }
 
 Text_Wrap_Mode :: enum u8 {
@@ -36,6 +37,15 @@ Text :: struct {
 	preferred_min: f32,
 	preferred_max: f32,
 	wrap_mode:     Text_Wrap_Mode,
+}
+
+Text_Info :: struct {
+	size:        Vec2f32, // We use previous frame x size, and current frame y size during sizing passes
+	position:    Vec2f32,
+	min_width:   f32,
+	max_width:   f32,
+	wrap_width:  f32,
+	lines_range: Range,
 }
 
 Style :: struct {
@@ -66,12 +76,16 @@ Key :: union {
 	int,
 }
 
+Clip_Info :: struct {
+	value: f32,
+	scale: f32,
+	min:   f32,
+	max:   f32,
+	kind:  Clip_Kind,
+}
+
 Clip :: struct {
-	value: Vec2f32,
-	scale: Vec2f32,
-	min:   Vec2f32,
-	max:   Vec2f32,
-	kind:  [2]Clip_Kind,
+	info:  [2]Clip_Info,
 	hash:  Hash,
 }
 
@@ -84,14 +98,16 @@ Clip_Kind :: enum u8 {
 Widget :: struct {
 	info:                            Info, // This will contain a Rect from previous frame.
 	form:                            Form,
+	text_info:                       Text_Info,
 	rect:                            Rect, // Info about current frame processed rect
 	total_children, z_index:         int,
-	detached_children:               [2]int,
+	detached_children:               [2]int, // [TODO]: Impl this
 	first, last, prev, next, parent: Widget_Index,
 }
 
 Form :: struct {
 	image:       rawptr,
+	z_offset:    int,
 	layout:      Layout,
 	event_flags: Event_Flags,
 	text:        Text_Index,
@@ -102,17 +118,11 @@ Form :: struct {
 }
 
 Info :: struct {
-	rect:             Rect,
-	index:            Widget_Index,
-	key:              Key,
-	text_size:        Vec2f32, // We use previous frame x size, and current frame y size during sizing passes
-	hash:             Hash,
-	parent_hash:      Hash,
-	text_min_width:   f32,
-	text_max_width:   f32,
-	text_wrap_width:  f32,
-	text_lines_range: Range,
-	text_position:    Vec2f32
+	rect:        Rect,
+	index:       Widget_Index,
+	key:         Key,
+	hash:        Hash,
+	parent_hash: Hash,
 }
 
 Core_Context :: struct {
@@ -120,7 +130,7 @@ Core_Context :: struct {
 	overrides:           [dynamic]Override,
 	clips:               [dynamic]Clip,
 	text:                [dynamic]Text,
-	animations:          [dynamic]Animation,
+	anims:               [dynamic]Animation,
 	styles:              [dynamic]Style,
 	temp:                [dynamic]^Widget,
 	growable:            [dynamic]Growable,
@@ -128,36 +138,47 @@ Core_Context :: struct {
 	lines:               [dynamic]string,
 	render_commands:     [dynamic]Render_Command,
 	measured_words:      [dynamic]Measured_Word,
-	animation_states:    map[Hash]Animation_State,
-	new, dead:           map[Hash]Info,
 	persistant:          Persistant_Data,
 	measure_text_width:  proc(text: string, style: Text_Style) -> f32,
 	measure_text_height: proc(style: Text_Style) -> f32,
 	mouse:               Mouse_Context,
 	keyboard:            Keyboard_Context,
 	window_size:         Vec2f32,
-	frame_start:         time.Time,
-	layout_start:        time.Time,
-	frame_time:          time.Duration,
-	layout_time:         time.Duration,
+	timers:              Timers,
+	z_offset_increment:  int,
+}
+
+Timers :: struct {
+	frame_start:  time.Time,
+	layout_start: time.Time,
+	frame_time:   time.Duration,
+	layout_time:  time.Duration,
 }
 
 Lookup_Data :: struct {
-	form: Form,
-	info: Info,
+	form:           Form,
+	info:           Info,
+	z_index:        int,
+	text_size:      Vec2f32,
+	text_position:  Vec2f32,
+	text_min_width: f32,
+	text_max_width: f32,
 }
 
 Persistant_Data :: struct {
-	prev_animations: [dynamic]Animation,
-	prev_styles:     [dynamic]Style,
-	prev_lookup:     map[Hash]Lookup_Data, // Swapped with curr_lookup at frame end
-	curr_lookup:     map[Hash]Lookup_Data, // Cleared at frame start
-	clip:            map[Hash]Vec2f32,
+	prev_styles:  [dynamic]Style,
+	prev_anims:   [dynamic]Animation,
+	anim_states:  map[Hash]Animation_State,
+	prev_candids: map[Hash]struct{},
+	curr_candids: map[Hash]struct{},
+	prev_lookup:  map[Hash]Lookup_Data, // Swapped with curr_lookup at frame end
+	curr_lookup:  map[Hash]Lookup_Data, // Cleared at frame start
+	clip:         map[Hash]Vec2f32,
 }
 
 init_context :: proc(size: int) -> Core_Context {
 	ctx: Core_Context
-	ctx.frame_start = time.now()
+	ctx.timers.frame_start = time.now()
 	return ctx
 }
 
@@ -171,17 +192,13 @@ deinit_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.overrides)
 	delete(ctx.measured_words)
 	delete(ctx.render_commands)
-	delete(ctx.animation_states)
-	delete(ctx.animations)
+	delete(ctx.anims)
 	delete(ctx.text)
 
-	delete(ctx.new)
-	delete(ctx.dead)
-
+	delete(ctx.persistant.anim_states)
 	delete(ctx.persistant.curr_lookup)
 	delete(ctx.persistant.prev_lookup)
 	delete(ctx.persistant.prev_styles)
-	delete(ctx.persistant.prev_animations)
 	delete(ctx.persistant.clip)
 }
 
@@ -199,10 +216,15 @@ reserve_widget :: proc(ctx: ^Core_Context, key: Key) -> Info {
 submit_widget :: proc(ctx: ^Core_Context, info: Info, form: Form) {
 	widget := get_widget(ctx, info.index)
 
+	widget.z_index += ctx.z_offset_increment
+	ctx.z_offset_increment += 5 // a widget can atmost emit 5 commands
+
 	ctx.persistant.curr_lookup[info.hash] = {
 		info = info,
 		form = form,
 	}
+
+	if form.animation != 0 {ctx.persistant.curr_candids[widget.info.hash] = {}}
 
 	widget.form = form
 }
@@ -239,7 +261,7 @@ _add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
 		}
 
 		parent.last = widget.info.index
-		widget.z_index += parent.z_index
+		widget.z_index += parent.form.z_offset
 		widget.info.parent_hash = parent.info.hash
 	}
 }
@@ -258,17 +280,19 @@ _generate_widget_hash :: proc(info: ^Info) {
 _read_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	data, ok := ctx.persistant.prev_lookup[widget.info.hash]
 	widget.info.rect = data.info.rect
-	widget.info.text_size = data.info.text_size
-	widget.info.text_min_width = data.info.text_min_width
-	widget.info.text_max_width = data.info.text_max_width
+	widget.text_info.size = data.text_size
+	widget.text_info.min_width = data.text_min_width
+	widget.text_info.max_width = data.text_max_width
 }
 
 _write_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	data := &ctx.persistant.curr_lookup[widget.info.hash]
 	data.info.rect = widget.rect
-	data.info.text_size = widget.info.text_size
-	data.info.text_min_width = widget.info.text_min_width
-	data.info.text_max_width = widget.info.text_max_width
+	data.text_size = widget.text_info.size
+	data.text_position = widget.text_info.position
+	data.text_min_width = widget.text_info.min_width
+	data.text_max_width = widget.text_info.max_width
+	data.z_index = widget.z_index
 }
 
 push_parent :: proc(ctx: ^Core_Context, info: Info) {
@@ -281,6 +305,7 @@ pop_parent :: proc(ctx: ^Core_Context) {
 
 begin :: proc(ctx: ^Core_Context) {
 	ctx.active_parent = -1
+	ctx.z_offset_increment = 0
 	clear(&ctx.lines)
 	clear(&ctx.widgets)
 	clear(&ctx.render_commands)
@@ -289,24 +314,22 @@ begin :: proc(ctx: ^Core_Context) {
 	clear(&ctx.clips)
 	clear(&ctx.styles)
 	clear(&ctx.overrides)
-	clear(&ctx.animations)
+	clear(&ctx.anims)
 
 	// Valid 0 states
 	append(&ctx.text, Text{})
 	append(&ctx.clips, Clip{})
 	append(&ctx.styles, Style{})
 	append(&ctx.overrides, Override{})
-	append(&ctx.animations, Animation{})
-	append(&ctx.persistant.prev_styles, Style{})
-	append(&ctx.persistant.prev_animations, Animation{})
+	append(&ctx.anims, Animation{})
 
 	clear(&ctx.temp)
-
 	clear(&ctx.persistant.curr_lookup)
+	clear(&ctx.persistant.curr_candids)
 
-	ctx.frame_time = time.diff(ctx.frame_start, time.now())
-	ctx.frame_start = time.now()
-	ctx.layout_start = time.now()
+	ctx.timers.frame_time = time.diff(ctx.timers.frame_start, time.now())
+	ctx.timers.frame_start = time.now()
+	ctx.timers.layout_start = time.now()
 }
 
 end :: proc(ctx: ^Core_Context) {
