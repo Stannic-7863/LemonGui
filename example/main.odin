@@ -65,13 +65,13 @@ Perf_State :: struct {
 	samples:     [1000]Perf_Info,
 	sample_i:    int,
 	tick:        time.Duration,
-	record:      [120]Perf_Info,
+	record:      [60]Perf_Info,
 	record_i:    int,
 }
 
 // Styles bundled so perf_chart doesn't need 6 style params every call
 Perf_Chart_Styles :: struct {
-	bg, bar, bar_hover, tooltip, col_a, col_b: ui.Style_Index,
+	bg, bar, bar_hover, tooltip, text, col_a, col_b: ui.Style_Index,
 }
 
 perf_state_update :: proc(ps: ^Perf_State, timers: ui.Timers) {
@@ -92,7 +92,7 @@ perf_state_update :: proc(ps: ^Perf_State, timers: ui.Timers) {
 		ps.sample_i = (ps.sample_i + 1) % len(ps.samples)
 	}
 
-	if ps.tick > time.Millisecond * 100 {
+	if ps.tick > time.Millisecond * 500 {
 		ps.tick = 0
 		n := time.Duration(max(ps.sample_i, 1))
 		acc := Perf_Info{}
@@ -135,8 +135,8 @@ container :: proc(
 	contf.layout.placement = placement
 	contf.layout.direction = direction
 	contf.style = style
-	x := ui.clip_auto(50) if .X in clip else ui.clip_none()
-	y := ui.clip_auto(50) if .Y in clip else ui.clip_none()
+	x := ui.clip_auto(50, max = 0) if .X in clip else ui.clip_none()
+	y := ui.clip_auto(50, max = 0, min = -(cont.rect.content_size.y - cont.rect.size.y)) if .Y in clip else ui.clip_none()
 	contf.clip = ui.create_clip(ctp, ui.clip(x, y, cont.hash))
 	contf.animation = all_anim
 	ui.submit_widget(ctp, cont, contf)
@@ -241,10 +241,10 @@ perf_chart :: proc(ctp: ^ui.Core_Context, sty: Perf_Chart_Styles, record: []Perf
 	row(ctp, id, sty.bg, {.Negative, .Positive}, 256)
 
 	column(ctp, fmt.tprint(id, "stats col"), sty.bg)
-	stat_label(ctp, fmt.tprint(id, "title"), label, sty.tooltip)
-	stat_label(ctp, fmt.tprint(id, "min"), fmt.tprint("min: ", min_v), sty.tooltip)
-	stat_label(ctp, fmt.tprint(id, "max"), fmt.tprint("max: ", max_v), sty.tooltip)
-	stat_label(ctp, fmt.tprint(id, "avg"), fmt.tprint("avg: ", avg), sty.tooltip)
+	stat_label(ctp, fmt.tprint(id, "title"), label, sty.text)
+	stat_label(ctp, fmt.tprint(id, "min"), fmt.tprint("min: ", min_v), sty.text)
+	stat_label(ctp, fmt.tprint(id, "max"), fmt.tprint("max: ", max_v), sty.text)
+	stat_label(ctp, fmt.tprint(id, "avg"), fmt.tprint("avg: ", avg), sty.text)
 	ui.pop_parent(ctp)
 
 	row(ctp, fmt.tprint(id, "bars"), sty.bg, {.Negative, .Positive}, 256)
@@ -313,28 +313,30 @@ main :: proc() {
 		s_card_2 := ui.create_style(ctp, {color = BG_2, border = br(BORDER, 8), text = {font = font_13, color = FG, font_size = 13}})
 		s_card_3 := ui.create_style(ctp, {color = BG_3, border = br(BORDER, 8), text = {font = font_13, color = FG, font_size = 13}})
 		s_inset := ui.create_style(ctp, {color = BG_2, border = br(BORDER, 6), text = {font = font_12, color = FG_DIM, font_size = 12}})
-		s_inset2 := ui.create_style(ctp, {color = BG_3, border = br(BORDER, 4), text = {font = font_12, color = FG_DIM, font_size = 12}})
+		s_inset2 := ui.create_style(ctp, {color = BG, border = br(CYAN, 4), text = {font = font_12, color = FG_DIM, font_size = 12}})
+		s_labelnobg := ui.create_style(ctp, {color = {}, border = nb(), text = {font = font_12, color = FG_DIM, font_size = 12}})
 		s_dim := ui.create_style(ctp, {color = BG_1, border = nb(), text = {font = font_12, color = FG_DIM, font_size = 12}})
 		s_xdim := ui.create_style(ctp, {color = BG_1, border = br(BORDER, 12), text = {font = font_11, color = FG_XDIM, font_size = 11}})
 		s_tab_on := ui.create_style(ctp, {color = CYAN, border = pill(CYAN_D, CYAN_D), text = {font = font_12, color = BG, font_size = 12}})
 		s_tab_off := ui.create_style(ctp, {color = BG_2, border = pill(BORDER, BG_3), text = {font = font_12, color = FG_DIM, font_size = 12}})
 		s_colors := []ui.Style_Index {
-			ui.create_style(ctp, {color = CYAN, border = nb(), text = {font = font_12, color = BG, font_size = 12}}),
-			ui.create_style(ctp, {color = AMBER, border = nb(), text = {font = font_12, color = BG, font_size = 12}}),
-			ui.create_style(ctp, {color = PURPLE, border = nb(), text = {font = font_12, color = BG, font_size = 12}}),
-			ui.create_style(ctp, {color = GREEN, border = nb(), text = {font = font_12, color = BG, font_size = 12}}),
-			ui.create_style(ctp, {color = PINK, border = nb(), text = {font = font_12, color = BG, font_size = 12}}),
-			ui.create_style(ctp, {color = RED, border = nb(), text = {font = font_12, color = BG, font_size = 12}}),
+			ui.create_style(ctp, {color = CYAN, border = br(CYAN, 8), text = {font = font_12, color = BG, font_size = 12}}),
+			ui.create_style(ctp, {color = AMBER, border = br(AMBER, 8), text = {font = font_12, color = BG, font_size = 12}}),
+			ui.create_style(ctp, {color = PURPLE, border = br(PURPLE, 8), text = {font = font_12, color = BG, font_size = 12}}),
+			ui.create_style(ctp, {color = GREEN, border = br(GREEN, 8), text = {font = font_12, color = BG, font_size = 12}}),
+			ui.create_style(ctp, {color = PINK, border = br(PINK, 8), text = {font = font_12, color = BG, font_size = 12}}),
+			ui.create_style(ctp, {color = RED, border = br(RED, 8), text = {font = font_12, color = BG, font_size = 12}}),
 		}
 
-		all_anim = ui.create_animation(ctp, ui.ANIM_ALL, time.Millisecond * 250)
-		color_anim = ui.create_animation(ctp, ui.ANIM_COLOR, time.Millisecond * 250)
+		all_anim = ui.create_animation(ctp, ui.ANIM_ALL, time.Millisecond * 300)
+		color_anim = ui.create_animation(ctp, ui.ANIM_COLOR, time.Millisecond * 300)
 
 		perf_sty := Perf_Chart_Styles {
-			bg        = s_card_2,
-			bar       = s_colors[1],
-			bar_hover = s_colors[0],
-			tooltip   = s_card_3,
+			bg        = s_card,
+			bar       = s_colors[3],
+			bar_hover = s_colors[2],
+			tooltip   = s_card_2,
+			text 	  = s_labelnobg,
 			col_a     = s_colors[0],
 			col_b     = s_colors[1],
 		}
@@ -372,9 +374,402 @@ main :: proc() {
 
 		switch selected_tab {
 		case .Sizing:
+			container(ctp, "sizing container", s_card, .Y, clip = {.Y})
+			label(ctp, "grow title", "grow — fills remaining space", s_inset)
+
+			row(ctp, "grow demo", s_card_2, min_height = 48)
+			for i in 0 ..< 3 {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.grow(), ui.grow())
+				wf.style = s_colors[i]
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "fit title", "fit — shrinks to content size", s_inset)
+			row(ctp, "fit demo", s_card_2, min_height = 48)
+			fit_labels := []string{"short", "a bit longer", "the longest one here"}
+			for l, i in fit_labels {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = s_colors[i]
+				wf.animation = all_anim
+				wf.text = ui.create_text(ctp, ui.text(l, .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "fixed title", "fixed — exact pixel size", s_inset)
+			row(ctp, "fixed demo", s_card_2, min_height = 64)
+			fixed_sizes := [][2]f32{{40, 40}, {80, 40}, {120, 40}, {60, 60}}
+			for sz, i in fixed_sizes {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(sz.x), ui.fixed(sz.y))
+				wf.style = s_colors[i]
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "percent title", "percent — fraction of parent axis", s_inset)
+			row(ctp, "percent demo", s_card_2, min_height = 48)
+			percents := []f32{0.1, 0.2, 0.3, 0.4}
+			for p, i in percents {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.percent(p), ui.grow())
+				wf.style = s_colors[i]
+				wf.animation = all_anim
+				wf.layout.padding = PAD_XS
+				wf.text = ui.create_text(ctp, ui.text(fmt.tprintf("%d%%", int(p * 100)), .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "ratio title", "ratio — Y = X * ratio  (0–1)", s_inset)
+			row(ctp, "ratio demo", s_card_2, {.Negative, .Positive}, 128)
+			ratios := []f32{0.25, 0.5, 0.75, 1.0}
+			for r_val, i in ratios {
+				col := ui.reserve_widget(ctp, i)
+				colf := ui.Form{}
+				colf.layout.sizing = ui.sizing(ui.grow(), ui.ratio(r_val))
+				colf.layout.padding = PAD_XS
+				colf.layout.placement = {.Center, .Center}
+				colf.style = s_colors[i]
+				colf.animation = all_anim
+				colf.text = ui.create_text(ctp, ui.text(fmt.tprintf("%.2f", r_val), .None))
+				ui.submit_widget(ctp, col, colf)
+			}
+			ui.pop_parent(ctp)
+
+			ui.pop_parent(ctp)
 		case .Borders:
+			container(ctp, "borders container", s_card, .Y, clip = {.Y})
+
+			label(ctp, "thickness title", "per-side thickness", s_inset)
+			row(ctp, "thickness demo", s_card_2, {.Negative, .Center}, 100)
+			thickness_cases := [][4]f32 {
+				{4, 1, 1, 1}, // top heavy
+				{1, 4, 1, 1}, // right heavy
+				{1, 1, 4, 1}, // bottom heavy
+				{1, 1, 1, 4}, // left heavy
+				{4, 1, 4, 1}, // top+bottom
+				{1, 4, 1, 4}, // left+right
+			}
+			for tc, i in thickness_cases {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(64), ui.fixed(64))
+				wf.style = ui.create_style(
+					ctp,
+					{
+						color = BG_3,
+						border = {color = {FG, FG, FG, FG}, thickness = {{tc[0], tc[2]}, {tc[3], tc[1]}}, radius = {R, R, R, R}},
+						text = {font = font_12, color = FG_DIM, font_size = 12},
+					},
+				)
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			// ── Per-side color ────────────────────────────────────────
+			label(ctp, "color title", "per-side color — hover to rotate clockwise", s_inset)
+			row(ctp, "color demo", s_card_2, {.Negative, .Center}, 100)
+			// colors order: top, right, bottom, left
+			// clockwise rotate: new_top=left, new_right=top, new_bottom=right, new_left=bottom
+			color_sets := [][4]ui.Color{{CYAN, AMBER, PURPLE, GREEN}, {RED, PINK, CYAN, AMBER}, {GREEN, PURPLE, AMBER, RED}}
+			for cs, i in color_sets {
+				w := ui.reserve_widget(ctp, i)
+				hovered := ui.is_widget_hovered(ctp, w)
+				top := cs[0] if !hovered else cs[3]
+				right := cs[1] if !hovered else cs[0]
+				bottom := cs[2] if !hovered else cs[1]
+				left := cs[3] if !hovered else cs[2]
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(80), ui.fixed(80))
+				wf.layout.padding = PAD_XS
+				wf.layout.placement = {.Center, .Center}
+				wf.style = ui.create_style(
+					ctp,
+					{
+						color = BG_3,
+						border = {color = {top, right, bottom, left}, thickness = {{3, 3}, {3, 3}}, radius = {R, R, R, R}},
+						text = {font = font_11, color = FG_DIM, font_size = 11},
+					},
+				)
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text("hover", .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			// ── Per-corner radius ─────────────────────────────────────
+			label(ctp, "radius title", "per-corner radius", s_inset)
+			row(ctp, "radius demo", s_card_2, {.Negative, .Center}, 120)
+			// radius order: top-left, top-right, bottom-right, bottom-left
+			radius_cases := [][4]f32{{24, 0, 0, 0}, {0, 24, 0, 0}, {0, 0, 24, 0}, {0, 0, 0, 24}, {24, 0, 24, 0}, {0, 24, 0, 24}, {24, 24, 0, 0}, {0, 0, 24, 24}}
+			for rc, i in radius_cases {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(72), ui.fixed(72))
+				wf.style = ui.create_style(ctp, {color = BG_3, border = {color = {FG, FG, FG, FG}, thickness = {{2, 2}, {2, 2}}, radius = {rc[0], rc[1], rc[2], rc[3]}}})
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "hover title", "thickness on hover", s_inset)
+			row(ctp, "hover demo", s_card_2, {.Negative, .Center}, 100)
+			hover_cases := []struct {
+				color:  ui.Color,
+				radius: f32,
+			}{{CYAN, R}, {PURPLE, R}, {AMBER, R}, {GREEN, R}, {PINK, 99}, {RED, 0}}
+			for hc, i in hover_cases {
+				w := ui.reserve_widget(ctp, i)
+				hovered := ui.is_widget_hovered(ctp, w)
+				thick: f32 = 3 if hovered else 1
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(72), ui.fixed(72))
+				wf.style = ui.create_style(
+					ctp,
+					{
+						color = BG_3,
+						border = {
+							color = {hc.color, hc.color, hc.color, hc.color},
+							thickness = {{thick, thick}, {thick, thick}},
+							radius = {hc.radius, hc.radius, hc.radius, hc.radius},
+						},
+					},
+				)
+				wf.animation = color_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+			ui.pop_parent(ctp)
 		case .Text:
+			PANGRAM :: "the quick brown fox jumps over the lazy dog"
+			PANGRAM_LONG :: "the quick brown fox jumps over the lazy dog — sphinx of black quartz, judge my vow"
+			container(ctp, "text container", s_card, .Y, clip = {.Y})
+			label(ctp, "wrap words title", "wrap mode: words", s_inset)
+			row(ctp, "wrap words demo", s_card_2)
+			{
+				w := ui.reserve_widget(ctp, "wrap words")
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.grow(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = s_card_3
+				wf.animation = all_anim
+				wf.text = ui.create_text(ctp, ui.text(PANGRAM_LONG, .Words))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			// ── Wrap mode: None ───────────────────────────────────────
+			label(ctp, "wrap none title", "wrap mode: none — overflows", s_inset)
+
+			row(ctp, "wrap none demo", s_card_2)
+			{
+				w := ui.reserve_widget(ctp, "wrap none")
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.grow(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = s_card_3
+				wf.animation = all_anim
+				wf.text = ui.create_text(ctp, ui.text(PANGRAM, .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			// ── preferred_min in fit container ────────────────────────
+			label(ctp, "pref min title", "preferred_min in fit container — sets minimum wrap width", s_inset)
+
+			row(ctp, "pref min demo", s_card_2, {.Negative, .Center})
+			pref_mins := []f32{80, 160, 240}
+			for pm, i in pref_mins {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = s_card_3
+				wf.animation = all_anim
+				wf.text = ui.create_text(ctp, ui.text(PANGRAM, .Words, pm))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			// ── preferred_max in grow container ───────────────────────
+			label(ctp, "pref max title", "preferred_max in grow container — caps how wide text stretches", s_inset)
+
+			row(ctp, "pref max demo", s_card_2)
+			pref_maxes := []f32{160, 280, 400}
+			for pm, i in pref_maxes {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.grow(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = s_colors[i]
+				wf.animation = all_anim
+				wf.text = ui.create_text(ctp, ui.text(PANGRAM, .Words, 0, pm))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			// ── Fixed container ───────────────────────────────────────
+			label(ctp, "fixed title", "text in fixed-width containers", s_inset)
+
+			row(ctp, "fixed demo", s_card_2, {.Negative, .Center})
+			fixed_widths := []f32{120, 200, 300}
+			for fw, i in fixed_widths {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(fw), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = s_card_3
+				wf.animation = all_anim
+				wf.text = ui.create_text(ctp, ui.text(PANGRAM, .Words))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			// ── Percent container ─────────────────────────────────────
+			label(ctp, "percent title", "text in percent-width containers", s_inset)
+
+			row(ctp, "percent demo", s_card_2, {.Negative, .Positive}, 120)
+			percents_text := []f32{0.25, 0.4, 0.35}
+			for p, i in percents_text {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.percent(p), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = s_colors[i]
+				wf.animation = all_anim
+				wf.text = ui.create_text(ctp, ui.text(fmt.tprintf("%d%% — %s", int(p * 100), PANGRAM), .Words))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			ui.pop_parent(ctp)
 		case .Layout:
+			container(ctp, "layout container", s_card, .Y, clip = {.Y})
+			label(ctp, "dir title", "direction", s_inset)
+
+			row(ctp, "dir demo", s_card_2, {.Negative, .Center}, 80)
+
+			spacer(ctp, "space 1", .X)
+
+			row(ctp, "dir x demo", s_card_3, {.Center, .Center})
+			label(ctp, "dir x label", "X", s_inset)
+			for i in 0 ..< 4 {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(24), ui.fixed(24))
+				wf.style = s_colors[i]
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			spacer(ctp, "space 2", .X)
+
+			column(ctp, "dir y demo", s_card_3, {.Center, .Center})
+			label(ctp, "dir y label", "Y", s_inset)
+			for i in 0 ..< 4 {
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(24), ui.fixed(24))
+				wf.style = s_colors[i]
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			spacer(ctp, "space 3", .X)
+
+			ui.pop_parent(ctp)
+
+			label(ctp, "align title", "align placement — main axis", s_inset2)
+			align_main := [][2]ui.Placement{{.Negative, .Center}, {.Center, .Center}, {.Positive, .Center}}
+			align_main_labels := []string{".Negative", ".Center", ".Positive"}
+			for pl, i in align_main {
+				label(ctp, fmt.tprint("align main lbl", i), align_main_labels[i], s_inset)
+
+				row(ctp, fmt.tprint("align main demo", i), s_card_3, pl, 56)
+				for j in 0 ..< 3 {
+					w := ui.reserve_widget(ctp, j)
+					wf := ui.Form{}
+					wf.layout.sizing = ui.sizing(ui.fixed(32), ui.fixed(32))
+					wf.style = s_colors[j]
+					wf.animation = all_anim
+					ui.submit_widget(ctp, w, wf)
+				}
+				ui.pop_parent(ctp)
+			}
+
+			label(ctp, "align cross title", "align placement — cross axis", s_inset2)
+			align_cross := [][2]ui.Placement{{.Negative, .Negative}, {.Negative, .Center}, {.Negative, .Positive}}
+			align_cross_labels := []string{".Negative", ".Center", ".Positive"}
+			for pl, i in align_cross {
+				label(ctp, fmt.tprint("align cross lbl", i), align_cross_labels[i], s_inset)
+				row(ctp, fmt.tprint("align cross demo", i), s_card_3, pl, 80)
+				sizes := []f32{48, 32, 56}
+				for j in 0 ..< 3 {
+					w := ui.reserve_widget(ctp, j)
+					wf := ui.Form{}
+					wf.layout.sizing = ui.sizing(ui.fixed(32), ui.fixed(sizes[j]))
+					wf.style = s_colors[j]
+					wf.animation = all_anim
+					ui.submit_widget(ctp, w, wf)
+				}
+				ui.pop_parent(ctp)
+			}
+
+			// ── Space placements (main axis only) ─────────────────────
+			label(ctp, "space title", "space placement — main axis only, cross defaults to center", s_inset2)
+			space_placements := [][2]ui.Placement{{.Evenly, .Center}, {.Around, .Center}, {.Between, .Center}}
+			space_labels := []string {
+				".Evenly — equal gaps including edges",
+				".Around — equal space on both sides of each child",
+				".Between — equal gaps between children, no edge gap",
+			}
+			for pl, i in space_placements {
+				label(ctp, fmt.tprint("space lbl", i), space_labels[i], s_inset)
+				row(ctp, fmt.tprint("space demo", i), s_card_3, pl, 56)
+				for j in 0 ..< 4 {
+					w := ui.reserve_widget(ctp, j)
+					wf := ui.Form{}
+					wf.layout.sizing = ui.sizing(ui.fixed(32), ui.fixed(32))
+					wf.style = s_colors[j]
+					wf.animation = all_anim
+					ui.submit_widget(ctp, w, wf)
+				}
+				ui.pop_parent(ctp)
+			}
+
+			label(ctp, "mixed title", "space main + varying cross alignment", s_inset2)
+			mixed := [][2]ui.Placement{{.Evenly, .Negative}, {.Between, .Center}, {.Around, .Positive}}
+			mixed_labels := []string{"evenly + cross negative", "between + cross center", "around + cross positive"}
+			for pl, i in mixed {
+				label(ctp, fmt.tprint("mixed lbl", i), mixed_labels[i], s_inset)
+				row(ctp, fmt.tprint("mixed demo", i), s_card_3, pl, 96)
+				sizes := []f32{40, 64, 32, 56}
+				for j in 0 ..< 4 {
+					w := ui.reserve_widget(ctp, j)
+					wf := ui.Form{}
+					wf.layout.sizing = ui.sizing(ui.fixed(32), ui.fixed(sizes[j]))
+					wf.style = s_colors[j]
+					wf.animation = all_anim
+					ui.submit_widget(ctp, w, wf)
+				}
+				ui.pop_parent(ctp)
+			}
+
+			ui.pop_parent(ctp)
 		case .Clips:
 			row(ctp, "clip row", s_card, min_height = 256)
 			container(ctp, "scroll x 1", s_card_2, .X, clip = {.X})
@@ -382,8 +777,8 @@ main :: proc() {
 				w := ui.reserve_widget(ctp, i)
 				wf := ui.Form{}
 				wf.layout.sizing = ui.sizing(ui.fixed(100), ui.grow())
-				wf.animation = all_anim
 				wf.style = s
+				wf.animation = all_anim
 				ui.submit_widget(ctp, w, wf)
 			}
 			ui.pop_parent(ctp)
@@ -392,16 +787,349 @@ main :: proc() {
 				w := ui.reserve_widget(ctp, i)
 				wf := ui.Form{}
 				wf.layout.sizing = ui.sizing(ui.fixed(100), ui.grow())
-				wf.animation = all_anim
 				wf.style = s
+				wf.animation = all_anim
 				ui.submit_widget(ctp, w, wf)
 			}
 			ui.pop_parent(ctp)
 			ui.pop_parent(ctp)
 		case .Interaction:
+			@(static) counter_a: int
+			@(static) counter_b: int
+			@(static) counter_clicks: int
+			@(static) counter_double: int
+			@(static) counter_long: int
+			@(static) locked: bool
+
+			container(ctp, "interaction container", s_card, .Y, clip = {.Y})
+
+			label(ctp, "basic title", "hover and click", s_inset)
+			row(ctp, "basic demo", s_card_2, {.Negative, .Center}, 48)
+			{
+				w := ui.reserve_widget(ctp, "hover btn")
+				hovered := ui.is_widget_hovered(ctp, w)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = hovered ? s_tab_on : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text("hover me", .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			{
+				w := ui.reserve_widget(ctp, "click btn")
+				events := ui.get_widget_mouse_events(ctp, w, .Left)
+				if .Clicked in events {counter_clicks += 1}
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = .Pressed in events ? s_colors[0] : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text(fmt.tprintf("clicks: %d", counter_clicks), .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			{
+				w := ui.reserve_widget(ctp, "double btn")
+				events := ui.get_widget_mouse_events(ctp, w, .Left)
+				if .Double_Clicked in events {counter_double += 1}
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = .Double_Clicked in events ? s_colors[2] : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text(fmt.tprintf("double clicks: %d", counter_double), .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			{
+				w := ui.reserve_widget(ctp, "long btn")
+				events := ui.get_widget_mouse_events(ctp, w, .Left)
+				if .Long_Down in events {counter_long += 1}
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = .Down in events ? s_colors[4] : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text(fmt.tprintf("long press: %d", counter_long), .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			// ── Mouse buttons ─────────────────────────────────────────
+			label(ctp, "mouse btn title", "mouse buttons", s_inset)
+			row(ctp, "mouse btn demo", s_card_2, {.Negative, .Center}, 48)
+			mouse_btns := []struct {
+				label: string,
+				btn:   ui.Mouse_Button,
+				color: ui.Style_Index,
+			}{{"left", .Left, s_colors[0]}, {"middle", .Middle, s_colors[1]}, {"right", .Right, s_colors[2]}}
+			for mb, i in mouse_btns {
+				w := ui.reserve_widget(ctp, i)
+				events := ui.get_widget_mouse_events(ctp, w, mb.btn)
+				active := .Down in events
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = active ? mb.color : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text(fmt.tprintf("%s click", mb.label), .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			// ── Counters with +/- ─────────────────────────────────────
+			label(ctp, "counter title", "counters", s_inset)
+			row(ctp, "counter demo", s_card_2, {.Negative, .Center}, 48)
+			counter_data := []struct {
+				label: string,
+				val:   ^int,
+				color: ui.Style_Index,
+			}{{"counter A", &counter_a, s_colors[0]}, {"counter B", &counter_b, s_colors[2]}}
+			for cd, i in counter_data {
+				row(ctp, fmt.tprint("counter row", i), s_card_3, {.Negative, .Center})
+
+				label(ctp, fmt.tprint("counter name", i), cd.label, s_dim)
+
+				{
+					w := ui.reserve_widget(ctp, fmt.tprint("dec", i))
+					if .Clicked in ui.get_widget_mouse_events(ctp, w, .Left) {cd.val^ -= 1}
+					wf := ui.Form{}
+					wf.layout.sizing = ui.sizing(ui.fixed(28), ui.fixed(28))
+					wf.layout.placement = {.Center, .Center}
+					wf.style = s_card_3
+					wf.animation = color_anim
+					wf.text = ui.create_text(ctp, ui.text("-", .None))
+					ui.submit_widget(ctp, w, wf)
+				}
+				{
+					w := ui.reserve_widget(ctp, fmt.tprint("count val", i))
+					wf := ui.Form{}
+					wf.layout.sizing = ui.sizing(ui.fixed(48), ui.fit())
+					wf.layout.padding = PAD_XS
+					wf.layout.placement = {.Center, .Center}
+					wf.style = cd.color
+					wf.animation = all_anim
+					wf.text = ui.create_text(ctp, ui.text(fmt.tprintf("%d", cd.val^), .None))
+					ui.submit_widget(ctp, w, wf)
+				}
+				{
+					w := ui.reserve_widget(ctp, fmt.tprint("inc", i))
+					if .Clicked in ui.get_widget_mouse_events(ctp, w, .Left) {cd.val^ += 1}
+					wf := ui.Form{}
+					wf.layout.sizing = ui.sizing(ui.fixed(28), ui.fixed(28))
+					wf.layout.placement = {.Center, .Center}
+					wf.style = s_card_3
+					wf.animation = color_anim
+					wf.text = ui.create_text(ctp, ui.text("+", .None))
+					ui.submit_widget(ctp, w, wf)
+				}
+
+				ui.pop_parent(ctp)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "flags title", "event flags", s_inset2)
+			label(ctp, "flag hover label", ".Disable_Hover — hover never triggers", s_inset)
+			row(ctp, "flag hover demo", s_card_2, {.Negative, .Center}, 48)
+			{
+				w := ui.reserve_widget(ctp, "normal hover")
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = ui.is_widget_hovered(ctp, w) ? s_tab_on : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text("normal", .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			{
+				w := ui.reserve_widget(ctp, "disabled hover")
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.event_flags += {.Disable_Hover}
+				wf.style = ui.is_widget_hovered(ctp, w) ? s_tab_on : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text(".Disable_Hover", .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "flag active label", ".Disable_Active — press state never triggers", s_inset)
+			row(ctp, "flag active demo", s_card_2, {.Negative, .Center}, 48)
+			{
+				w := ui.reserve_widget(ctp, "normal active")
+				events := ui.get_widget_mouse_events(ctp, w, .Left)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = .Down in events ? s_colors[0] : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text("normal", .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			{
+				w := ui.reserve_widget(ctp, "disabled active")
+				events := ui.get_widget_mouse_events(ctp, w, .Left)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.event_flags += {.Disable_Active}
+				wf.style = .Down in events ? s_colors[0] : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text(".Disable_Active", .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "flag lock hover label", ".Lock_Hover — hover is locked to this widget until released", s_inset)
+			row(ctp, "flag lock hover demo", s_card_2, {.Negative, .Center}, 48)
+			{
+				w := ui.reserve_widget(ctp, "lock hover btn")
+				hovered := ui.is_widget_hovered(ctp, w)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.event_flags += {.Lock_Hover}
+				wf.style = hovered ? s_colors[3] : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text(".Lock_Hover — hover away while down", .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "flag lock active label", ".Lock_Active — active state is locked, but hover state is free", s_inset)
+			row(ctp, "flag lock active demo", s_card_2, {.Negative, .Center}, 48)
+			{
+				w := ui.reserve_widget(ctp, "lock active btn")
+				events := ui.get_widget_mouse_events(ctp, w, .Left)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.event_flags += {.Lock_Active}
+				wf.style = ui.is_widget_active(ctp, w) ? s_colors[5] : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text(".Lock_Active — other widgets will register hover while this widget stays active", .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+			ui.pop_parent(ctp)
 		case .Animation:
+			@(static) anim_tick: time.Duration
+			@(static) anim_phase: int
+			@(static) shown_a: bool = true
+			@(static) shown_b: bool = true
+			@(static) shown_c: bool = true
+
+			anim_tick += ctp.timers.frame_time
+			if anim_tick > time.Millisecond * 800 {
+				anim_tick = 0
+				anim_phase = (anim_phase + 1) % 4
+			}
+
+			container(ctp, "anim container", s_card, .Y, clip = {.Y})
+			label(ctp, "anim all title", "ANIM_ALL — size, color, position all interpolated", s_inset)
+			row(ctp, "anim all demo", s_card_2, {.Negative, .Center}, 96)
+			{
+				sizes := []f32{32, 48, 64, 80}
+				colors := []ui.Style_Index{s_colors[0], s_colors[1], s_colors[2], s_colors[3]}
+				sz := sizes[anim_phase]
+				w := ui.reserve_widget(ctp, "anim all size")
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(sz), ui.fixed(sz))
+				wf.style = colors[anim_phase]
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			{
+				margins := [][2]f32{{0, 0}, {16, 0}, {32, 0}, {16, 0}}
+				m := margins[anim_phase]
+				w := ui.reserve_widget(ctp, "anim all pos")
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(48), ui.fixed(48))
+				wf.layout.margin.y = {m[0], m[1]}
+				wf.style = s_colors[4]
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			{
+				sizes := []f32{32, 56, 40, 64}
+				colors := []ui.Style_Index{s_colors[0], s_colors[2], s_colors[4], s_colors[1]}
+				margins := [][2]f32{{0, 0}, {24, 0}, {0, 0}, {8, 0}}
+				sz := sizes[anim_phase]
+				m := margins[anim_phase]
+				w := ui.reserve_widget(ctp, "anim all combo")
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(sz), ui.fixed(sz))
+				wf.layout.margin.y = {m[0], m[1]}
+				wf.style = colors[anim_phase]
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "anim color title", "ANIM_COLOR — only color interpolated, size snaps", s_inset)
+			row(ctp, "anim color demo", s_card_2, {.Negative, .Center}, 80)
+			color_cycle := []ui.Style_Index{s_colors[0], s_colors[1], s_colors[2], s_colors[3]}
+			for i in 0 ..< 4 {
+				phase := (anim_phase + i) % 4
+				w := ui.reserve_widget(ctp, i)
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(48), ui.fixed(48))
+				wf.style = color_cycle[phase]
+				wf.animation = color_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			label(ctp, "spawn title", "on_created / on_destroyed — toggle widgets in and out", s_inset)
+			row(ctp, "spawn toggles", s_card_2, {.Negative, .Center}, 40)
+			toggle_data := []struct {
+				label: string,
+				val:   ^bool,
+				color: ui.Style_Index,
+			}{{"A", &shown_a, s_colors[0]}, {"B", &shown_b, s_colors[2]}, {"C", &shown_c, s_colors[4]}}
+			for td, i in toggle_data {
+				w := ui.reserve_widget(ctp, fmt.tprint("toggle", i))
+				if .Clicked in ui.get_widget_mouse_events(ctp, w, .Left) {td.val^ = !td.val^}
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fit(), ui.fit())
+				wf.layout.padding = PAD_S
+				wf.style = td.val^ ? td.color : s_card_3
+				wf.animation = color_anim
+				wf.text = ui.create_text(ctp, ui.text(fmt.tprintf("toggle %s", td.label), .None))
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			row(ctp, "spawn demo", s_card_2, {.Negative, .Center}, 80)
+			if shown_a {
+				w := ui.reserve_widget(ctp, "spawn a")
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(64), ui.fixed(64))
+				wf.style = s_colors[0]
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			if shown_b {
+				w := ui.reserve_widget(ctp, "spawn b")
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(64), ui.fixed(64))
+				wf.style = s_colors[2]
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			if shown_c {
+				w := ui.reserve_widget(ctp, "spawn c")
+				wf := ui.Form{}
+				wf.layout.sizing = ui.sizing(ui.fixed(64), ui.fixed(64))
+				wf.style = s_colors[4]
+				wf.animation = all_anim
+				ui.submit_widget(ctp, w, wf)
+			}
+			ui.pop_parent(ctp)
+
+			ui.pop_parent(ctp)
 		case .Performance:
-			container(ctp, "perf container", s_card, .Y, clip = {.Y})
+			container(ctp, "perf container", s_root, .Y, clip = {.Y})
 			pc :: proc(ctp: ^ui.Core_Context, sty: Perf_Chart_Styles, ps: ^Perf_State, label, id: string, get: proc(_: Perf_Info) -> time.Duration) {
 				perf_chart(ctp, sty, ps.record[:], ps.record_i, label, id, get)
 			}

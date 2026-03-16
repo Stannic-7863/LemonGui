@@ -218,7 +218,7 @@ init :: proc(window_title: cstring, vert_path, frag_path, stencil_vert_path, ste
 	backend_ctx.render_commands_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.dummy_texture = sdl.CreateGPUTexture(gpu, {height = 1, width = 1, format = .R8G8B8A8_UNORM, usage = {.SAMPLER}, layer_count_or_depth = 1, num_levels = 1})
 
-	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .VSYNC))
+	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .IMMEDIATE))
 	return backend_ctx
 }
 

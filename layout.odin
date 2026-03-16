@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:fmt"
 import "core:container/lru"
 import "core:time"
 import "core:unicode/utf8"
@@ -265,7 +266,7 @@ _resolve_fit_sizing :: proc(ctx: ^Core_Context, axis: Axis) #no_bounds_check {
 
 _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 	for &widget in ctx.widgets {
-		widget.text_info.wrap_width = axis == .X ? widget.rect.size.x - _get_axis_spacing(.X, widget.form.layout.padding) : 0
+		widget.text_info.wrap_width = axis == .X ? min(widget.rect.size.x - _get_axis_spacing(.X, widget.form.layout.padding), widget.text_info.max_width) : 0
 		if widget.first == -1 {continue}
 
 		total_child_gap := _get_child_gap(&widget, axis)
@@ -409,11 +410,10 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 			defer clear(&ctx.measured_words)
 
 			size: Vec2f32
-			m_w: f32
+			acc_size: Vec2f32
+			maximum_width: f32
 			minimum_width: f32
 			new_line_index: int
-			accumulated_width: f32
-			accumulated_height: f32
 			text_height := ctx.measure_text_height(style.text)
 
 			space_width := ctx.measure_text_width(" ", style.text)
@@ -422,39 +422,39 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 			padding := _get_axis_spacing(.X, widget.form.layout.padding)
 
 			for word, index in ctx.measured_words {
-				m_w += word.width + f32(word.spaces) * space_width
+				maximum_width += word.width + f32(word.spaces) * space_width
 				if word.string == "\n" {
-					size.x = max(accumulated_width, size.x)
-					accumulated_width = 0
+					size.x = max(acc_size.x, size.x)
+					acc_size.x = 0
 					append(&ctx.lines, text.text[new_line_index:word.start])
 					new_line_index = word.start
 					if index == len(ctx.measured_words) - 1 {
-						accumulated_height += (text_height + style.text.line_spacing)
+						acc_size.y += (text_height + style.text.line_spacing)
 					}
 					continue
 				}
 				minimum_width = max(minimum_width, word.width)
-				accumulated_width += space_width * f32(word.spaces)
-				if accumulated_width + word.width > widget.text_info.wrap_width {
-					size.x = max(accumulated_width, size.x)
-					accumulated_width = 0
+				acc_size.x += space_width * f32(word.spaces)
+				if acc_size.x + word.width > widget.text_info.wrap_width {
+					size.x = max(acc_size.x, size.x)
+					acc_size.x = 0
 					append(&ctx.lines, text.text[new_line_index:word.start])
 					new_line_index = word.start
 				}
-				accumulated_width += word.width
+				acc_size.x += word.width
 			}
 
-			size.x = max(accumulated_width, size.x)
+			size.x = max(acc_size.x, size.x)
 			if new_line_index < len(text.text) {
 				append(&ctx.lines, text.text[new_line_index:])
 			}
 
 			widget.text_info.lines_range.start = i32(start)
 			widget.text_info.lines_range.end = i32(len(ctx.lines))
-			size.y = f32(i32(len(ctx.lines)) - i32(start)) * (text_height + style.text.line_spacing) + accumulated_height
+			size.y = f32(i32(len(ctx.lines)) - i32(start)) * (text_height + style.text.line_spacing) + acc_size.y
 			widget.text_info.size = size
-			widget.text_info.max_width = m_w
-			widget.text_info.min_width = minimum_width
+			widget.text_info.max_width = min(text.preferred_max, maximum_width)
+			widget.text_info.min_width = max(text.preferred_min, minimum_width)
 		case .None:
 			style := ctx.styles[widget.form.style]
 			append(&ctx.lines, text.text)
@@ -565,8 +565,8 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #n
 
 	total_size[axis] += _get_child_gap(widget, axis) + widget.text_info.size[axis]
 	available_size := widget.rect.size[axis] - _get_axis_spacing(axis, widget.form.layout.padding) - total_size[axis] + _get_child_gap(widget, axis)
-	widget.info.rect.content_size[axis] = total_size[axis] + _get_axis_spacing(axis, widget.form.layout.padding)
-	widget.info.rect.content_size[other_axis] = total_size[other_axis] + _get_axis_spacing(other_axis, widget.form.layout.padding)
+	widget.rect.content_size[axis] = total_size[axis] + _get_axis_spacing(axis, widget.form.layout.padding)
+	widget.rect.content_size[other_axis] = total_size[other_axis] + _get_axis_spacing(other_axis, widget.form.layout.padding)
 
 	increment: Vec2f32
 	computed_child_gap := layout.child_gap

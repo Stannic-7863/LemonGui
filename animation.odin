@@ -54,13 +54,19 @@ Animation_State :: struct {
 
 _resolve_animations :: proc(ctx: ^Core_Context) {
 	for owner, &state in ctx.persistant.anim_states {
-        if state.type == .Creation || state.type == .Update {
-            if lookup, ok := ctx.persistant.curr_lookup[owner]; ok {
-                state.end.rect          = lookup.info.rect
-                state.end.text_position = lookup.text_position
-            }
-        }
-    }
+		if state.type == .Creation || state.type == .Update {
+			if lookup, ok := ctx.persistant.curr_lookup[owner]; ok {
+				new_rect := lookup.info.rect
+				new_text := lookup.text_position
+				if new_rect.position != state.end.rect.position || new_rect.size != state.end.rect.size || new_text != state.end.text_position {
+					state.start = state.now
+					state.elapsed = 0
+				}
+				state.end.rect = new_rect
+				state.end.text_position = new_text
+			}
+		}
+	}
 
 	for owner, &state in ctx.persistant.anim_states {
 		ended := state.update(&state, ctx.timers.frame_time)
@@ -101,9 +107,9 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 			}
 			ctx.persistant.anim_states[curr_candid] = state
 			widget := get_widget(ctx, curr_lookup.info.index)
-            widget.form.style = create_style(ctx, state.now.style)
-            widget.rect = state.now.rect
-            widget.text_info.position = state.now.text_position
+			widget.form.style = create_style(ctx, state.now.style)
+			widget.rect = state.now.rect
+			widget.text_info.position = state.now.text_position
 			continue
 		}
 
@@ -128,16 +134,16 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 				owner_hash = curr_candid,
 				start      = prev_data,
 				end        = curr_data,
-				now		   = prev_data,
+				now        = prev_data,
 				type       = .Update,
 				duration   = curr_anim.duration,
 				update     = curr_anim.hooks.update,
 			}
 			ctx.persistant.anim_states[curr_candid] = state
 			widget := get_widget(ctx, curr_lookup.info.index)
-            widget.form.style = create_style(ctx, state.now.style)
-            widget.rect = state.now.rect
-            widget.text_info.position = state.now.text_position
+			widget.form.style = create_style(ctx, state.now.style)
+			widget.rect = state.now.rect
+			widget.text_info.position = state.now.text_position
 		}
 	}
 
@@ -154,21 +160,22 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 					rect  = prev_lookup.info.rect,
 					style = prev_style,
 				}}
+			start.rect.position += start.rect.scroll_offset
 			state = Animation_State {
 				z_index    = prev_lookup.z_index + prev_lookup.form.z_offset,
 				owner_hash = prev_candid,
 				end        = end,
 				start      = start,
-				now 	   = start,
+				now        = start,
 				type       = .Destruction,
 				duration   = prev_anim.duration,
 				update     = prev_anim.hooks.update,
 			}
 			ctx.persistant.anim_states[prev_candid] = state
 			border := state.now.style.border
-            comp   := min(state.now.rect.size.x, state.now.rect.size.y) / 2
-            for &r in border.radius {r = min(comp, r)}
-            _add_render_command(ctx, prev_candid, Command_Rect{border = border, color = state.now.style.color}, state.now.rect, state.z_index)
+			comp := min(state.now.rect.size.x, state.now.rect.size.y) / 2
+			for &r in border.radius {r = min(comp, r)}
+			_add_render_command(ctx, prev_candid, Command_Rect{border = border, color = state.now.style.color}, state.now.rect, state.z_index)
 		}
 	}
 }
@@ -192,6 +199,7 @@ ANIM_ALL :: Animation_Hooks {
 		state.now.rect.size = state.start.rect.size + e_color * (state.end.rect.size - state.start.rect.size)
 		state.now.style.color = state.start.style.color + e_color * (state.end.style.color - state.start.style.color)
 		state.now.style.border.color = state.start.style.border.color + e_color * (state.end.style.border.color - state.start.style.border.color)
+		state.now.style.border.radius = state.start.style.border.radius + e_color * (state.end.style.border.radius - state.start.style.border.radius)
 		state.now.style.text.color = state.start.style.text.color + e_color * (state.end.style.text.color - state.start.style.text.color)
 		return false
 	},
@@ -203,12 +211,12 @@ ANIM_ALL :: Animation_Hooks {
 	},
 	on_created = proc(info: Info, style: Style, text_position: Vec2f32) -> (start: Animation_Data) {
 		rect := Rect{}
-		rect.position = info.rect.position + info.rect.size / 2
+		rect.position = info.rect.position + info.rect.size / 2 + info.rect.scroll_offset
 		rect.size = {}
 		return {rect = rect, style = style, text_position = text_position}
 	},
 	on_destroyed = proc(info: Info, style: Style, text_position: Vec2f32) -> (end: Animation_Data) {
-		return {rect = {position = info.rect.position + info.rect.size / 2}, style = style, text_position = text_position}
+		return {rect = {position = info.rect.position + info.rect.size / 2 + info.rect.scroll_offset}, style = style, text_position = text_position + info.rect.scroll_offset}
 	},
 }
 
