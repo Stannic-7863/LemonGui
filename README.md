@@ -45,11 +45,11 @@ main :: proc () {
 		// Resoruce such as animations, styles, overrides, clip, text must be explicitly created and reused.
 
 		// ANIM_COLOR provided by the library, you can define your own anims 
-		anim_color := lui.create_animation(&ctx, ui.ANIM_COLOR, time.Millisecond * 250)
+		anim_color := lui.create_animation(&ctx, lui.ANIM_COLOR, time.Millisecond * 250)
 
 		// Creates a style and returns a handle (index in ctx.styles array) to it
 		root_style := lui.create_style(&ctx, { ... }) 
-		root_style_hovered := ui.create_style(&ctx, { ... })
+		root_style_hovered := lui.create_style(&ctx, { ... })
 
 		// Each widget must be explicitly reserved.
 		// Reservation does:
