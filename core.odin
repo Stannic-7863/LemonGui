@@ -104,13 +104,14 @@ Clip_Kind :: enum u8 {
 }
 
 Widget :: struct {
-	info:                            Info, // This will contain a Rect from previous frame.
-	form:                            Form,
-	text_info:                       Text_Info,
-	rect:                            Rect, // Info about current frame processed rect
-	total_children, z_index:         int,
-	detached_children:               [2]int, // [TODO]: Impl this
-	first, last, prev, next, parent: Widget_Index,
+	info:                    Info, // This will contain a Rect from previous frame.
+	form:                    Form,
+	text_info:               Text_Info,
+	rect:                    Rect, // Info about current frame processed rect
+	total_children, z_index: int,
+	detached_children:       [2]int,
+	first, last, prev, next: Widget_Index,
+	parent, clip_parent:     Widget_Index,
 }
 
 Form :: struct {
@@ -254,6 +255,9 @@ submit_widget :: proc(ctx: ^Core_Context, info: Info, form: Form) {
 		if DETACH_FLAGS & form.layout.flags.y != {} {
 			p.detached_children.y += 1
 		}
+		if p.form.clip != 0 {
+			widget.clip_parent = p.info.index
+		}
 	}
 
 	if form.animation != 0 {ctx.persistant.curr_candids[widget.info.hash] = {}}
@@ -294,6 +298,7 @@ _add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
 
 		parent.last = widget.info.index
 		widget.z_index += parent.form.z_offset
+		widget.clip_parent = parent.clip_parent
 		widget.info.parent_hash = parent.info.hash
 	}
 }

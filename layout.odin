@@ -1,6 +1,5 @@
 package core_ui
 
-import "core:fmt"
 import "core:container/lru"
 import "core:time"
 import "core:unicode/utf8"
@@ -151,11 +150,16 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		   !ctx.mouse.hover_is_locked &&
 		   widget.z_index >= hovered_z_index {
 
-			hovered_z_index = widget.z_index
+			if widget.clip_parent != 0 {
+				clip_parent := get_widget(ctx, widget.clip_parent)
+				if !is_point_in_rect(clip_parent.rect, ctx.mouse.position, get_style(ctx, clip_parent.form.style).border) {continue}
+			}
+
 			widget_clip := ctx.clips[widget.form.clip]
 			if widget_clip.info.x.kind != .None || widget_clip.info.y.kind != .None {
 				ctx.mouse.hovered_clip = widget_clip.hash
 			}
+			hovered_z_index = widget.z_index
 
 			ctx.mouse.hovered = widget.info.hash
 			ctx.mouse.can_lock_active = .Lock_Active in widget.form.event_flags
