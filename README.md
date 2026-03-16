@@ -1,18 +1,15 @@
 Chass chao 👍 (means to have fun in the present moment, in my native language) .
 
-# A simple (POTENTIAL) Imgui written in Odin
+# A simple Imgui written in Odin
 # Progress so far
 ## Features:
 - [x] Flex box sort of layout
 - [x] Word wrapping
-- [x] Basic mouse event handling
-- [x] Basic styling options and tag system for compose-able styles
-- [x] Keyboard events
-- [x] Id/Keying system for widgets
-## Planned things:
-- [ ] Animation system
-- [ ] Caching (text wrapping especially) for better performance
-- [ ] Errors and Error handler support
+- [x] Raylib-esq event handling for keyboard and mouse (callbacks are technically possible as well)
+- [x] Form based api (reserve widget, create a form, submit form to the widget)
+- [x] Caching (text wrapping especially) for better performance
+- [x] Animations
+- [x] Decently fast
 
 # Example usage 
 
@@ -25,11 +22,11 @@ import lui "LemonGui"
 
 main :: proc () {
 
-	// Init the ui context. Size parameter specified the length of widget array. Although its dynamic, the resizing of array can cause memory rellocation which result in invalid pointers and lead to segfault
-	ctx := lui.init_context(256)
+	// First argument in init_context will pre allocate space for widgets, while second argument defines the word cache (to store measured widths)
+	ctx := lui.init_context(256, 2048)
 	defer lui.deinit_context()
 
-	// Need to set this function as well. Otherwise there will be a segfault
+	// Need to set this function as well. Otherwise there will be a segfault.
 	ctx.measure_text_proc = measure_text
 
 	// Magically create a window to render stuff in
@@ -37,35 +34,57 @@ main :: proc () {
 	defer deinit_the_window_somehow()
 
 	for window_open {
+		// in your main app loop
+		lui.begin(&ctx)
+		
+		// Relevent data has to be provided to ctx.mouse and ctx.keyboard, for example
+		ctx.mouse.position = get_mouse_position_somehow()
+		ctx.mouse.scroll = get_mouse_scroll_somehow()
+		// check out handle_events functions in example/main.odin file for more details
 
-		// all create_widget proc calls should be inside the begin_ui and end_ui
-		lui.begin_ui(&ctx)
+		// Resoruce such as animations, styles, overrides, clip, text must be explicitly created and reused.
 
-		// The id's are generated from the string + parent's hash.
-		// This means as children of different parents can have same id if their parent id differs.
-		// Useful for creating widgets like buttons as the button's body widget can have a unique id while all inner children can have same id's such as label or icon 
-		root := lui.create_widget(&ctx, "id root", lui.layout(lui.sizing(lui.fixed(window_width), lui.fixed(window_height))), style = lui.style(background_color)))
+		// ANIM_COLOR provided by the library, you can define your own anims 
+		anim_color := lui.create_animation(&ctx, ui.ANIM_COLOR, time.Millisecond * 250)
 
-		// Set a widget as parent. This is how the tree is constructed. Can also do if lui.push_parent(...) {defer lui.pop_parent() ...}
-		lui.push_parent(&ctx, root)
+		// Creates a style and returns a handle (index in ctx.styles array) to it
+		root_style := lui.create_style(&ctx, { ... }) 
+		root_style_hovered := ui.create_style(&ctx, { ... })
 
-		// Add more stuff inside the root. First widget is considered root and all other widgets MUST be children of root. Otherwise they'll probably simply not work
+		// Each widget must be explicitly reserved.
+		// Reservation does:
+		// - allocates a widget into the ctx.widgets array, adds the widget in the widget tree.
+		// - generates the widget hash and reads its properties such as size, position etc from the previous frame
+		// - returns an Info struct, from which user can read useful properties such as widget size, content size, scroll offset etc. 
+		root_info := lui.reserve_info(&ctx, "root_id")
 
-		// All parameters specified : ). 
-		lui.create_widget(
-			&ctx,
-			id = "example widget",
-			layout = lui.layout(lui.sizing(lui.grow(min=50, max=250), lui.fit(50, 700)), lui.alignment(.Negative, .Positive), child_gap = 16, direction = .Y),
-			override = lui.override(lui.flags(x = {}, y = {}), lui.offset(lui.fixed(50), lui.Percent_Self(0.5)), lui.expand(lui.percent(0.5), lui.fixed(50)), z_index = 100),
-			event_flag = {.Lock_Active, .Lock_Hover},
-			clip = lui.clip(lui.clip_custom(value = custom_clip_value, scale = 15), lui.clip_auto(scale = 15))
-			image = nil,
-			style = lui.style(color = {250,250,250,255}, padding = lui.axis_vec2f32({16, 16}, {8, 8}), border = lui.border(color = {28,28,28,255}, radius = {4,4,4,4}, thickness = lui.axis_vec2f32({2, 2}, {2, 2})))
-		)
+		// For each reserved widget you create a form struct and fill it in with required data. Note that form.layout.sizing must be always defined
+		// otherwise layout bugs will happen.
+		root_form := lui.Form{}
+		root_form.layout.sizing = lui.sizing(lui.fixed(window_size.x), lui.fixed(window_size.y)) // lui.sizing() for default layout
+		root_form.layout.padding = { x = {10, 10}, y = {20, 20}} // left right, top bottom
+		root_form.layout.maring = { ... } // same as padding. 
+		root_form.style = lui.is_widget_hovered(&ctx, root_info) ? root_style_hovered : root_style
+		root_form.anim = anim_color
 
+		// All event queries use Info struct of the widget. 
+		evs := lui.get_widget_events(&ctx, root_info, .Left) 
+		// .Clicked in evs, .Down in evs, .Double_Clicked in evs etc
+		
+		// After you've created the form and modified it based on events etc, you can submit the form.
+		// After submission this you should not modify the widget in any way. Unless you know what you are doing.
+		lui.submit_widget(&ctx, root_info, root_form)
+
+		lui.push_parent(&ctx, root_info)
+		// Children of root go here.
+		// A widget must be pushed as a parent after its been submitted, otherwise, there will be errors or bugs.
+		// Library assumes you'll submit children once only. So you cannot do [push a, add children, pop a, push b, add children, pop b, push a again ...]
+		// That will break the library. (intended by design, for faster perf)
 		lui.pop_parent(&ctx)
 
-		lui.end_ui(&ctx)
+		// lui.end will do the layout things (sizing, positioning), animations, events handling etc and emit render commands
+		// stores render commands in ctx.render_commands, render em yourself or use the sdl backend in za repo
+		lui.end(&ctx) 
 
 		render_the_commands_somehow(ctx)
 
