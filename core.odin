@@ -21,9 +21,9 @@ Color :: Vec4f32
 Hash :: distinct u64
 
 Rect :: struct {
-	position:     Vec2f32,
-	size:         Vec2f32,
-	content_size: Vec2f32,
+	position:      Vec2f32,
+	size:          Vec2f32,
+	content_size:  Vec2f32,
 	scroll_offset: Vec2f32,
 }
 
@@ -85,8 +85,8 @@ Clip_Info :: struct {
 }
 
 Clip :: struct {
-	info:  [2]Clip_Info,
-	hash:  Hash,
+	info: [2]Clip_Info,
+	hash: Hash,
 }
 
 Clip_Kind :: enum u8 {
@@ -149,10 +149,20 @@ Core_Context :: struct {
 }
 
 Timers :: struct {
-	frame_start:  time.Time,
-	layout_start: time.Time,
-	frame_time:   time.Duration,
-	layout_time:  time.Duration,
+	frame_start:        time.Time,
+	layout_start:       time.Time,
+	sizing_start:       time.Time,
+	word_wrap_start:    time.Time,
+	positioning_start:  time.Time,
+	frame_time:         time.Duration,
+	layout_time:        time.Duration,
+	sizing_time:        time.Duration,
+	word_wrap_time:     time.Duration,
+	positioning_time:   time.Duration,
+	sizing_fit_start:   [2]time.Time,
+	sizing_other_start: [2]time.Time,
+	sizing_fit_time:    [2]time.Duration,
+	sizing_other_time:  [2]time.Duration,
 }
 
 Lookup_Data :: struct {
@@ -222,6 +232,17 @@ submit_widget :: proc(ctx: ^Core_Context, info: Info, form: Form) {
 	ctx.persistant.curr_lookup[info.hash] = {
 		info = info,
 		form = form,
+	}
+
+	if widget.parent != -1 {
+		p := &ctx.widgets[widget.parent]
+		DETACH_FLAGS :: Layout_Flags{.No_Positioning, .No_Positioning_Relative}
+		if DETACH_FLAGS & form.layout.flags.x != {} {
+			p.detached_children.x += 1
+		}
+		if DETACH_FLAGS & form.layout.flags.y != {} {
+			p.detached_children.y += 1
+		}
 	}
 
 	if form.animation != 0 {ctx.persistant.curr_candids[widget.info.hash] = {}}
@@ -333,7 +354,11 @@ begin :: proc(ctx: ^Core_Context) {
 }
 
 end :: proc(ctx: ^Core_Context) {
+	ctx.timers.sizing_start = time.now()
 	_sizing_pass(ctx)
+	ctx.timers.sizing_time = time.diff(ctx.timers.sizing_start, time.now())
+	ctx.timers.positioning_start = time.now()
 	_positioning_pass(ctx)
+	ctx.timers.positioning_time = time.diff(ctx.timers.positioning_start, time.now())
 	_post_layout_pass(ctx)
 }

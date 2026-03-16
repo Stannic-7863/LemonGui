@@ -8,16 +8,16 @@ clip :: proc "contextless" (info_x, info_y: Clip_Info, hash: Hash = 0) -> Clip {
 	return Clip{info = {info_x, info_y}, hash = hash}
 }
 
-clip_none :: proc "contextless" () -> (Clip_Info) {
+clip_none :: proc "contextless" () -> Clip_Info {
 	return {}
 }
 
-clip_custom :: proc "contextless" (value: f32, scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> (Clip_Info) {
-	return {kind=.Custom, max=max, min=min, scale=scale, value=value}
+clip_custom :: proc "contextless" (value: f32, scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> Clip_Info {
+	return {kind = .Custom, max = max, min = min, scale = scale, value = value}
 }
 
-clip_auto :: proc "contextless" (scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> (Clip_Info) {
-	return {kind=.Auto, max=max, min=min, scale=scale}
+clip_auto :: proc "contextless" (scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> Clip_Info {
+	return {kind = .Auto, max = max, min = min, scale = scale}
 }
 
 override :: proc "contextless" (offset: [2]Override_Transform, expand: [2]Override_Transform) -> Override {
@@ -138,17 +138,20 @@ get_widget_mouse_events :: proc(ctx: ^Core_Context, info: Info, button: Mouse_Bu
 }
 
 is_widget_on_screen :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
-	return widget.rect.position.x + widget.rect.size.x < 0 ||
-		   widget.rect.position.y + widget.rect.size.y < 0 ||
-		   widget.rect.position.x > ctx.window_size.x ||
-		   widget.rect.position.y > ctx.window_size.y
+	p := widget.rect.position + widget.rect.scroll_offset
+	return p.x + widget.rect.size.x < 0 || p.y + widget.rect.size.y < 0 || p.x > ctx.window_size.x || p.y > ctx.window_size.y
 }
 
 is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style) -> bool {
 	border_radius := border_style.radius.zywx
 
+	comp := min(rect.size.x, rect.size.y) / 2
+	for &r in border_radius {
+		r = min(comp, r)
+	}
+
 	half_size := rect.size / 2
-	rel_pos := point - (rect.position + half_size)
+	rel_pos := point - (rect.position + rect.scroll_offset + half_size)
 
 	border_radius.xy = rel_pos.x > 0 ? border_radius.xy : border_radius.zw
 	border_radius.x = rel_pos.y > 0 ? border_radius.x : border_radius.y
@@ -221,7 +224,6 @@ get_widget :: #force_inline proc(ctx: ^Core_Context, index: Widget_Index) -> ^Wi
 }
 
 get_override :: #force_inline proc(ctx: ^Core_Context, range: Override_Range) -> []Override #no_bounds_check {
-	if range.start != range.end do fmt.println(range)
 	return ctx.overrides[range.start:range.end]
 }
 

@@ -149,12 +149,13 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 			state, ok := ctx.persistant.anim_states[prev_candid]
 			end := prev_anim.hooks.on_destroyed(prev_lookup.info, prev_style, prev_lookup.text_position)
 			start := Animation_Data{}
+			r := prev_lookup
 			if ok {start = state.now} else {start = {
 					rect  = prev_lookup.info.rect,
 					style = prev_style,
 				}}
 			state = Animation_State {
-				z_index    = prev_lookup.z_index,
+				z_index    = prev_lookup.z_index + prev_lookup.form.z_offset,
 				owner_hash = prev_candid,
 				end        = end,
 				start      = start,
