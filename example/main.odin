@@ -65,7 +65,7 @@ Perf_State :: struct {
 	samples:     [1000]Perf_Info,
 	sample_i:    int,
 	tick:        time.Duration,
-	record:      [60]Perf_Info,
+	record:      [120]Perf_Info,
 	record_i:    int,
 }
 
@@ -92,7 +92,7 @@ perf_state_update :: proc(ps: ^Perf_State, timers: ui.Timers) {
 		ps.sample_i = (ps.sample_i + 1) % len(ps.samples)
 	}
 
-	if ps.tick > time.Millisecond * 500 {
+	if ps.tick > time.Millisecond * 100 {
 		ps.tick = 0
 		n := time.Duration(max(ps.sample_i, 1))
 		acc := Perf_Info{}
@@ -203,7 +203,7 @@ bar_widget :: proc(ctp: ^ui.Core_Context, id: ui.Key, sty: Perf_Chart_Styles, re
 	bf := ui.Form{}
 	bf.layout.sizing = ui.sizing(ui.grow(), ui.percent(f32(rec) / f32(m)))
 	bf.style = ui.is_widget_hovered(ctp, b) ? sty.bar_hover : sty.bar
-	bf.animation = all_anim
+	// bf.animation = all_anim
 	ui.submit_widget(ctp, b, bf)
 
 	if ui.is_widget_hovered(ctp, b) {
@@ -216,7 +216,10 @@ bar_widget :: proc(ctp: ^ui.Core_Context, id: ui.Key, sty: Perf_Chart_Styles, re
 		tf.style = sty.tooltip
 		tf.animation = all_anim
 		tf.text = ui.create_text(ctp, ui.text(fmt.tprint(label, ": ", rec), .None))
-		ofs := [2]ui.Override_Transform{ui.fixed(b.rect.position.x + b.rect.size.x * 0.5 - t.rect.size.x * 0.5 + b.rect.scroll_offset.x), ui.fixed(b.rect.position.y + b.rect.size.y + 20 + b.rect.scroll_offset.y)}
+		ofs := [2]ui.Override_Transform {
+			ui.fixed(b.rect.position.x + b.rect.size.x * 0.5 - t.rect.size.x * 0.5 + b.rect.scroll_offset.x),
+			ui.fixed(b.rect.position.y + b.rect.size.y + 20 + b.rect.scroll_offset.y),
+		}
 		tf.override = ui.create_override(ctp, {offset = ofs})
 		ui.submit_widget(ctp, t, tf)
 	}
@@ -264,7 +267,7 @@ main :: proc() {
 	)
 	defer sdl_backend.de_init(&backend_ctx)
 
-	ctx := ui.init_context(0)
+	ctx := ui.init_context(0, 2048)
 	ctp := &ctx
 	defer ui.deinit_context(&ctx)
 

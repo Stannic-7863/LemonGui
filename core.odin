@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:container/lru"
 import "core:hash"
 import "core:time"
 
@@ -48,13 +49,6 @@ Text_Info :: struct {
 	lines_range: Range,
 }
 
-Style :: struct {
-	text:       Text_Style,
-	border:     Border_Style,
-	color:      Color,
-	image_tint: Color,
-}
-
 Text_Style :: struct {
 	color:          Color,
 	font_name:      string,
@@ -65,10 +59,24 @@ Text_Style :: struct {
 	line_spacing:   f32,
 }
 
+Text_Cache_Key :: struct {
+	word:           string,
+	font:           rawptr,
+	font_size:      f32,
+	letter_spacing: f32,
+}
+
 Border_Style :: struct {
 	color:     [4]Color,
 	thickness: [2]Vec2f32,
 	radius:    Vec4f32,
+}
+
+Style :: struct {
+	text:       Text_Style,
+	border:     Border_Style,
+	color:      Color,
+	image_tint: Color,
 }
 
 Key :: union {
@@ -176,19 +184,21 @@ Lookup_Data :: struct {
 }
 
 Persistant_Data :: struct {
+	// all prev curr pairs are swapped at the end of layout. The curr things are clear at frame start
 	prev_styles:  [dynamic]Style,
 	prev_anims:   [dynamic]Animation,
 	anim_states:  map[Hash]Animation_State,
+	prev_lookup:  map[Hash]Lookup_Data,
+	curr_lookup:  map[Hash]Lookup_Data,
+	clip:         map[Hash]Vec2f32,
 	prev_candids: map[Hash]struct{},
 	curr_candids: map[Hash]struct{},
-	prev_lookup:  map[Hash]Lookup_Data, // Swapped with curr_lookup at frame end
-	curr_lookup:  map[Hash]Lookup_Data, // Cleared at frame start
-	clip:         map[Hash]Vec2f32,
+	cached_words: lru.Cache(Text_Cache_Key, f32),
 }
 
-init_context :: proc(size: int) -> Core_Context {
+init_context :: proc(size: int, words_to_cache: int) -> Core_Context {
 	ctx: Core_Context
-	ctx.timers.frame_start = time.now()
+	lru.init(&ctx.persistant.cached_words, words_to_cache)
 	return ctx
 }
 
@@ -210,6 +220,7 @@ deinit_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.persistant.prev_lookup)
 	delete(ctx.persistant.prev_styles)
 	delete(ctx.persistant.clip)
+	lru.destroy(&ctx.persistant.cached_words, false)
 }
 
 reserve_widget :: proc(ctx: ^Core_Context, key: Key) -> Info {
@@ -350,10 +361,10 @@ begin :: proc(ctx: ^Core_Context) {
 
 	ctx.timers.frame_time = time.diff(ctx.timers.frame_start, time.now())
 	ctx.timers.frame_start = time.now()
-	ctx.timers.layout_start = time.now()
 }
 
 end :: proc(ctx: ^Core_Context) {
+	ctx.timers.layout_start = time.now()
 	ctx.timers.sizing_start = time.now()
 	_sizing_pass(ctx)
 	ctx.timers.sizing_time = time.diff(ctx.timers.sizing_start, time.now())
@@ -361,4 +372,5 @@ end :: proc(ctx: ^Core_Context) {
 	_positioning_pass(ctx)
 	ctx.timers.positioning_time = time.diff(ctx.timers.positioning_start, time.now())
 	_post_layout_pass(ctx)
+	ctx.timers.layout_time = time.diff(ctx.timers.layout_start, time.now())
 }

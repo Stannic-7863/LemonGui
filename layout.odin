@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:container/lru"
 import "core:time"
 import "core:unicode/utf8"
 
@@ -210,8 +211,6 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 }
 
 _post_layout_pass :: proc(ctx: ^Core_Context) {
-	ctx.timers.layout_time = time.diff(ctx.timers.frame_start, time.now())
-
 	ctx.persistant.prev_styles, ctx.styles = ctx.styles, ctx.persistant.prev_styles
 	ctx.persistant.prev_lookup, ctx.persistant.curr_lookup = ctx.persistant.curr_lookup, ctx.persistant.prev_lookup
 	ctx.persistant.prev_candids, ctx.persistant.curr_candids = ctx.persistant.curr_candids, ctx.persistant.prev_candids
@@ -462,7 +461,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 			widget.text_info.lines_range.start = i32(len(ctx.lines) - 1)
 			widget.text_info.lines_range.end = i32(len(ctx.lines))
 			y := ctx.measure_text_height(style.text)
-			widget.text_info.min_width = ctx.measure_text_width(text.text, style.text)
+			widget.text_info.min_width = _measure_text_width_cached(ctx, text.text, style.text)
 			widget.text_info.size = {widget.text_info.min_width, y}
 			widget.text_info.max_width = widget.text_info.min_width
 		}
@@ -481,7 +480,7 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, style: Text_Style) {
 		if r == '\n' {
 			if byte_index > word_start {
 				word := text.text[word_start:byte_index]
-				width := ctx.measure_text_width(word, style)
+				width := _measure_text_width_cached(ctx, word, style)
 				append(&ctx.measured_words, Measured_Word{string = word, width = width, start = word_start})
 			}
 			byte_index += size
@@ -510,7 +509,7 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, style: Text_Style) {
 		}
 
 		word := text.text[start:byte_index]
-		width := ctx.measure_text_width(word, style)
+		width := _measure_text_width_cached(ctx, word, style)
 		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before, start = start})
 		word_start = byte_index
 		spaces_before = 0
@@ -518,9 +517,27 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, style: Text_Style) {
 
 	if word_start < len(data) {
 		word := text.text[word_start:]
-		width := ctx.measure_text_width(word, style)
+		width := _measure_text_width_cached(ctx, word, style)
 		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before, start = word_start})
 	}
+}
+
+_measure_text_width_cached :: proc(ctx: ^Core_Context, word: string, style: Text_Style) -> f32 {
+	k := Text_Cache_Key {
+		font           = style.font,
+		font_size      = style.font_size,
+		letter_spacing = style.letter_spacing,
+		word           = word,
+	}
+
+	w, ok := lru.get(&ctx.persistant.cached_words, k)
+
+	if ok {return w} else {
+		w := ctx.measure_text_width(word, style)
+		lru.set(&ctx.persistant.cached_words, k, w)
+		return w
+	}
+	return 0
 }
 
 _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #no_bounds_check {
