@@ -68,7 +68,7 @@ main :: proc () {
 		root_form.anim = anim_color
 
 		// All event queries use Info struct of the widget. 
-		evs := lui.get_widget_events(&ctx, root_info, .Left) 
+		evs := lui.get_widget_mouse_events(&ctx, root_info, .Left) 
 		// .Clicked in evs, .Down in evs, .Double_Clicked in evs etc
 		
 		// After you've created the form and modified it based on events etc, you can submit the form.
