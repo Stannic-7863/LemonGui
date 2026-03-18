@@ -139,7 +139,7 @@ get_widget_mouse_events :: proc(ctx: ^Core_Context, info: Info, button: Mouse_Bu
 
 is_widget_on_screen :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
 	p := widget.rect.position + widget.rect.scroll_offset
-	return p.x + widget.rect.size.x < 0 || p.y + widget.rect.size.y < 0 || p.x > ctx.window_size.x || p.y > ctx.window_size.y
+	return !(p.x + widget.rect.size.x < 0 || p.y + widget.rect.size.y < 0 || p.x > ctx.window_size.x || p.y > ctx.window_size.y)
 }
 
 is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style) -> bool {

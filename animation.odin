@@ -74,10 +74,12 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 		switch state.type {
 		case .Destruction:
 			border := state.now.style.border
-			comp := min(state.now.rect.size.x, state.now.rect.size.y) / 2
-			for &r in border.radius {r = min(comp, r)}
-			_add_render_command(ctx, owner, Command_Rect{border = border, color = state.now.style.color}, state.now.rect, state.z_index)
-
+			for &r in border.radius {r = min(min(state.now.rect.size.x, state.now.rect.size.y) / 2, r)}
+			cmd := Render_Command{}
+			cmd.kind = Command_Rect{state.now.style.color, border}
+			cmd.rect = state.now.rect
+			cmd.z_index = state.z_index
+			append(&ctx.render_commands, cmd)
 		case .Creation, .Update:
 			lookup := ctx.persistant.curr_lookup[owner]
 			widget := get_widget(ctx, lookup.info.index)
@@ -157,8 +159,9 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 			start := Animation_Data{}
 			r := prev_lookup
 			if ok {start = state.now} else {start = {
-					rect  = prev_lookup.info.rect,
-					style = prev_style,
+					rect          = prev_lookup.info.rect,
+					style         = prev_style,
+					text_position = prev_lookup.text_position,
 				}}
 			start.rect.position += start.rect.scroll_offset
 			state = Animation_State {
@@ -173,9 +176,12 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 			}
 			ctx.persistant.anim_states[prev_candid] = state
 			border := state.now.style.border
-			comp := min(state.now.rect.size.x, state.now.rect.size.y) / 2
-			for &r in border.radius {r = min(comp, r)}
-			_add_render_command(ctx, prev_candid, Command_Rect{border = border, color = state.now.style.color}, state.now.rect, state.z_index)
+			for &r in border.radius {r = min(min(state.now.rect.size.x, state.now.rect.size.y) / 2, r)}
+			cmd := Render_Command{}
+			cmd.kind = Command_Rect{state.now.style.color, border}
+			cmd.rect = state.now.rect
+			cmd.z_index = state.z_index
+			append(&ctx.render_commands, cmd)
 		}
 	}
 }

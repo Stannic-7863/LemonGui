@@ -1,5 +1,6 @@
 package core_ui
 
+import "base:runtime"
 import "core:container/lru"
 import "core:hash"
 import "core:time"
@@ -108,7 +109,7 @@ Widget :: struct {
 	form:                    Form,
 	text_info:               Text_Info,
 	rect:                    Rect, // Info about current frame processed rect
-	total_children, z_index: int,
+	total_children:          int,
 	detached_children:       [2]int,
 	first, last, prev, next: Widget_Index,
 	parent, clip_parent:     Widget_Index,
@@ -136,15 +137,15 @@ Info :: struct {
 
 Core_Context :: struct {
 	active_parent:       Widget_Index,
-	overrides:           [dynamic]Override,
-	clips:               [dynamic]Clip,
 	text:                [dynamic]Text,
+	clips:               [dynamic]Clip,
 	anims:               [dynamic]Animation,
-	styles:              [dynamic]Style,
-	temp:                [dynamic]^Widget,
-	growable:            [dynamic]Growable,
-	widgets:             [dynamic]Widget,
 	lines:               [dynamic]string,
+	styles:              [dynamic]Style,
+	widgets:             [dynamic]Widget,
+	growable:            [dynamic]Growable,
+	overrides:           [dynamic]Override,
+	clip_stack:          [dynamic]Widget_Index,
 	render_commands:     [dynamic]Render_Command,
 	measured_words:      [dynamic]Measured_Word,
 	persistant:          Persistant_Data,
@@ -154,7 +155,6 @@ Core_Context :: struct {
 	keyboard:            Keyboard_Context,
 	window_size:         Vec2f32,
 	timers:              Timers,
-	z_offset_increment:  int,
 }
 
 Timers :: struct {
@@ -197,30 +197,61 @@ Persistant_Data :: struct {
 	cached_words: lru.Cache(Text_Cache_Key, f32),
 }
 
-init_context :: proc(size: int, words_to_cache: int) -> Core_Context {
+init_context :: proc(size: int, words_to_cache: int, allocator: runtime.Allocator) -> Core_Context {
 	ctx: Core_Context
-	lru.init(&ctx.persistant.cached_words, words_to_cache)
+	lru.init(&ctx.persistant.cached_words, words_to_cache, allocator, allocator)
+
+	ctx.text = make([dynamic]Text, allocator)
+	ctx.clips = make([dynamic]Clip, allocator)
+	ctx.anims = make([dynamic]Animation, allocator)
+	ctx.lines = make([dynamic]string, allocator)
+	ctx.styles = make([dynamic]Style, allocator)
+	ctx.widgets = make([dynamic]Widget, allocator)
+	ctx.growable = make([dynamic]Growable, allocator)
+	ctx.overrides = make([dynamic]Override, allocator)
+	ctx.clip_stack = make([dynamic]Widget_Index, allocator)
+	ctx.render_commands = make([dynamic]Render_Command, allocator)
+	ctx.measured_words = make([dynamic]Measured_Word, allocator)
+
+	ctx.persistant.prev_styles = make([dynamic]Style, allocator)
+	ctx.persistant.prev_anims = make([dynamic]Animation, allocator)
+
+	ctx.persistant.anim_states = make(map[Hash]Animation_State, allocator)
+	ctx.persistant.prev_lookup = make(map[Hash]Lookup_Data, allocator)
+	ctx.persistant.curr_lookup = make(map[Hash]Lookup_Data, allocator)
+
+	ctx.persistant.clip = make(map[Hash]Vec2f32, allocator)
+
+	ctx.persistant.prev_candids = make(map[Hash]struct{}, allocator)
+	ctx.persistant.curr_candids = make(map[Hash]struct{}, allocator)
+
 	return ctx
 }
 
 deinit_context :: proc(ctx: ^Core_Context) {
-	delete(ctx.temp)
-	delete(ctx.lines)
+	delete(ctx.text)
 	delete(ctx.clips)
+	delete(ctx.anims)
+	delete(ctx.lines)
 	delete(ctx.styles)
 	delete(ctx.widgets)
 	delete(ctx.growable)
 	delete(ctx.overrides)
-	delete(ctx.measured_words)
+	delete(ctx.clip_stack)
 	delete(ctx.render_commands)
-	delete(ctx.anims)
-	delete(ctx.text)
+	delete(ctx.measured_words)
+
+	delete(ctx.persistant.prev_styles)
+	delete(ctx.persistant.prev_anims)
 
 	delete(ctx.persistant.anim_states)
-	delete(ctx.persistant.curr_lookup)
 	delete(ctx.persistant.prev_lookup)
-	delete(ctx.persistant.prev_styles)
+	delete(ctx.persistant.curr_lookup)
+
 	delete(ctx.persistant.clip)
+
+	delete(ctx.persistant.prev_candids)
+	delete(ctx.persistant.curr_candids)
 	lru.destroy(&ctx.persistant.cached_words, false)
 }
 
@@ -238,25 +269,19 @@ reserve_widget :: proc(ctx: ^Core_Context, key: Key) -> Info {
 submit_widget :: proc(ctx: ^Core_Context, info: Info, form: Form) {
 	widget := get_widget(ctx, info.index)
 
-	widget.z_index += ctx.z_offset_increment
-	ctx.z_offset_increment += 5 // a widget can atmost emit 5 commands
-
 	ctx.persistant.curr_lookup[info.hash] = {
 		info = info,
 		form = form,
 	}
 
 	if widget.parent != -1 {
-		p := &ctx.widgets[widget.parent]
+		parent := &ctx.widgets[widget.parent]
 		DETACH_FLAGS :: Layout_Flags{.No_Positioning, .No_Positioning_Relative}
 		if DETACH_FLAGS & form.layout.flags.x != {} {
-			p.detached_children.x += 1
+			parent.detached_children.x += 1
 		}
 		if DETACH_FLAGS & form.layout.flags.y != {} {
-			p.detached_children.y += 1
-		}
-		if p.form.clip != 0 {
-			widget.clip_parent = p.info.index
+			parent.detached_children.y += 1
 		}
 	}
 
@@ -274,6 +299,7 @@ _get_new_widget :: proc(ctx: ^Core_Context) -> ^Widget {
 
 	widget.info.index = widget_index
 	widget.parent = ctx.active_parent
+	widget.clip_parent = -1
 	widget.first = -1
 	widget.last = -1
 	widget.next = -1
@@ -297,9 +323,11 @@ _add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
 		}
 
 		parent.last = widget.info.index
-		widget.z_index += parent.form.z_offset
-		widget.clip_parent = parent.clip_parent
 		widget.info.parent_hash = parent.info.hash
+		widget.clip_parent = parent.clip_parent
+		if parent.form.clip != 0 {
+			widget.clip_parent = parent.info.index
+		}
 	}
 }
 
@@ -329,7 +357,6 @@ _write_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 	data.text_position = widget.text_info.position
 	data.text_min_width = widget.text_info.min_width
 	data.text_max_width = widget.text_info.max_width
-	data.z_index = widget.z_index
 }
 
 push_parent :: proc(ctx: ^Core_Context, info: Info) {
@@ -342,7 +369,6 @@ pop_parent :: proc(ctx: ^Core_Context) {
 
 begin :: proc(ctx: ^Core_Context) {
 	ctx.active_parent = -1
-	ctx.z_offset_increment = 0
 	clear(&ctx.lines)
 	clear(&ctx.widgets)
 	clear(&ctx.render_commands)
@@ -360,7 +386,7 @@ begin :: proc(ctx: ^Core_Context) {
 	append(&ctx.overrides, Override{})
 	append(&ctx.anims, Animation{})
 
-	clear(&ctx.temp)
+	clear(&ctx.clip_stack)
 	clear(&ctx.persistant.curr_lookup)
 	clear(&ctx.persistant.curr_candids)
 

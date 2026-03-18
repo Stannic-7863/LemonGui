@@ -126,16 +126,17 @@ container :: proc(
 	direction := ui.Axis.Y,
 	placement := [2]ui.Placement{.Negative, .Negative},
 	clip := bit_set[ui.Axis]{},
+	min_size := ui.Vec2f32{}
 ) {
 	cont := ui.reserve_widget(ctp, id)
 	contf := ui.Form{}
-	contf.layout.sizing = ui.sizing(ui.grow(), ui.grow())
+	contf.layout.sizing = ui.sizing(ui.grow(min_size.x), ui.grow(min_size.y))
 	contf.layout.padding = PAD_S
 	contf.layout.child_gap = GAP_S
 	contf.layout.placement = placement
 	contf.layout.direction = direction
 	contf.style = style
-	x := ui.clip_auto(50, max = 0) if .X in clip else ui.clip_none()
+	x := ui.clip_auto(50, max = 0, min = -(cont.rect.content_size.x - cont.rect.size.x)) if .X in clip else ui.clip_none()
 	y := ui.clip_auto(50, max = 0, min = -(cont.rect.content_size.y - cont.rect.size.y)) if .Y in clip else ui.clip_none()
 	contf.clip = ui.create_clip(ctp, ui.clip(x, y, cont.hash))
 	contf.animation = all_anim
@@ -262,12 +263,11 @@ main :: proc() {
 		"ui debug",
 		"./backend/sdl_gpu/shaders/compiled/main.vert.sprv",
 		"./backend/sdl_gpu/shaders/compiled/main.frag.sprv",
-		"./backend/sdl_gpu/shaders/compiled/stencil.vert.sprv",
-		"./backend/sdl_gpu/shaders/compiled/stencil.frag.sprv",
+		context.allocator
 	)
 	defer sdl_backend.de_init(&backend_ctx)
 
-	ctx := ui.init_context(0, 2048)
+	ctx := ui.init_context(0, 2048, context.allocator)
 	ctp := &ctx
 	defer ui.deinit_context(&ctx)
 
@@ -287,7 +287,7 @@ main :: proc() {
 	font_40 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 40)
 	defer sdl_backend.de_init_font(&backend_ctx)
 
-	selected_tab := Tab.Performance
+	selected_tab := Tab.Clips
 	perf := Perf_State{}
 
 	for handle_events(ctp, &backend_ctx) {
@@ -336,7 +336,7 @@ main :: proc() {
 			bar       = s_colors[3],
 			bar_hover = s_colors[2],
 			tooltip   = s_card_2,
-			text 	  = s_labelnobg,
+			text      = s_labelnobg,
 			col_a     = s_colors[0],
 			col_b     = s_colors[1],
 		}
@@ -793,6 +793,22 @@ main :: proc() {
 			}
 			ui.pop_parent(ctp)
 			ui.pop_parent(ctp)
+			row(ctp, "clip row nested clips", s_card, min_height = 256)
+			container(ctp, "scroll x", s_card_2, .Y, clip = {.Y})
+			for c in 0 ..< 5 {
+				container(ctp, c, s_card_3, .X, clip = {.X}, min_size = {0, 256})
+				for s, i in s_colors {
+					w := ui.reserve_widget(ctp, i)
+					wf := ui.Form{}
+					wf.layout.sizing = ui.sizing(ui.fixed(400), ui.grow())
+					wf.style = s
+					wf.animation = all_anim
+					ui.submit_widget(ctp, w, wf)
+				}
+				ui.pop_parent(ctp)
+			}
+			ui.pop_parent(ctp)
+			ui.pop_parent(ctp)
 		case .Interaction:
 			@(static) counter_a: int
 			@(static) counter_b: int
@@ -1147,7 +1163,6 @@ main :: proc() {
 
 		ui.pop_parent(ctp)
 		ui.end(ctp)
-
 		perf_state_update(&perf, ctp.timers)
 		sdl_backend.render(&backend_ctx, &ctx)
 	}

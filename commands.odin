@@ -10,11 +10,10 @@ Render_Command_Kind :: union {
 }
 
 Render_Command :: struct {
-	kind:              Render_Command_Kind,
-	rect:              Rect,
-	z_index:           int,
-	emitter_hash:      Hash,
-	emitter_string_id: Key,
+	kind:         Render_Command_Kind,
+	rect:         Rect,
+	z_index:      int,
+	emitter_hash: Hash,
 }
 
 Command_Rect :: struct {
@@ -42,57 +41,91 @@ Command_Custom :: struct {
 	data: rawptr,
 }
 
-_emit_render_commands :: proc(ctx: ^Core_Context, widget: ^Widget, active_clip: ^^Widget) {
-	style := get_style(ctx, widget.form.style)
-	widget_clip := ctx.clips[widget.form.clip]
+_emit_render_commands :: proc(ctx: ^Core_Context) {
+	active_clip := Widget_Index(-1)
+	z_offset := 0
+	for i := 0; i < len(ctx.widgets) && i != -1; {
+		widget := get_widget(ctx, Widget_Index(i))
 
-	if widget_clip.info.x.kind != .None || widget_clip.info.y.kind != .None {
-		if active_clip^ != nil {
-			append(&ctx.temp, active_clip^)
-		}
-		if widget.first != -1 {
-			active_clip^ = widget
-			_add_render_command(ctx, widget.info.hash, Command_Clip_Start{border_radius = style.border.radius}, widget.rect, widget.z_index + widget.form.z_offset)
-		}
-	}
-
-	border := style.border
-	comp := min(widget.rect.size.x, widget.rect.size.y) / 2
-	for &r in border.radius {r = min(comp, r)}
-	_add_render_command(ctx, widget.info.hash, Command_Rect{border = border, color = style.color}, widget.rect, widget.z_index + widget.form.z_offset + 1)
-
-	if widget.form.image != nil {
-		_add_render_command(ctx, widget.info.hash, Command_Image{data = widget.form.image, tint = style.image_tint}, widget.rect, widget.z_index + widget.form.z_offset + 2)
-	}
-
-	if widget.form.text != 0 {
-		text := get_text(ctx, widget.form.text)
-		lines := ctx.lines[widget.text_info.lines_range.start:widget.text_info.lines_range.end]
-		cmd := Command_Text {
-			lines = lines,
-			style = style.text,
-		}
-		rect := widget.rect
-		rect.position = widget.text_info.position
-		rect.size = widget.text_info.size + {_get_axis_spacing(.X, widget.form.layout.padding), _get_axis_spacing(.Y, widget.form.layout.padding)}
-		_add_render_command(ctx, widget.info.hash, cmd, rect, widget.z_index + widget.form.z_offset + 3)
-	}
-
-	if widget.next == -1 && widget.first == -1 {
-		for parent_index := widget.parent; parent_index != -1; {
-			parent := &ctx.widgets[parent_index]
-			parent_index = parent.parent
-			if parent == active_clip^ {
-				_add_render_command(ctx, parent.info.hash, Command_Clip_End{}, parent.rect, widget.z_index + widget.form.z_offset + 4)
-				active_clip^, _ = pop_safe(&ctx.temp)
-				break
+		if !is_widget_on_screen(ctx, widget) {
+			j := widget.next
+			p: ^Widget
+			if widget.parent != -1 {p = get_widget(ctx, widget.parent)}
+			for (j == -1 && p != nil) {
+				j = p.next
+				if p.parent == -1 {break}
+				p = get_widget(ctx, p.parent)
 			}
-			if parent.next != -1 {break}
+			i = int(j)
+			continue
 		}
+
+		style := get_style(ctx, widget.form.style)
+		target := widget.clip_parent
+
+		for len(ctx.clip_stack) > 0 && ctx.clip_stack[len(ctx.clip_stack) - 1] != target {
+			parent := get_widget(ctx, pop(&ctx.clip_stack))
+			cmd := Render_Command{}
+			cmd.emitter_hash = parent.info.hash
+			cmd.kind = Command_Clip_End{}
+			cmd.rect = parent.rect
+			cmd.z_index = z_offset + parent.form.z_offset
+			append(&ctx.render_commands, cmd)
+			z_offset += 1
+		}
+
+		cmd := Render_Command{}
+		cmd.emitter_hash = widget.info.hash
+		cmd.rect = widget.rect
+		cmd.z_index = z_offset
+
+		if widget.form.clip != 0 && widget.first != -1 {
+			_add_render_command(ctx, &cmd, Command_Clip_Start{style.border.radius}, widget.form.z_offset)
+			z_offset += 1
+			append(&ctx.clip_stack, widget.info.index)
+		}
+
+		border := style.border
+		for &r in border.radius {r = min(min(widget.rect.size.x, widget.rect.size.y) / 2, r)}
+		_add_render_command(ctx, &cmd, Command_Rect{style.color, border}, widget.form.z_offset)
+		z_offset += 1
+
+		if widget.form.image != nil {
+			_add_render_command(ctx, &cmd, Command_Image{widget.form.image, style.image_tint}, widget.form.z_offset)
+			z_offset += 1
+		}
+
+		if widget.form.text != 0 {
+			cmd.kind = Command_Text{style.text, ctx.lines[widget.text_info.lines_range.start:widget.text_info.lines_range.end]}
+			t_cmd := cmd
+			t_cmd.rect.position = widget.text_info.position
+			t_cmd.rect.size = widget.text_info.size + {_get_axis_spacing(.X, widget.form.layout.padding), _get_axis_spacing(.Y, widget.form.layout.padding)}
+			t_cmd.z_index += widget.form.z_offset
+			append(&ctx.render_commands, t_cmd)
+			cmd.z_index += 1
+			z_offset += 1
+		}
+		i += 1
+	}
+
+	for len(ctx.clip_stack) > 0 {
+		widget := get_widget(ctx, pop(&ctx.clip_stack))
+		cmd := Render_Command{}
+		cmd.emitter_hash = widget.info.hash
+		cmd.rect = widget.rect
+		cmd.z_index = z_offset + widget.form.z_offset
+		cmd.kind = Command_Clip_End{}
+		append(&ctx.render_commands, cmd)
+		z_offset += 1
 	}
 }
 
-_add_render_command :: proc(ctx: ^Core_Context, hash: Hash, kind: Render_Command_Kind, rect: Rect, z_index: int) {
-	append(&ctx.render_commands, Render_Command{kind = kind, z_index = z_index, rect = rect, emitter_hash = hash})
+_add_render_command :: proc(ctx: ^Core_Context, cmd: ^Render_Command, kind: Render_Command_Kind, offset: int) {
+	cmd.kind = kind
+	t := cmd.z_index
+	cmd.z_index += offset
+	append(&ctx.render_commands, cmd^)
+	cmd.z_index = t
+	cmd.z_index += 1
 	return
 }

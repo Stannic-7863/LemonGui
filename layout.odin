@@ -139,7 +139,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	root.rect.position += {root_offset_x, root_offset_y} + {root_clip_x, root_clip_y}
 	root.rect.size += {root_expand_x, root_expand_y}
 
-	for &widget in ctx.widgets {
+	positioning_loop: for &widget, i in ctx.widgets {
 		_position_layout_widget_children(ctx, &widget)
 
 		widget_style := get_style(ctx, widget.form.style)
@@ -147,20 +147,19 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 		if is_point_in_rect(widget.rect, ctx.mouse.position, widget_style.border) &&
 		   .Disable_Hover not_in widget.form.event_flags &&
-		   !ctx.mouse.hover_is_locked &&
-		   widget.z_index >= hovered_z_index {
+		   !ctx.mouse.hover_is_locked {
 
-			if widget.clip_parent != 0 {
-				clip_parent := get_widget(ctx, widget.clip_parent)
-				if !is_point_in_rect(clip_parent.rect, ctx.mouse.position, get_style(ctx, clip_parent.form.style).border) {continue}
+			for p := widget.clip_parent; p != -1; {
+				clip_parent := get_widget(ctx, p)
+				p = clip_parent.parent
+				if !is_point_in_rect(clip_parent.rect, ctx.mouse.position, get_style(ctx, clip_parent.form.style).border) {continue positioning_loop}
 			}
 
 			widget_clip := ctx.clips[widget.form.clip]
 			if widget_clip.info.x.kind != .None || widget_clip.info.y.kind != .None {
 				ctx.mouse.hovered_clip = widget_clip.hash
 			}
-			hovered_z_index = widget.z_index
-
+			hovered_z_index = i
 			ctx.mouse.hovered = widget.info.hash
 			ctx.mouse.can_lock_active = .Lock_Active in widget.form.event_flags
 			ctx.mouse.can_lock_hover = .Lock_Hover in widget.form.event_flags
@@ -182,27 +181,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	}
 
 	_resolve_animations(ctx)
-
-	active_clip: ^Widget
-	for i := 0; i < len(ctx.widgets) && i != -1; {
-		widget := get_widget(ctx, Widget_Index(i))
-
-		if is_widget_on_screen(ctx, widget) {
-			j := widget.next
-			p: ^Widget
-			if widget.parent != -1 {p = get_widget(ctx, widget.parent)}
-			for (j == -1 && p != nil) {
-				j = p.next
-				if p.parent == -1 {break}
-				p = get_widget(ctx, p.parent)
-			}
-			i = int(j)
-			continue
-		}
-		_emit_render_commands(ctx, widget, &active_clip)
-		i += 1
-	}
-
+	_emit_render_commands(ctx)
 	sort_render_commands(ctx.render_commands[:])
 	_resolve_events(ctx)
 

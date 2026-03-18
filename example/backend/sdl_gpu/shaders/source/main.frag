@@ -1,5 +1,16 @@
 #version 460
 
+struct Clip {
+    vec4 position_and_size;
+    vec4 radius;
+};
+
+layout(set = 2, binding = 0) uniform sampler2D font_sampler;
+layout(set = 2, binding = 1) readonly buffer Clips { Clip clips[];};
+layout(set = 2, binding = 2) readonly buffer Clips_Indices {int clips_indices[];};
+
+layout(origin_upper_left) in vec4 gl_FragCoord;
+
 layout(location = 0) in vec4 in_color;
 layout(location = 1) in vec4 in_radius;
 layout(location = 2) in vec4 in_border_thickness;
@@ -7,8 +18,6 @@ layout(location = 3) in vec2 in_size;
 layout(location = 4) in vec2 in_uv;
 layout(location = 5) in vec4 in_border_color[4];
 layout(location = 9) flat in ivec4 in_flags;
-
-layout(set = 2, binding = 0) uniform sampler2D font_sampler;
 
 layout(location = 0) out vec4 out_color;
 
@@ -58,7 +67,26 @@ float sdf_inner_rect(vec2 pos, vec2 half_size, vec4 thickness,
 
     return sdf_rect(pos - offset, inner_half, rad_inner);
 }
+
+float sdf_clip_rect(vec2 frag_pos, vec4 pos_size, vec4 radius) {
+    vec2 center = pos_size.xy + pos_size.zw * 0.5;
+    vec2 half_size = pos_size.zw * 0.5;
+    vec2 p = frag_pos - center;
+    float r = rect_select_side(p, radius);
+    vec2 q = abs(p) - half_size + r;
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+
 void main() {
+    if (in_flags.z > 0) {
+        for (int i = 0; i < in_flags.z; i++) {
+            int idx = clips_indices[in_flags.y + i];
+            Clip clip = clips[idx];
+            float d = sdf_clip_rect(gl_FragCoord.xy, clip.position_and_size, clip.radius);
+            if (d > 0.0) discard;
+        }
+    }
+
     if (in_flags.x == 0) {
         vec2 h_size = in_size * 0.5;
         vec2 s_pos = in_uv * in_size - h_size;
@@ -71,7 +99,6 @@ void main() {
         float fill_mask = smoothstep(aa, -aa, sdf_inner);
         float border_mask = smoothstep(-aa, aa, sdf_inner);
 
-        // premultiply
         vec4 fill_col = vec4(in_color.rgb * in_color.a, in_color.a);
 
         vec4 border_col = rect_get_blended_border_color(s_pos, h_size);
