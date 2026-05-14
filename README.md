@@ -11,6 +11,11 @@ Chass chao 👍 (means to have fun in the present moment, in my native language)
 - [x] Animations
 - [x] Decently fast
 
+## Todo:
+- [ ] Refactor the animations and commands so they are nicer to work with. (Allow custom command injection at some point?)
+- [ ] Text selection api and perhaps rich text as well, or someway to integrate different types of text's etc in the layout
+- [ ] Overhaul the event system 
+
 # Example usage 
 
 > API is experimental. Refer to files in example/ directory for latest API. 

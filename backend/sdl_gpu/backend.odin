@@ -1,7 +1,7 @@
 package sdl_gpu_backend
 
 import "base:runtime"
-import ui "./../../../"
+import ui "./../../"
 import "vendor:sdl3/ttf"
 
 import "core:fmt"
@@ -62,7 +62,7 @@ init :: proc(window_title: cstring, vert_path, frag_path: string, allocator: run
 	assert(sdl.Init({.VIDEO}))
 
 	window := sdl.CreateWindow(window_title, 800, 600, {.RESIZABLE})
-	gpu := sdl.CreateGPUDevice({.SPIRV}, true, nil)
+	gpu := sdl.CreateGPUDevice({.SPIRV}, false, nil)
 	assert(sdl.ClaimWindowForGPUDevice(gpu, window))
 
 	vert_shader := load_shader(gpu, vert_path, .VERTEX, {.SPIRV}, 1, 0, 1)
@@ -289,8 +289,8 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 		switch cmd_kind in cmd.kind {
 		case ui.Command_Rect:
 			r := Gpu_Render_Command{}
-			r.f1 = cmd_kind.border.radius
-			r.f2 = ui.vec4f32_axis(cmd_kind.border.thickness)
+			r.f1 = cmd_kind.border.radius.wzyx
+			r.f2 = ui.vec4f32_to_axis(cmd_kind.border.thickness)
 			r.color = cmd_kind.color / 255
 			r.border_color = cmd_kind.border.color / 255
 			r.position_and_size.xy = cmd.rect.position
@@ -316,16 +316,8 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 		case ui.Command_Image:
 		case ui.Command_Custom:
 		case ui.Command_Text:
-			line_offset: f32
-			text_height := measure_text_height(cmd_kind.style)
 			for line in cmd_kind.lines {
-				defer line_offset += text_height + cmd_kind.style.line_spacing
-
-				if line_offset + cmd.rect.position.y + text_height < 0 || (line_offset + cmd.rect.position.y) > f32(backend_ctx.window_size.y) {
-					continue
-				}
-
-				text := ttf.CreateText(backend_ctx.font_engine, cast(^ttf.Font)cmd_kind.style.font, cast(cstring)raw_data(line), len(line))
+				text := ttf.CreateText(backend_ctx.font_engine, cast(^ttf.Font)cmd_kind.style.font, cast(cstring)raw_data(line.line), len(line.line))
 				defer ttf.DestroyText(text)
 				draw_data := ttf.GetGPUTextDrawData(text)
 
@@ -354,7 +346,7 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 						width := x_max - x_min
 						height := y_max - y_min
 
-						position := cmd.rect.position + {x_min, -y_min + line_offset}
+						position := line.position + {x_min, -y_min}
 
 						index := len(backend_ctx.render_commands)
 
@@ -432,4 +424,22 @@ measure_text_width :: proc(text: string, style: ui.Text_Style) -> f32 {
 measure_text_height :: proc(style: ui.Text_Style) -> f32 {
 	font := cast(^ttf.Font)(style.font)
 	return f32(ttf.GetFontHeight(font))
+}
+
+measure_text_hover_index :: proc(text: string, point: Vec2f32, style: ui.Text_Style, user_data: rawptr) -> (int) {
+	engine := cast(^ttf.TextEngine)user_data
+	font := cast(^ttf.Font)style.font
+
+	if engine == nil || font == nil { return 0 }
+
+	text := ttf.CreateText(engine, font, cast(cstring)raw_data(text), uint(len(text)))
+	defer ttf.DestroyText(text)
+	if text == nil { return 0 }
+
+	substring: ttf.SubString
+	if ttf.GetTextSubStringForPoint(text, i32(point.x), 0, &substring) {
+		return int(substring.offset)
+	}
+
+	return 0
 }

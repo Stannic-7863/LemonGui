@@ -87,7 +87,7 @@ Growable :: struct {
 }
 
 Measured_Word :: struct {
-	string: string,
+	word: string,
 	spaces: int,
 	start:  int,
 	width:  f32,
@@ -116,28 +116,12 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	prev_hovered, prev_active := ctx.mouse.hovered, ctx.mouse.active
 
 	ctx.mouse.active_disabled = false
+	ctx.mouse.hovered_character_index = -1
 	if !ctx.mouse.hover_is_locked {ctx.mouse.hovered = 0}
 	if !ctx.mouse.active_is_locked {ctx.mouse.active = 0}
 
-	hovered_z_index: int = -1
-
-	root := get_widget(ctx, 0)
-	root_overrides := get_override(ctx, root.form.override)
-	root_expand_x, root_expand_y, root_offset_x, root_offset_y := f32(0), f32(0), f32(0), f32(0)
-
-	for root_override in root_overrides {
-		root_offset_x += _get_override_transform_value(root_override.offset, root.rect.size, 0, .X)
-		root_offset_y += _get_override_transform_value(root_override.offset, root.rect.size, 0, .Y)
-
-		root_expand_x += _get_override_transform_value(root_override.expand, root.rect.size, 0, .X)
-		root_expand_y += _get_override_transform_value(root_override.expand, root.rect.size, 0, .Y)
-	}
-
-	root_clip_x := _get_clip_value(ctx, root, .X)
-	root_clip_y := _get_clip_value(ctx, root, .Y)
-
-	root.rect.position += {root_offset_x, root_offset_y} + {root_clip_x, root_clip_y}
-	root.rect.size += {root_expand_x, root_expand_y}
+	hovered_z_index := -1
+	hovered_widget := (^Widget)(nil)
 
 	positioning_loop: for &widget, i in ctx.widgets {
 		_position_layout_widget_children(ctx, &widget)
@@ -155,6 +139,8 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 				if !is_point_in_rect(clip_parent.rect, ctx.mouse.position, get_style(ctx, clip_parent.form.style).border) {continue positioning_loop}
 			}
 
+			hovered_widget = &widget
+
 			widget_clip := ctx.clips[widget.form.clip]
 			if widget_clip.info.x.kind != .None || widget_clip.info.y.kind != .None {
 				ctx.mouse.hovered_clip = widget_clip.hash
@@ -167,6 +153,42 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		}
 	}
 
+	if ctx.mouse.active == 0 && ctx.mouse.mapped_events != {} {
+		ctx.mouse.active = prev_active
+	}
+
+	if hovered_widget == nil { return }
+	if hovered_widget.form.text == 0 { return }
+	text := get_text(ctx, hovered_widget.form.text)
+	style := get_style(ctx, hovered_widget.form.style)
+	height := ctx.measure_text_height(style.text)
+	spacing := style.text.line_spacing
+	lines := ctx.lines[hovered_widget.text_info.lines_range.start:hovered_widget.text_info.lines_range.end]
+	for line in lines {
+		if ctx.mouse.position.y - spacing < line.position.y || ctx.mouse.position.y > line.position.y + height + spacing { continue }
+		_get_measured_words(ctx, line.line, style.text)
+		space_width := ctx.measure_text_width(" ", style.text)
+		accumulated_width := f32(0)
+		for w in ctx.measured_words {
+			if ctx.mouse.position.x >= line.position.x + accumulated_width && ctx.mouse.position.x <= line.position.x + accumulated_width + w.width {
+				p := line.position.x + accumulated_width
+				index := ctx.measure_text_hover_index(w.word, ctx.mouse.position - line.position - {accumulated_width, 0}, style.text, text.user_data)
+				if index != -1 {
+					ctx.mouse.hovered_character, _ = utf8.decode_rune_in_string(w.word[index:])
+					ctx.mouse.hovered_character_index = w.start + index + line.start
+				} else {
+					ctx.mouse.hovered_character = ' '
+					ctx.mouse.hovered_character_index = 0
+				}
+				break
+			}
+			accumulated_width += w.width + f32(w.spaces) * space_width
+	 	}
+		clear(&ctx.measured_words)
+	}
+}
+
+_post_layout_pass :: proc(ctx: ^Core_Context) {
 	for &clip in ctx.clips {
 		if ctx.mouse.hovered_clip == clip.hash {
 			for &info in clip.info {
@@ -177,24 +199,27 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 				info.value = min(info.max, info.value)
 			}
 		}
-		ctx.persistant.clip[clip.hash] = {clip.info.x.value, clip.info.y.value}
+		ctx.persistant.clips[clip.hash] = {clip.info.x.value, clip.info.y.value}
 	}
 
+	for &selection in ctx.selections {
+		selection_persistant, ok := &ctx.persistant.selections[selection.hash]
+		if !ok {
+			ctx.persistant.selections[selection.hash] = {}
+			selection_persistant = &ctx.persistant.selections[selection.hash]
+		}
+		selection_persistant.cursor = selection.cursor
+		selection_persistant.anchor = selection.anchor
+	}
+
+	_resolve_events(ctx)
 	_resolve_animations(ctx)
 	_emit_render_commands(ctx)
 	sort_render_commands(ctx.render_commands[:])
-	_resolve_events(ctx)
-
-	if ctx.mouse.active == 0 && ctx.mouse.mapped_events != {} {
-		ctx.mouse.active = prev_active
-	}
 
 	ctx.mouse.hovered_clip = 0
 	ctx.mouse.mapped_events = {}
 	ctx.keyboard.mapped_events = {}
-}
-
-_post_layout_pass :: proc(ctx: ^Core_Context) {
 	ctx.persistant.prev_styles, ctx.styles = ctx.styles, ctx.persistant.prev_styles
 	ctx.persistant.prev_lookup, ctx.persistant.curr_lookup = ctx.persistant.curr_lookup, ctx.persistant.prev_lookup
 	ctx.persistant.prev_candids, ctx.persistant.curr_candids = ctx.persistant.curr_candids, ctx.persistant.prev_candids
@@ -389,7 +414,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 		switch text.wrap_mode {
 		case .Words:
 			style := ctx.styles[widget.form.style]
-			_get_measured_words(ctx, text^, style.text)
+			_get_measured_words(ctx, text.text, style.text)
 			defer clear(&ctx.measured_words)
 
 			size: Vec2f32
@@ -406,10 +431,10 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 
 			for word, index in ctx.measured_words {
 				maximum_width += word.width + f32(word.spaces) * space_width
-				if word.string == "\n" {
+				if word.word == "\n" {
 					size.x = max(acc_size.x, size.x)
+					append(&ctx.lines, Text_Line{line = text.text[new_line_index:word.start], start = new_line_index, end = word.start, width = acc_size.x})
 					acc_size.x = 0
-					append(&ctx.lines, text.text[new_line_index:word.start])
 					new_line_index = word.start
 					if index == len(ctx.measured_words) - 1 {
 						acc_size.y += (text_height + style.text.line_spacing)
@@ -420,8 +445,8 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 				acc_size.x += space_width * f32(word.spaces)
 				if acc_size.x + word.width > widget.text_info.wrap_width {
 					size.x = max(acc_size.x, size.x)
+					append(&ctx.lines, Text_Line{line = text.text[new_line_index:word.start], start = new_line_index, end = word.start, width = acc_size.x})
 					acc_size.x = 0
-					append(&ctx.lines, text.text[new_line_index:word.start])
 					new_line_index = word.start
 				}
 				acc_size.x += word.width
@@ -429,7 +454,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 
 			size.x = max(acc_size.x, size.x)
 			if new_line_index < len(text.text) {
-				append(&ctx.lines, text.text[new_line_index:])
+				append(&ctx.lines, Text_Line{line = text.text[new_line_index:], start = new_line_index, end = len(text.text), width = acc_size.x})
 			}
 
 			widget.text_info.lines_range.start = i32(start)
@@ -440,7 +465,7 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 			widget.text_info.min_width = max(text.preferred_min, minimum_width)
 		case .None:
 			style := ctx.styles[widget.form.style]
-			append(&ctx.lines, text.text)
+			append(&ctx.lines, Text_Line{line = text.text, start = 0, end = len(text.text), width = widget.text_info.min_width})
 			widget.text_info.lines_range.start = i32(len(ctx.lines) - 1)
 			widget.text_info.lines_range.end = i32(len(ctx.lines))
 			y := ctx.measure_text_height(style.text)
@@ -451,10 +476,10 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 	}
 }
 
-_get_measured_words :: proc(ctx: ^Core_Context, text: Text, style: Text_Style) {
+_get_measured_words :: proc(ctx: ^Core_Context, text: string, style: Text_Style) {
 	word_start := 0
 	spaces_before := 0
-	data := transmute([]u8)text.text
+	data := transmute([]u8)text
 	byte_index := 0
 
 	for byte_index < len(data) {
@@ -462,13 +487,13 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, style: Text_Style) {
 
 		if r == '\n' {
 			if byte_index > word_start {
-				word := text.text[word_start:byte_index]
+				word := text[word_start:byte_index]
 				width := _measure_text_width_cached(ctx, word, style)
-				append(&ctx.measured_words, Measured_Word{string = word, width = width, start = word_start})
+				append(&ctx.measured_words, Measured_Word{word = word, width = width, start = word_start})
 			}
 			byte_index += size
 			word_start = byte_index
-			append(&ctx.measured_words, Measured_Word{string = "\n", spaces = spaces_before, start = word_start})
+			append(&ctx.measured_words, Measured_Word{word = "\n", spaces = spaces_before, start = word_start})
 			spaces_before = 0
 			continue
 		}
@@ -491,17 +516,17 @@ _get_measured_words :: proc(ctx: ^Core_Context, text: Text, style: Text_Style) {
 			byte_index += size2
 		}
 
-		word := text.text[start:byte_index]
+		word := text[start:byte_index]
 		width := _measure_text_width_cached(ctx, word, style)
-		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before, start = start})
+		append(&ctx.measured_words, Measured_Word{word = word, width = width, spaces = spaces_before, start = start})
 		word_start = byte_index
 		spaces_before = 0
 	}
 
 	if word_start < len(data) {
-		word := text.text[word_start:]
+		word := text[word_start:]
 		width := _measure_text_width_cached(ctx, word, style)
-		append(&ctx.measured_words, Measured_Word{string = word, width = width, spaces = spaces_before, start = word_start})
+		append(&ctx.measured_words, Measured_Word{word = word, width = width, spaces = spaces_before, start = word_start})
 	}
 }
 
@@ -562,13 +587,13 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #n
 	case .Center:
 		increment[axis] = widget.rect.position[axis] + (widget.rect.size[axis] - total_size[axis]) / 2
 	case .Around:
-		computed_child_gap = available_size / f32(widget.total_children - widget.detached_children[axis])
+		computed_child_gap = available_size / f32(max(1, widget.total_children - widget.detached_children[axis]))
 		increment[axis] = widget.rect.position[axis] + widget.form.layout.padding[axis].x + computed_child_gap / 2
 	case .Evenly:
-		computed_child_gap = available_size / f32(widget.total_children + 1 - widget.detached_children[axis])
+		computed_child_gap = available_size / f32(max(1, widget.total_children + 1 - widget.detached_children[axis]))
 		increment[axis] = widget.rect.position[axis] + widget.form.layout.padding[axis].x + computed_child_gap
 	case .Between:
-		computed_child_gap = available_size / f32(widget.total_children - 1 - widget.detached_children[axis])
+		computed_child_gap = available_size / f32(max(1, widget.total_children - 1 - widget.detached_children[axis]))
 		increment[axis] = widget.rect.position[axis] + widget.form.layout.padding[axis].x
 	}
 
@@ -593,6 +618,17 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #n
 			widget.text_info.position[other_axis] -= widget.text_info.size[other_axis] + widget.form.layout.margin[other_axis].y
 		case .Center, .Between, .Around, .Evenly:
 			widget.text_info.position[other_axis] -= widget.text_info.size[other_axis] / 2
+		}
+	}
+
+	{
+		lines := ctx.lines[widget.text_info.lines_range.start:widget.text_info.lines_range.end]
+		t := get_style(ctx, widget.form.style)
+		h := ctx.measure_text_height(t.text)
+		p := widget.text_info.position
+		for &l in lines {
+			l.position = p
+			p.y += h + t.text.line_spacing
 		}
 	}
 

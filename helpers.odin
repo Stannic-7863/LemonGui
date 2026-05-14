@@ -1,15 +1,10 @@
 package core_ui
 
-import "core:fmt"
 import "core:math/linalg"
 import "core:time"
 
 clip :: proc "contextless" (info_x, info_y: Clip_Info, hash: Hash = 0) -> Clip {
 	return Clip{info = {info_x, info_y}, hash = hash}
-}
-
-clip_none :: proc "contextless" () -> Clip_Info {
-	return {}
 }
 
 clip_custom :: proc "contextless" (value: f32, scale: f32, min: f32 = min(f32), max: f32 = max(f32)) -> Clip_Info {
@@ -36,8 +31,8 @@ offset :: proc "contextless" (x: Override_Transform = nil, y: Override_Transform
 	return {.X = x, .Y = y}
 }
 
-text :: proc "contextless" (text: string, wrap_mode: Text_Wrap_Mode = .Words, preferred_min: f32 = 0, preferred_max: f32 = max(f32)) -> Text {
-	return Text{text = text, preferred_min = preferred_min, preferred_max = preferred_max, wrap_mode = wrap_mode}
+text :: proc "contextless" (text: string, wrap_mode: Text_Wrap_Mode = .Words, preferred_min: f32 = 0, preferred_max: f32 = max(f32), user_data : rawptr = nil) -> Text {
+	return Text{text = text, preferred_min = preferred_min, preferred_max = preferred_max, wrap_mode = wrap_mode, user_data = user_data}
 }
 
 layout :: proc "contextless" (sizing: [2]Sizing, placement: [2]Placement = {}, child_gap: f32 = 0, direction: Axis = .X) -> Layout {
@@ -68,7 +63,11 @@ percent :: proc "contextless" (value: f32 = 1) -> Percent {
 	return Percent{value = value}
 }
 
-fixed :: proc "contextless" (value: f32) -> Fixed {
+percent_self :: proc "contextless" (value: f32 = 1) -> Percent_Self {
+	return Percent_Self{value = value}
+}
+
+fixed :: proc "contextless" (value: f32 = 0) -> Fixed {
 	return Fixed{value = value}
 }
 
@@ -80,8 +79,10 @@ text_style :: proc "contextless" (
 	font: rawptr = nil,
 	font_name: string = "",
 	font_id: int = 0,
+	selection_background: Color = 0,
+	selection_border: Border_Style = {}
 ) -> Text_Style {
-	return {color = color, font_size = font_size, letter_spacing = letter_spacing, line_spacing = line_spacing, font = font, font_name = font_name, font_id = font_id}
+	return {color = color, selection_background = selection_background, selection_border = selection_border, font_size = font_size, letter_spacing = letter_spacing, line_spacing = line_spacing, font = font, font_name = font_name, font_id = font_id}
 }
 
 style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, border: Border_Style = {}, text: Text_Style = {}) -> Style {
@@ -92,18 +93,42 @@ border :: proc "contextless" (color: [4]Color = 0, radius: Vec4f32 = 0, thicknes
 	return {color = color, radius = radius, thickness = thickness}
 }
 
-axis_vec2f32 :: proc "contextless" (x: Vec2f32 = 0, y: Vec2f32 = 0) -> [2]Vec2f32 {
+axis_from_2vec2f32 :: proc "contextless" (x: Vec2f32 = 0, y: Vec2f32 = 0) -> [2]Vec2f32 {
 	return {x, y}
 }
 
-axis_vec4f32 :: proc "contextless" (vec4: Vec4f32) -> [2]Vec2f32 {
+axis_from_vec4f32 :: proc "contextless" (vec4: Vec4f32) -> [2]Vec2f32 {
 	return {{vec4[3], vec4[1]}, {vec4[0], vec4[2]}}
 }
 
-vec4f32_axis :: proc "contextless" (vec: [2]Vec2f32) -> Vec4f32 {
+vec4f32_to_axis :: proc "contextless" (vec: [2]Vec2f32) -> Vec4f32 {
 	return {vec.y.x, vec.x.y, vec.y.y, vec.x.x}
 }
 
+color_from_hex :: proc "contextless" (hex: u32) -> Color {
+	rgba := (transmute([4]u8)hex)
+	return {f32(rgba.r), f32(rgba.g), f32(rgba.b), f32(rgba.a)}
+}
+
+selection :: proc (hash: Hash) -> Text_Selection {
+	return {hash = hash}
+}
+
+set_selection_anchor :: proc (ctx: ^Core_Context, index: Selection_Index, anchor: int) {
+	selection := get_selection(ctx, index)
+	selection.anchor = anchor
+}
+
+set_selection_cursor :: proc (ctx: ^Core_Context, index: Selection_Index, cursor: int) {
+	selection := get_selection(ctx, index)
+	selection.cursor = cursor
+}
+
+set_selection :: proc (ctx: ^Core_Context, index: Selection_Index, anchor, cursor: int) {
+	selection := get_selection(ctx, index)
+	selection.anchor = anchor
+	selection.cursor = cursor
+}
 // EVENTS
 
 is_mouse_pressed :: proc(ctx: ^Core_Context, button: Mouse_Button) -> bool {
@@ -118,22 +143,22 @@ is_mouse_released :: proc(ctx: ^Core_Context, button: Mouse_Button) -> bool {
 	return .Released in ctx.mouse.mapped_events[button]
 }
 
-is_widget_hovered :: proc(ctx: ^Core_Context, info: Info) -> bool {
+is_widget_hovered :: proc(ctx: ^Core_Context, info: Widget_Info) -> bool {
 	return info.hash == ctx.mouse.hovered
 }
 
-is_widget_active :: proc(ctx: ^Core_Context, info: Info) -> bool {
+is_widget_active :: proc(ctx: ^Core_Context, info: Widget_Info) -> bool {
 	return info.hash == ctx.mouse.active
 }
 
-get_widget_mouse_events_all :: proc(ctx: ^Core_Context, info: Info) -> Mouse_Events {
+get_widget_mouse_events_all :: proc(ctx: ^Core_Context, info: Widget_Info) -> Mouse_Events {
 	if is_widget_active(ctx, info) {
 		return ctx.mouse.events
 	}
 	return {}
 }
 
-get_widget_mouse_events :: proc(ctx: ^Core_Context, info: Info, button: Mouse_Button) -> bit_set[Widget_Key_Event] {
+get_widget_mouse_events :: proc(ctx: ^Core_Context, info: Widget_Info, button: Mouse_Button) -> bit_set[Widget_Key_Event] {
 	return get_widget_mouse_events_all(ctx, info)[button]
 }
 
@@ -171,7 +196,7 @@ create_clip :: proc(ctx: ^Core_Context, clip: Clip) -> Clip_Index {
 	clip := clip
 
 	if clip.hash != 0 {
-		persistant_clip := ctx.persistant.clip[clip.hash]
+		persistant_clip := ctx.persistant.clips[clip.hash]
 		for clip_kind, axis in clip.info {
 			if clip_kind.kind == .Auto {
 				clip.info[axis].value = persistant_clip[axis]
@@ -181,6 +206,20 @@ create_clip :: proc(ctx: ^Core_Context, clip: Clip) -> Clip_Index {
 
 	append(&ctx.clips, clip)
 	return clip_index
+}
+
+create_selection :: proc(ctx: ^Core_Context, selection: Text_Selection) -> Selection_Index {
+	selection_index := Selection_Index(len(ctx.selections))
+	selection := selection
+
+	if selection.hash != 0 {
+		persistant_selection := ctx.persistant.selections[selection.hash]
+		selection.anchor = persistant_selection.anchor
+		selection.cursor = persistant_selection.cursor
+	}
+
+	append(&ctx.selections, selection)
+	return selection_index
 }
 
 create_style :: proc(ctx: ^Core_Context, style: Style) -> Style_Index {
@@ -213,6 +252,10 @@ get_animation :: #force_inline proc(ctx: ^Core_Context, index: Animation_Index) 
 
 get_clip :: #force_inline proc(ctx: ^Core_Context, index: Clip_Index) -> ^Clip #no_bounds_check {
 	return &ctx.clips[index]
+}
+
+get_selection :: #force_inline proc(ctx: ^Core_Context, index: Selection_Index) -> ^Text_Selection #no_bounds_check {
+	return &ctx.selections[index]
 }
 
 get_style :: #force_inline proc(ctx: ^Core_Context, index: Style_Index) -> ^Style #no_bounds_check {
@@ -262,8 +305,6 @@ sort_render_commands :: proc(commands: []Render_Command) #no_bounds_check {
 	sort_render_commands(commands[0:i])
 	sort_render_commands(commands[i:length])
 }
-
-// INTERNALS
 
 _get_override_transform_value :: proc(transform: [2]Override_Transform, widget_size: Vec2f32, parent_size: Vec2f32, axis: Axis) -> (offset_value: f32) #no_bounds_check {
 	switch kind in transform[axis] {

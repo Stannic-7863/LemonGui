@@ -7,10 +7,10 @@ import "core:time"
 Widget_Comparison :: #type proc(curr, prev: Animation_Data) -> bool
 
 // Should return a state from where the animation will start. Inputs are from current frame.
-Widget_Created :: #type proc(info: Info, style: Style, text_position: Vec2f32) -> (start: Animation_Data)
+Widget_Created :: #type proc(info: Widget_Info, style: Style, text_position: Vec2f32) -> (start: Animation_Data)
 
 // Should return a state at which animation will conclude. Inputs are from last frame.
-Widget_Destroy :: #type proc(info: Info, style: Style, text_position: Vec2f32) -> (end: Animation_Data)
+Widget_Destroy :: #type proc(info: Widget_Info, style: Style, text_position: Vec2f32) -> (end: Animation_Data)
 
 // Animation Update mechanism. Returns true on animation completion
 Animation_Update :: #type proc(state: ^Animation_State, deltatime: time.Duration) -> bool
@@ -157,7 +157,6 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 			state, ok := ctx.persistant.anim_states[prev_candid]
 			end := prev_anim.hooks.on_destroyed(prev_lookup.info, prev_style, prev_lookup.text_position)
 			start := Animation_Data{}
-			r := prev_lookup
 			if ok {start = state.now} else {start = {
 					rect          = prev_lookup.info.rect,
 					style         = prev_style,
@@ -215,13 +214,13 @@ ANIM_ALL :: Animation_Hooks {
 		if curr.style.color != prev.style.color {return true}
 		return false
 	},
-	on_created = proc(info: Info, style: Style, text_position: Vec2f32) -> (start: Animation_Data) {
+	on_created = proc(info: Widget_Info, style: Style, text_position: Vec2f32) -> (start: Animation_Data) {
 		rect := Rect{}
 		rect.position = info.rect.position + info.rect.size / 2 + info.rect.scroll_offset
 		rect.size = {}
 		return {rect = rect, style = style, text_position = text_position}
 	},
-	on_destroyed = proc(info: Info, style: Style, text_position: Vec2f32) -> (end: Animation_Data) {
+	on_destroyed = proc(info: Widget_Info, style: Style, text_position: Vec2f32) -> (end: Animation_Data) {
 		return {rect = {position = info.rect.position + info.rect.size / 2 + info.rect.scroll_offset}, style = style, text_position = text_position + info.rect.scroll_offset}
 	},
 }
@@ -251,14 +250,14 @@ ANIM_COLOR :: Animation_Hooks {
 		if curr.style.border.color != prev.style.border.color {return true}
 		return false
 	},
-	on_created = proc(info: Info, style: Style, text_position: Vec2f32) -> (start: Animation_Data) {
+	on_created = proc(info: Widget_Info, style: Style, text_position: Vec2f32) -> (start: Animation_Data) {
 		s := style
 		s.color = {}
 		s.text.color = {}
 		s.border.color = {}
 		return {rect = info.rect, style = s, text_position = text_position}
 	},
-	on_destroyed = proc(info: Info, style: Style, text_position: Vec2f32) -> (end: Animation_Data) {
+	on_destroyed = proc(info: Widget_Info, style: Style, text_position: Vec2f32) -> (end: Animation_Data) {
 		s := style
 		s.color = {}
 		s.text.color = {}

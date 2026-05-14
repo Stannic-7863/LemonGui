@@ -170,25 +170,27 @@ Mouse_Events :: [Mouse_Button]bit_set[Widget_Key_Event]
 Keyboard_Events :: [Keyboard_Key]bit_set[Widget_Key_Event]
 
 Mouse_Context :: struct {
-	last_click:           [Mouse_Button]time.Time,
-	down_start:           [Mouse_Button]time.Time,
-	mapped_events:        [Mouse_Button]bit_set[Key_Event],
-	events:               Mouse_Events,
-	double_click_timeout: time.Duration,
-	long_down_timeout:    time.Duration,
-	old_position:         Vec2f32,
-	position:             Vec2f32,
-	delta:                Vec2f32,
-	scroll_v:             Vec2f32,
-	scroll:               f32,
-	hovered:              Hash,
-	hovered_clip:         Hash,
-	active:               Hash,
-	can_lock_active:      bool,
-	can_lock_hover:       bool,
-	active_is_locked:     bool,
-	hover_is_locked:      bool,
-	active_disabled:      bool,
+	last_click:              [Mouse_Button]time.Time,
+	down_start:              [Mouse_Button]time.Time,
+	mapped_events:           [Mouse_Button]bit_set[Key_Event],
+	events:                  Mouse_Events,
+	double_click_timeout:    time.Duration,
+	long_down_timeout:       time.Duration,
+	old_position:            Vec2f32,
+	position:                Vec2f32,
+	delta:                   Vec2f32,
+	scroll_v:                Vec2f32,
+	scroll:                  f32,
+	hovered:                 Hash,
+	hovered_clip:            Hash,
+	active:                  Hash,
+	can_lock_active:         bool,
+	can_lock_hover:          bool,
+	active_is_locked:        bool,
+	hover_is_locked:         bool,
+	active_disabled:         bool,
+	hovered_character:       rune,
+	hovered_character_index: int,
 }
 
 Keyboard_Context :: struct {
@@ -209,12 +211,9 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 	for mouse_events, mouse_button in ctx.mouse.mapped_events {
 		for mouse_event in mouse_events {
 			switch mouse_event {
-			case .Pressed:
-				_handle_mouse_pressed(ctx, mouse_button, mouse_event)
-			case .Down:
-				_handle_mouse_down(ctx, mouse_button, mouse_event)
-			case .Released:
-				_handle_mouse_released(ctx, mouse_button, mouse_event)
+			case .Down:      _handle_mouse_down(ctx, mouse_button, mouse_event)
+			case .Pressed:   _handle_mouse_pressed(ctx, mouse_button, mouse_event)
+			case .Released:  _handle_mouse_released(ctx, mouse_button, mouse_event)
 			}
 		}
 	}
@@ -222,16 +221,12 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 	for keyboard_events, keyboard_key in ctx.keyboard.mapped_events {
 		for keyboard_event in keyboard_events {
 			switch keyboard_event {
-			case .Pressed:
-				_handle_keyboard_pressed(ctx, keyboard_key, keyboard_event)
-			case .Released:
-				_handle_keyboard_released(ctx, keyboard_key, keyboard_event)
-			case .Down:
-				_handle_keyboard_down(ctx, keyboard_key, keyboard_event)
+			case .Down:     _handle_keyboard_down(ctx, keyboard_key, keyboard_event)
+			case .Pressed:  _handle_keyboard_pressed(ctx, keyboard_key, keyboard_event)
+			case .Released: _handle_keyboard_released(ctx, keyboard_key, keyboard_event)
 			}
 		}
 	}
-	return
 }
 
 _handle_mouse_event_locking :: proc(ctx: ^Core_Context) {
@@ -262,9 +257,8 @@ _handle_mouse_released :: proc(ctx: ^Core_Context, button: Mouse_Button, event: 
 	ctx.mouse.events[button] += {.Clicked}
 	if time.since(ctx.mouse.last_click[button]) < ctx.mouse.double_click_timeout {
 		ctx.mouse.events[button] += {.Double_Clicked}
-	} else {
-		ctx.mouse.last_click[button] = time.now()
 	}
+	ctx.mouse.last_click[button] = time.now()
 	ctx.mouse.active_is_locked = false
 	ctx.mouse.hover_is_locked = false
 }
@@ -285,7 +279,6 @@ _handle_keyboard_released :: proc(ctx: ^Core_Context, key: Keyboard_Key, event: 
 	ctx.keyboard.events[key] += {.Clicked}
 	if time.since(ctx.keyboard.last_click[key]) < ctx.keyboard.double_click_timeout {
 		ctx.keyboard.events[key] += {.Double_Clicked}
-	} else {
-		ctx.keyboard.last_click[key] = time.now()
 	}
+	ctx.keyboard.last_click[key] = time.now()
 }
