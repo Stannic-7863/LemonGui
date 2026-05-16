@@ -120,7 +120,6 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	if !ctx.mouse.hover_is_locked {ctx.mouse.hovered = 0}
 	if !ctx.mouse.active_is_locked {ctx.mouse.active = 0}
 
-	hovered_z_index := -1
 	hovered_widget := (^Widget)(nil)
 
 	positioning_loop: for &widget, i in ctx.widgets {
@@ -132,6 +131,12 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		if is_point_in_rect(widget.rect, ctx.mouse.position, widget_style.border) &&
 		   .Disable_Hover not_in widget.form.event_flags &&
 		   !ctx.mouse.hover_is_locked {
+
+			if hovered_widget != nil {
+				if hovered_widget.form.z_offset > widget.form.z_offset {
+					continue
+				}
+			}
 
 			for p := widget.clip_parent; p != -1; {
 				clip_parent := get_widget(ctx, p)
@@ -145,7 +150,6 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 			if widget_clip.info.x.kind != .None || widget_clip.info.y.kind != .None {
 				ctx.mouse.hovered_clip = widget_clip.hash
 			}
-			hovered_z_index = i
 			ctx.mouse.hovered = widget.info.hash
 			ctx.mouse.can_lock_active = .Lock_Active in widget.form.event_flags
 			ctx.mouse.can_lock_hover = .Lock_Hover in widget.form.event_flags

@@ -294,8 +294,8 @@ reserve_widget :: proc(ctx: ^Core_Context, key: Key) -> Widget_Info {
 }
 
 submit_widget :: proc(ctx: ^Core_Context, info: Widget_Info, form: Form) {
+	form := form
 	widget := get_widget(ctx, info.index)
-
 	ctx.persistant.curr_lookup[info.hash] = {
 		info = info,
 		form = form,
@@ -310,6 +310,7 @@ submit_widget :: proc(ctx: ^Core_Context, info: Widget_Info, form: Form) {
 		if DETACH_FLAGS & form.layout.flags.y != {} {
 			parent.detached_children.y += 1
 		}
+		form.z_offset += parent.form.z_offset
 	}
 
 	if form.animation != 0 {ctx.persistant.curr_candids[widget.info.hash] = {}}
