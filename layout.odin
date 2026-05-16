@@ -300,7 +300,12 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 						append(&ctx.growable, Growable{&child.rect.size[axis], child.rect.size[axis], kind.max})
 					}
 				case Percent:
-					child.rect.size[axis] = (widget.rect.size[axis] - total_child_gap - total_padding) * kind.value
+					FLOATING_FLAGS :: Layout_Flags{.No_Positioning, .No_Positioning_Relative}
+					if FLOATING_FLAGS & child.form.layout.flags[axis] != {} {
+						child.rect.size[axis] = widget.rect.size[axis] * kind.value
+					} else {
+						child.rect.size[axis] = (widget.rect.size[axis] - total_child_gap - total_padding) * kind.value
+					}
 				}
 
 				if .No_Size_Propagation not_in child.form.layout.flags[axis] {
@@ -336,7 +341,12 @@ _resolve_other_sizing :: proc(ctx: ^Core_Context, axis: Axis) {
 					child.rect.size[axis] = max(child.rect.size[axis], child_layout.accumulating_min[axis])
 					child.rect.size[axis] = min(child.rect.size[axis], kind.max)
 				case Percent:
-					child.rect.size[axis] = (widget.rect.size[axis] - total_padding) * kind.value
+					FLOATING_FLAGS :: Layout_Flags{.No_Positioning, .No_Positioning_Relative}
+					if FLOATING_FLAGS & child.form.layout.flags[axis] != {} {
+						child.rect.size[axis] = widget.rect.size[axis] * kind.value
+					} else {
+						child.rect.size[axis] = (widget.rect.size[axis] - total_child_gap - total_padding) * kind.value
+					}
 				}
 			}
 		}
