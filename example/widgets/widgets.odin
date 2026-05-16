@@ -61,15 +61,18 @@ Theme :: struct {
     font:    Font,
 
     container: struct {
-    	body:      Interaction_Style,
-    	title:     Interaction_Style,
-    	button:    Interaction_Style,
-    	title_bar: Interaction_Style,
-     	collapsed_text:   lui.Text_Index,
-      	uncollapsed_text: lui.Text_Index,
-        undocked_text:    lui.Text_Index,
+    	body:         Interaction_Style,
+    	title:        Interaction_Style,
+    	button:       Interaction_Style,
+    	title_bar:    Interaction_Style,
+    	scroll_track: Interaction_Style,
+    	scroll_thumb: Interaction_Style,
        	docked_text:      lui.Text_Index,
         resize_text:      lui.Text_Index,
+        undocked_text:    lui.Text_Index,
+     	collapsed_text:   lui.Text_Index,
+      	uncollapsed_text: lui.Text_Index,
+        scroll_thumb_width: f32,
     },
 
     button: struct {
@@ -144,6 +147,11 @@ Container_State :: struct {
 	position: lui.Vec2f32,
 }
 
+Container_Stack_Item :: struct {
+	cont: lui.Widget_Info,
+	conti: lui.Widget_Info
+}
+
 Dropdown_State :: struct {
 	selected:  lui.Hash,
 	counter:   int,
@@ -159,7 +167,7 @@ State :: struct {
 	dropdown_state:     map[lui.Hash]Dropdown_State,
 	radio_state:        map[lui.Hash]Radio_State,
 	container_state:    map[lui.Hash]Container_State,
-	container_stack:    [dynamic]lui.Widget_Info,
+	container_stack:    [dynamic]Container_Stack_Item,
 	active_radio_state:    ^Radio_State,
 	active_dropdown_state: ^Dropdown_State,
 	text_user_data:         rawptr
@@ -509,16 +517,22 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {4, 0, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
 	    button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {4, 0, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
 
+		scroll_track := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {{1, 0}, 0}}})
+		scroll_thumb := lui.create_style(ctx, {color = p.accent, border = {radius = 999}})
+
 	   	theme.container.body = si(body, body, body)
 	   	theme.container.title = si(title, title, title)
 	   	theme.container.button = si(button, button_h, button_p)
 	   	theme.container.title_bar = si(title_bar, title_bar, title_bar)
+		theme.container.scroll_track = si(scroll_track, scroll_track, scroll_track)
+		theme.container.scroll_thumb = si(scroll_thumb, scroll_thumb, scroll_thumb)
 
 	   	theme.container.collapsed_text   = lui.create_text(ctx, lui.text("▶", .None))
 	   	theme.container.uncollapsed_text = lui.create_text(ctx, lui.text("▼", .None))
 	   	theme.container.docked_text      = lui.create_text(ctx, lui.text("■", .None))
 	   	theme.container.undocked_text    = lui.create_text(ctx, lui.text("□", .None))
 	   	theme.container.resize_text      = lui.create_text(ctx, lui.text("󰑝", .None))
+		theme.container.scroll_thumb_width = 8
     }
 
     theme.button.style = si(accent, accent_hover, accent_press)
@@ -582,10 +596,9 @@ resolve_style :: proc(ctx: ^lui.Core_Context, info: lui.Widget_Info, style: Inte
 
 container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> bool {
 	cont := lui.reserve_widget(ctx, key)
-	cont_state, _ := &state.container_state[cont.hash]
-	append(&state.container_stack, cont)
+	cont_state, ok := &state.container_state[cont.hash]
 
-	if cont_state == nil {
+	if !ok {
 		state.container_state[cont.hash] = {flags = {.Docked}}
 		cont_state = &state.container_state[cont.hash]
 	}
@@ -664,7 +677,6 @@ container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> 
 
 	if .Collapsed in cont_state.flags {
 		lui.pop_parent(ctx)
-		pop(&state.container_stack)
 		return false
 	}
 
@@ -678,12 +690,37 @@ container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> 
 	contif.style = resolve_style(ctx, conti, theme.container.body)
 	lui.submit_widget(ctx, conti, contif)
 	lui.push_parent(ctx, conti)
+
+	append(&state.container_stack, Container_Stack_Item{cont = cont, conti = conti})
+
+	fmt.println(title_label, conti.rect)
 	return true
 }
 
 end_container :: proc(ctx: ^lui.Core_Context) {
-	cont := pop(&state.container_stack)
+	cont_stack_item := pop(&state.container_stack)
+	cont := cont_stack_item.cont
+	conti := cont_stack_item.conti
 	cont_state := &state.container_state[cont.hash]
+
+	if conti.rect.content_size.y > conti.rect.size.y {
+		scroll_track := lui.reserve_widget(ctx, "__internal_cont_scroll_track")
+		scroll_trackf := lui.Form{}
+		scroll_trackf.layout.sizing = {lui.fit(), lui.percent(1)}
+		scroll_trackf.layout.flags = {{.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset}, {.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset}}
+		scroll_trackf.override = lui.create_override(ctx, {offset = {lui.percent(1), lui.percent(0)}}, {offset = {lui.percent_self(-1), lui.percent(0)}})
+		scroll_trackf.style = resolve_style(ctx, scroll_track, theme.container.scroll_track)
+		lui.submit_widget(ctx, scroll_track, scroll_trackf)
+
+		lui.push_parent(ctx, scroll_track)
+		scroll_thumb := lui.reserve_widget(ctx, "__internal_cont_scroll_thumb")
+		scroll_thumbf := lui.Form{}
+		scroll_thumbf.layout.sizing = {lui.fixed(theme.container.scroll_thumb_width), lui.percent(conti.rect.size.y / conti.rect.content_size.y)}
+		scroll_thumbf.override = lui.create_override(ctx, {offset = {{}, lui.percent(-conti.rect.clip_offset.y / conti.rect.content_size.y)}})
+		scroll_thumbf.style = resolve_style(ctx, scroll_thumb, theme.container.scroll_thumb)
+		lui.submit_widget(ctx, scroll_thumb, scroll_thumbf)
+		lui.pop_parent(ctx)
+	}
 
 	resizew := lui.reserve_widget(ctx, "__internal_cont_resize")
 	resizew_events := lui.get_widget_mouse_events(ctx, resizew, .Left)
@@ -892,20 +929,14 @@ radio_item :: proc(ctx: ^lui.Core_Context, item_label: string) -> bool {
 	state.active_radio_state.counter += 1
 
 	holderf := lui.Form{}
-	holderf.layout.sizing = lui.sizing()
+	holderf.layout.sizing = {lui.fit(), lui.fit()}
 	holderf.layout.child_gap = theme.spacing.sm
 	lui.submit_widget(ctx, holder, holderf)
 	lui.push_parent(ctx, holder)
 
-	control := lui.reserve_widget(ctx, "__internal_radio_control")
-
-	events := lui.get_widget_mouse_events(ctx, control, .Left)
-	if .Clicked in events {
-		state.active_radio_state.selected = holder.hash
-	}
-
 	active := holder.hash == state.active_radio_state.selected
 
+	control := lui.reserve_widget(ctx, "__internal_radio_control")
 	controlf := lui.Form{}
 	controlf.layout.sizing = {lui.fixed(theme.radio.size.x), lui.fixed(theme.radio.size.y)}
 	controlf.style = resolve_style(ctx, control, theme.radio.item_toggle_on if active else theme.radio.item_toggle_off)
@@ -916,7 +947,12 @@ radio_item :: proc(ctx: ^lui.Core_Context, item_label: string) -> bool {
 
 	lui.pop_parent(ctx)
 
-	return .Clicked in events && active
+	events := lui.get_widget_mouse_events(ctx, control, .Left)
+	if .Clicked in events {
+		state.active_radio_state.selected = holder.hash
+		return true
+	}
+	return false
 }
 
 label :: proc(ctx: ^lui.Core_Context, key: lui.Key, text: string) {
@@ -959,7 +995,6 @@ text_box :: proc(ctx: ^lui.Core_Context, key: lui.Key, text: string, wrap: lui.T
 	contf.text = lui.create_text(ctx, lui.text(text, wrap, user_data = state.text_user_data))
 	contf.style = resolve_style(ctx, cont, theme.text_box.style)
 	contf.selection = lui.create_selection(ctx, lui.selection(cont.hash))
-	fmt.println(lui.get_selection(ctx, contf.selection))
 	events := lui.get_widget_mouse_events(ctx, cont, .Left)
 
 	if .Pressed in events {
