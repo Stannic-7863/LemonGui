@@ -123,6 +123,13 @@ Theme :: struct {
     	style: Interaction_Style,
     },
 
+    dropdown: struct {
+    	label:    Interaction_Style,
+    	item_on:  Interaction_Style,
+     	item_off: Interaction_Style,
+      	body:     Interaction_Style,
+    },
+
     control_animation: lui.Animation_Index,
 }
 
@@ -138,8 +145,9 @@ Container_State :: struct {
 }
 
 Dropdown_State :: struct {
-	selected: lui.Hash,
-	counter: int,
+	selected:  lui.Hash,
+	counter:   int,
+	is_active: bool,
 }
 
 Radio_State :: struct {
@@ -148,15 +156,31 @@ Radio_State :: struct {
 }
 
 State :: struct {
+	dropdown_state:     map[lui.Hash]Dropdown_State,
 	radio_state:        map[lui.Hash]Radio_State,
 	container_state:    map[lui.Hash]Container_State,
 	container_stack:    [dynamic]lui.Widget_Info,
-	active_radio_state: ^Radio_State,
-	text_user_data:     rawptr
+	active_radio_state:    ^Radio_State,
+	active_dropdown_state: ^Dropdown_State,
+	text_user_data:         rawptr
 }
 
 theme := Theme{}
 state := State{}
+
+Default_Palette :: enum {
+	Kanagawa,
+	Mono_Dark,
+	Mono_Light,
+	Gruvbox_Dark,
+	Gruvbox_Light,
+	Everforest_Dark,
+	Everforest_Light,
+	Everblush,
+	Catppuccin_Dark,
+	Catppuccin_Light,
+	Tokyo_Night,
+}
 
 DEFAULT_SPACING :: Spacing {
     xs = 2,
@@ -166,214 +190,237 @@ DEFAULT_SPACING :: Spacing {
     xl = 24,
 }
 
-PALETTE_KANAGAWA :: Color_Palette {
-    bg_base       = { 31,  31,  40, 255 },
-    bg_elevated   = { 39,  39,  48, 255 },
-    bg_sunken     = { 37,  37,  46, 255 },
+DEFAULT_PALETTES := [Default_Palette]Color_Palette {
+    .Kanagawa = {
+        bg_base       = { 31,  31,  40, 255 },
+        bg_elevated   = { 39,  39,  48, 255 },
+        bg_sunken     = { 37,  37,  46, 255 },
 
-    fg_primary    = { 220, 215, 186, 255 },
-    fg_secondary  = { 200, 195, 166, 255 },
-    fg_muted      = {  76,  76,  85, 255 },
+        fg_primary    = { 220, 215, 186, 255 },
+        fg_secondary  = { 200, 195, 166, 255 },
+        fg_muted      = {  76,  76,  85, 255 },
 
-    accent        = { 122, 168, 159, 255 },
-    accent_hover  = { 152, 187, 108, 255 },
-    accent_press  = { 126, 156, 216, 255 },
+        accent        = { 122, 168, 159, 255 },
+        accent_hover  = { 152, 187, 108, 255 },
+        accent_press  = { 126, 156, 216, 255 },
 
-    border_subtle = {  49,  49,  58, 255 },
-    border_strong = {  76,  76,  85, 255 },
+        border_subtle = {  49,  49,  58, 255 },
+        border_strong = {  76,  76,  85, 255 },
 
-    danger        = { 216,  97, 107, 255 },
-    warning       = { 220, 165,  97, 255 },
-    success       = { 152, 187, 108, 255 },
-}
+        danger        = { 216,  97, 107, 255 },
+        warning       = { 220, 165,  97, 255 },
+        success       = { 152, 187, 108, 255 },
+    },
 
-PALETTE_MONO_DARK :: Color_Palette {
-    bg_base       = {  18,  18,  18, 255 },
-    bg_elevated   = {  30,  30,  30, 255 },
-    bg_sunken     = {  24,  24,  24, 255 },
+    .Mono_Dark = {
+        bg_base       = {  18,  18,  18, 255 },
+        bg_elevated   = {  30,  30,  30, 255 },
+        bg_sunken     = {  24,  24,  24, 255 },
 
-    fg_primary    = { 230, 230, 230, 255 },
-    fg_secondary  = { 189, 189, 189, 255 },
-    fg_muted      = { 122, 122, 122, 255 },
+        fg_primary    = { 230, 230, 230, 255 },
+        fg_secondary  = { 189, 189, 189, 255 },
+        fg_muted      = { 122, 122, 122, 255 },
 
-    accent        = { 154, 154, 154, 255 },
-    accent_hover  = { 168, 168, 168, 255 },
-    accent_press  = { 128, 128, 128, 255 },
+        accent        = { 154, 154, 154, 255 },
+        accent_hover  = { 168, 168, 168, 255 },
+        accent_press  = { 128, 128, 128, 255 },
 
-    border_subtle = {  47,  47,  47, 255 },
-    border_strong = { 122, 122, 122, 255 },
+        border_subtle = {  47,  47,  47, 255 },
+        border_strong = { 122, 122, 122, 255 },
 
-    danger        = { 208, 208, 208, 255 },
-    warning       = { 181, 181, 181, 255 },
-    success       = { 168, 168, 168, 255 },
-}
+        danger        = { 208, 208, 208, 255 },
+        warning       = { 181, 181, 181, 255 },
+        success       = { 168, 168, 168, 255 },
+    },
 
-PALETTE_MONO_LIGHT :: Color_Palette {
-    bg_base       = { 250, 250, 250, 255 },
-    bg_elevated   = { 235, 235, 235, 255 },
-    bg_sunken     = { 242, 242, 242, 255 },
+    .Mono_Light = {
+        bg_base       = { 250, 250, 250, 255 },
+        bg_elevated   = { 235, 235, 235, 255 },
+        bg_sunken     = { 242, 242, 242, 255 },
 
-    fg_primary    = {  26,  26,  26, 255 },
-    fg_secondary  = {  68,  68,  68, 255 },
-    fg_muted      = { 122, 122, 122, 255 },
+        fg_primary    = {  26,  26,  26, 255 },
+        fg_secondary  = {  68,  68,  68, 255 },
+        fg_muted      = { 122, 122, 122, 255 },
 
-    accent        = { 106, 106, 106, 255 },
-    accent_hover  = {  74,  74,  74, 255 },
-    accent_press  = { 138, 138, 138, 255 },
+        accent        = { 106, 106, 106, 255 },
+        accent_hover  = {  74,  74,  74, 255 },
+        accent_press  = { 138, 138, 138, 255 },
 
-    border_subtle = { 207, 207, 207, 255 },
-    border_strong = { 122, 122, 122, 255 },
+        border_subtle = { 207, 207, 207, 255 },
+        border_strong = { 122, 122, 122, 255 },
 
-    danger        = {  42,  42,  42, 255 },
-    warning       = {  90,  90,  90, 255 },
-    success       = { 106, 106, 106, 255 },
-}
+        danger        = {  42,  42,  42, 255 },
+        warning       = {  90,  90,  90, 255 },
+        success       = { 106, 106, 106, 255 },
+    },
 
-PALETTE_GRUVBOX_DARK :: Color_Palette {
-    bg_base       = {  30,  33,  34, 255 },
-    bg_elevated   = {  40,  43,  44, 255 },
-    bg_sunken     = {  36,  39,  40, 255 },
+    .Gruvbox_Dark = {
+        bg_base       = {  30,  33,  34, 255 },
+        bg_elevated   = {  40,  43,  44, 255 },
+        bg_sunken     = {  36,  39,  40, 255 },
 
-    fg_primary    = { 199, 184, 157, 255 },
-    fg_secondary  = { 192, 177, 150, 255 },
-    fg_muted      = {  87,  90,  91, 255 },
+        fg_primary    = { 199, 184, 157, 255 },
+        fg_secondary  = { 192, 177, 150, 255 },
+        fg_muted      = {  87,  90,  91, 255 },
 
-    accent        = { 116, 150, 137, 255 },
-    accent_hover  = { 169, 182, 101, 255 },
-    accent_press  = { 109, 141, 173, 255 },
+        accent        = { 116, 150, 137, 255 },
+        accent_hover  = { 169, 182, 101, 255 },
+        accent_press  = { 109, 141, 173, 255 },
 
-    border_subtle = {  50,  53,  54, 255 },
-    border_strong = {  87,  90,  91, 255 },
+        border_subtle = {  50,  53,  54, 255 },
+        border_strong = {  87,  90,  91, 255 },
 
-    danger        = { 236, 107, 100, 255 },
-    warning       = { 214, 182, 118, 255 },
-    success       = { 169, 182, 101, 255 },
-}
+        danger        = { 236, 107, 100, 255 },
+        warning       = { 214, 182, 118, 255 },
+        success       = { 169, 182, 101, 255 },
+    },
 
-PALETTE_GRUVBOX_LIGHT :: Color_Palette {
-    bg_base       = { 242, 229, 188, 255 },
-    bg_elevated   = { 229, 216, 175, 255 },
-    bg_sunken     = { 227, 214, 173, 255 },
+    .Gruvbox_Light = {
+        bg_base       = { 242, 229, 188, 255 },
+        bg_elevated   = { 229, 216, 175, 255 },
+        bg_sunken     = { 227, 214, 173, 255 },
 
-    fg_primary    = {  80,  73,  69, 255 },
-    fg_secondary  = { 102,  92,  84, 255 },
-    fg_muted      = { 162, 149, 108, 255 },
+        fg_primary    = {  80,  73,  69, 255 },
+        fg_secondary  = { 102,  92,  84, 255 },
+        fg_muted      = { 162, 149, 108, 255 },
 
-    accent        = {  66, 123,  88, 255 },
-    accent_hover  = { 121, 116,  14, 255 },
-    accent_press  = {  69, 133, 136, 255 },
+        accent        = {  66, 123,  88, 255 },
+        accent_hover  = { 121, 116,  14, 255 },
+        accent_press  = {  69, 133, 136, 255 },
 
-    border_subtle = { 160, 149, 108, 255 },
-    border_strong = { 102,  92,  84, 255 },
+        border_subtle = { 160, 149, 108, 255 },
+        border_strong = { 102,  92,  84, 255 },
 
-    danger        = { 157,   0,   6, 255 },
-    warning       = { 215, 153,  33, 255 },
-    success       = { 121, 116,  14, 255 },
-}
+        danger        = { 157,   0,   6, 255 },
+        warning       = { 215, 153,  33, 255 },
+        success       = { 121, 116,  14, 255 },
+    },
 
-PALETTE_CATPPUCCIN_DARK :: Color_Palette {
-    bg_base       = {  30,  30,  46, 255 },
-    bg_elevated   = {  36,  39,  58, 255 },
-    bg_sunken     = {  24,  24,  37, 255 },
+    .Everforest_Dark = {
+        bg_base       = {  35,  42,  46, 255 },
+        bg_elevated   = {  52,  63,  68, 255 },
+        bg_sunken     = {  45,  53,  59, 255 },
 
-    fg_primary    = { 205, 214, 244, 255 },
-    fg_secondary  = { 186, 194, 222, 255 },
-    fg_muted      = { 108, 112, 134, 255 },
+        fg_primary    = { 211, 198, 170, 255 },
+        fg_secondary  = { 133, 146, 137, 255 },
+        fg_muted      = { 122, 132, 120, 255 },
 
-    accent        = { 148, 226, 213, 255 },
-    accent_hover  = { 137, 180, 250, 255 },
-    accent_press  = { 203, 166, 247, 255 },
+        accent        = { 167, 192, 128, 255 },
+        accent_hover  = { 127, 187, 179, 255 },
+        accent_press  = { 214, 153, 182, 255 },
 
-    border_subtle = {  59,  63,  90, 255 },
-    border_strong = { 108, 112, 134, 255 },
+        border_subtle = {  79,  88,  94, 255 },
+        border_strong = { 133, 146, 137, 255 },
 
-    danger        = { 243, 139, 168, 255 },
-    warning       = { 249, 226, 175, 255 },
-    success       = { 166, 227, 161, 255 },
-}
+        danger        = { 230, 126, 128, 255 },
+        warning       = { 219, 188, 127, 255 },
+        success       = { 167, 192, 128, 255 },
+    },
 
-PALETTE_CATPPUCCIN_LIGHT :: Color_Palette {
-    bg_base       = { 239, 241, 245, 255 },
-    bg_elevated   = { 226, 230, 238, 255 },
-    bg_sunken     = { 233, 236, 242, 255 },
+    .Everforest_Light = {
+        bg_base       = { 239, 235, 212, 255 },
+        bg_elevated   = { 244, 240, 217, 255 },
+        bg_sunken     = { 253, 246, 227, 255 },
 
-    fg_primary    = {  76,  79, 105, 255 },
-    fg_secondary  = {  92,  95, 119, 255 },
-    fg_muted      = { 156, 160, 176, 255 },
+        fg_primary    = {  76,  86,  92, 255 },
+        fg_secondary  = { 110, 122, 118, 255 },
+        fg_muted      = { 140, 148, 138, 255 },
 
-    accent        = {  23, 146, 153, 255 },
-    accent_hover  = {  30, 102, 245, 255 },
-    accent_press  = { 136,  57, 239, 255 },
+        accent        = { 114, 138,   0, 255 },
+        accent_hover  = {  42, 145, 104, 255 },
+        accent_press  = {  46, 120, 168, 255 },
 
-    border_subtle = { 191, 198, 212, 255 },
-    border_strong = { 156, 160, 176, 255 },
+        border_subtle = { 191, 184, 158, 255 },
+        border_strong = { 140, 148, 138, 255 },
 
-    danger        = { 210,  15,  57, 255 },
-    warning       = { 223, 142,  29, 255 },
-    success       = {  64, 160,  43, 255 },
-}
+        danger        = { 214,  69,  65, 255 },
+        warning       = { 191, 136,   0, 255 },
+        success       = { 114, 138,   0, 255 },
+    },
 
-PALETTE_TOKYO_NIGHT :: Color_Palette {
-    bg_base       = {  36,  40,  59, 255 },
-    bg_elevated   = {  41,  46,  66, 255 },
-    bg_sunken     = {  31,  35,  53, 255 },
+    .Everblush = {
+        bg_base       = {  20,  27,  30, 255 },
+        bg_elevated   = {  35,  42,  45, 255 },
+        bg_sunken     = {  16,  22,  24, 255 },
 
-    fg_primary    = { 192, 202, 245, 255 },
-    fg_secondary  = { 169, 177, 214, 255 },
-    fg_muted      = {  86,  95, 137, 255 },
+        fg_primary    = { 218, 218, 218, 255 },
+        fg_secondary  = { 179, 185, 184, 255 },
+        fg_muted      = { 107, 111, 114, 255 },
 
-    accent        = { 115, 218, 202, 255 },
-    accent_hover  = { 122, 162, 247, 255 },
-    accent_press  = { 187, 154, 247, 255 },
+        accent        = { 108, 191, 191, 255 },
+        accent_hover  = { 103, 176, 232, 255 },
+        accent_press  = { 196, 127, 213, 255 },
 
-    border_subtle = {  65,  72, 104, 255 },
-    border_strong = {  86,  95, 137, 255 },
+        border_subtle = {  48,  56,  59, 255 },
+        border_strong = { 107, 111, 114, 255 },
 
-    danger        = { 247, 118, 142, 255 },
-    warning       = { 224, 175, 104, 255 },
-    success       = { 158, 206, 106, 255 },
-}
+        danger        = { 229, 116, 116, 255 },
+        warning       = { 229, 199, 107, 255 },
+        success       = { 140, 207, 126, 255 },
+    },
 
-PALETTE_EVERFOREST_DARK :: Color_Palette {
-    bg_base       = {  35,  42,  46, 255 },
-    bg_elevated   = {  52,  63,  68, 255 },
-    bg_sunken     = {  45,  53,  59, 255 },
+    .Catppuccin_Dark = {
+        bg_base       = {  30,  30,  46, 255 },
+        bg_elevated   = {  36,  39,  58, 255 },
+        bg_sunken     = {  24,  24,  37, 255 },
 
-    fg_primary    = { 211, 198, 170, 255 },
-    fg_secondary  = { 133, 146, 137, 255 },
-    fg_muted      = { 122, 132, 120, 255 },
+        fg_primary    = { 205, 214, 244, 255 },
+        fg_secondary  = { 186, 194, 222, 255 },
+        fg_muted      = { 108, 112, 134, 255 },
 
-    accent        = { 167, 192, 128, 255 },
-    accent_hover  = { 127, 187, 179, 255 },
-    accent_press  = { 214, 153, 182, 255 },
+        accent        = { 148, 226, 213, 255 },
+        accent_hover  = { 137, 180, 250, 255 },
+        accent_press  = { 203, 166, 247, 255 },
 
-    border_subtle = {  79,  88,  94, 255 },
-    border_strong = { 133, 146, 137, 255 },
+        border_subtle = {  59,  63,  90, 255 },
+        border_strong = { 108, 112, 134, 255 },
 
-    danger        = { 230, 126, 128, 255 },
-    warning       = { 219, 188, 127, 255 },
-    success       = { 167, 192, 128, 255 },
-}
+        danger        = { 243, 139, 168, 255 },
+        warning       = { 249, 226, 175, 255 },
+        success       = { 166, 227, 161, 255 },
+    },
 
-PALETTE_EVERBLUSH :: Color_Palette {
-    bg_base       = {  20,  27,  30, 255 },
-    bg_elevated   = {  35,  42,  45, 255 },
-    bg_sunken     = {  16,  22,  24, 255 },
+    .Catppuccin_Light = {
+        bg_base       = { 239, 241, 245, 255 },
+        bg_elevated   = { 226, 230, 238, 255 },
+        bg_sunken     = { 233, 236, 242, 255 },
 
-    fg_primary    = { 218, 218, 218, 255 },
-    fg_secondary  = { 179, 185, 184, 255 },
-    fg_muted      = { 107, 111, 114, 255 },
+        fg_primary    = {  76,  79, 105, 255 },
+        fg_secondary  = {  92,  95, 119, 255 },
+        fg_muted      = { 156, 160, 176, 255 },
 
-    accent        = { 108, 191, 191, 255 },
-    accent_hover  = { 103, 176, 232, 255 },
-    accent_press  = { 196, 127, 213, 255 },
+        accent        = {  23, 146, 153, 255 },
+        accent_hover  = {  30, 102, 245, 255 },
+        accent_press  = { 136,  57, 239, 255 },
 
-    border_subtle = {  48,  56,  59, 255 },
-    border_strong = { 107, 111, 114, 255 },
+        border_subtle = { 191, 198, 212, 255 },
+        border_strong = { 156, 160, 176, 255 },
 
-    danger        = { 229, 116, 116, 255 },
-    warning       = { 229, 199, 107, 255 },
-    success       = { 140, 207, 126, 255 },
+        danger        = { 210,  15,  57, 255 },
+        warning       = { 223, 142,  29, 255 },
+        success       = {  64, 160,  43, 255 },
+    },
+
+    .Tokyo_Night = {
+        bg_base       = {  36,  40,  59, 255 },
+        bg_elevated   = {  41,  46,  66, 255 },
+        bg_sunken     = {  31,  35,  53, 255 },
+
+        fg_primary    = { 192, 202, 245, 255 },
+        fg_secondary  = { 169, 177, 214, 255 },
+        fg_muted      = {  86,  95, 137, 255 },
+
+        accent        = { 115, 218, 202, 255 },
+        accent_hover  = { 122, 162, 247, 255 },
+        accent_press  = { 187, 154, 247, 255 },
+
+        border_subtle = {  65,  72, 104, 255 },
+        border_strong = {  86,  95, 137, 255 },
+
+        danger        = { 247, 118, 142, 255 },
+        warning       = { 224, 175, 104, 255 },
+        success       = { 158, 206, 106, 255 },
+    },
 }
 
 build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spacing, font: Font) {
@@ -451,27 +498,27 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     }
 
     {
-   		body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {1, {0, 1}}, radius = {0, 0, 6, 6}}})
-     	title_bar := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = {1, {1, 0}}, radius = {6, 6, 0, 0}}})
-        title    := lui.create_style(ctx, {text = {color = p.fg_primary, font = f.f_md}})
-      	button := lui.create_style(ctx, {
-       		color = p.bg_elevated,
-         	border = {color = p.border_subtle, radius = 4},
-          	text = {color = p.fg_primary, font = f.f_md}}
-       )
-        button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {4, 0, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
-        button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {4, 0, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
+	    body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {1, {0, 1}}, radius = {0, 0, 6, 6}}})
+	   	title_bar := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = {1, {1, 0}}, radius = {6, 6, 0, 0}}})
+	    title := lui.create_style(ctx, {text = {color = p.fg_primary, font = f.f_md}})
+	   	button := lui.create_style(ctx, {
+	    	color = p.bg_elevated,
+	       	border = {color = p.border_subtle, radius = 4},
+	       	text = {color = p.fg_primary, font = f.f_md}}
+	    )
+	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {4, 0, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
+	    button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {4, 0, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
 
-    	theme.container.body = si(body, body, body)
-    	theme.container.title = si(title, title, title)
-    	theme.container.button = si(button, button_h, button_p)
-    	theme.container.title_bar = si(title_bar, title_bar, title_bar)
+	   	theme.container.body = si(body, body, body)
+	   	theme.container.title = si(title, title, title)
+	   	theme.container.button = si(button, button_h, button_p)
+	   	theme.container.title_bar = si(title_bar, title_bar, title_bar)
 
-     	theme.container.collapsed_text   = lui.create_text(ctx, lui.text("▶", .None))
-      	theme.container.uncollapsed_text = lui.create_text(ctx, lui.text("▼", .None))
-       	theme.container.docked_text      = lui.create_text(ctx, lui.text("■", .None))
-       	theme.container.undocked_text    = lui.create_text(ctx, lui.text("□", .None))
-       	theme.container.resize_text      = lui.create_text(ctx, lui.text("󰑝", .None))
+	   	theme.container.collapsed_text   = lui.create_text(ctx, lui.text("▶", .None))
+	   	theme.container.uncollapsed_text = lui.create_text(ctx, lui.text("▼", .None))
+	   	theme.container.docked_text      = lui.create_text(ctx, lui.text("■", .None))
+	   	theme.container.undocked_text    = lui.create_text(ctx, lui.text("□", .None))
+	   	theme.container.resize_text      = lui.create_text(ctx, lui.text("󰑝", .None))
     }
 
     theme.button.style = si(accent, accent_hover, accent_press)
@@ -494,6 +541,20 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     theme.radio.size = {18, 18}
     theme.radio.item_toggle_on = si(thumb_p, thumb_p, thumb_p)
     theme.radio.item_toggle_off = si(thumb, thumb_h, thumb_p)
+
+    {
+        dropdown_label := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1, radius = 6}, text = {color = p.fg_primary, font = f.f_md}})
+        dropdown_label_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1, radius = 6}, text = {color = p.fg_primary, font = f.f_md}})
+        dropdown_body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1, radius = 6}})
+        dropdown_item := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1}, text = {color = p.fg_primary, font = f.f_md}})
+        dropdown_item_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1}, text = {color = p.fg_primary, font = f.f_md}})
+        dropdown_item_p := lui.create_style(ctx, {color = p.accent, border = {color = p.border_subtle, thickness = 1}, text = {color = p.bg_base, font = f.f_md}})
+
+	    theme.dropdown.label = si(dropdown_label, dropdown_label_h, dropdown_label_h)
+	    theme.dropdown.body = si(dropdown_body, dropdown_body, dropdown_body)
+	    theme.dropdown.item_on = si(dropdown_item_p, dropdown_item_p, dropdown_item_p)
+	    theme.dropdown.item_off = si(dropdown_item, dropdown_item_h, dropdown_item_p)
+    }
 
     theme.label.md = si(text_md, text_md, text_md)
     theme.label.sm = si(text_sm, text_sm, text_sm)
@@ -536,7 +597,7 @@ container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> 
 	if .Docked not_in cont_state.flags {
 		if cont_state.position.x == 0 { cont_state.position.x = cont.rect.position.x }
 		if cont_state.position.y == 0 { cont_state.position.y = cont.rect.position.y }
-		contf.layout.flags = {{.No_Positioning, .No_Size_Propagation}, {.No_Positioning, .No_Size_Propagation}}
+		contf.layout.flags = {{.No_Positioning_Relative, .No_Size_Propagation}, {.No_Positioning_Relative, .No_Size_Propagation}}
 		contf.override = lui.create_override(ctx, {offset = {lui.fixed(cont_state.position.x), lui.fixed(cont_state.position.y)}})
 	}
 
@@ -947,33 +1008,78 @@ tooltip :: proc(ctx: ^lui.Core_Context, key: lui.Key, parent: lui.Widget_Info, t
 		lui.submit_widget(ctx, cont, contf)
 }
 
-begin_dropdown :: proc(ctx: ^lui.Core_Context, key: lui.Key, dropdown_label: string) {
+begin_dropdown :: proc(ctx: ^lui.Core_Context, key: lui.Key, dropdown_label: string) -> bool {
 	holder := lui.reserve_widget(ctx, key)
 	holderf := lui.Form{}
 	holderf.layout.sizing = {lui.fit(), lui.fit()}
-	holderf.layout.direction = .Y
 	holderf.layout.padding = theme.spacing.md
 	holderf.layout.child_gap = theme.spacing.sm
 	holderf.text = lui.create_text(ctx, lui.text(dropdown_label, .None))
-	holderf.style = resolve_style(ctx, holder, theme.label.md)
+	holderf.style = resolve_style(ctx, holder, theme.dropdown.label)
 	lui.submit_widget(ctx, holder, holderf)
-	lui.push_parent(ctx, holder)
 
+	ok := false
+	state.active_dropdown_state, ok = &state.dropdown_state[holder.hash]
+	if !ok {
+		state.dropdown_state[holder.hash] = {}
+		state.active_dropdown_state = &state.dropdown_state[holder.hash]
+	}
+
+	state.active_dropdown_state.counter = 0
+
+	events := lui.get_widget_mouse_events(ctx, holder, .Left)
+	if .Clicked in events {
+		state.active_dropdown_state.is_active = !state.active_dropdown_state.is_active
+	}
+
+	if !state.active_dropdown_state.is_active {
+		return false
+	}
+
+	lui.push_parent(ctx, holder)
 	item_holder := lui.reserve_widget(ctx, "__internal_dropdown_item_holder")
 	item_holderf := lui.Form{}
-	item_holderf.layout.sizing = {lui.fit(), lui.fit()}
+	item_holderf.layout.direction = .Y
+	item_holderf.layout.sizing = {lui.fit(164), lui.fit(256)}
 	item_holderf.layout.flags = {{.No_Size_Propagation, .No_Positioning_Relative}, {.No_Size_Propagation, .No_Positioning_Relative}}
-	item_holderf.override = lui.create_override(ctx, {offset = {lui.percent(1), lui.percent(1)}}, {offset = {{}, lui.fixed(theme.spacing.sm)}})
+	item_holderf.override = lui.create_override(ctx, {offset = {lui.percent(0), lui.percent(1)}}, {offset = {{}, lui.fixed(theme.spacing.sm)}})
 	item_holderf.layout.child_gap = theme.spacing.sm
+	item_holderf.layout.padding = {theme.spacing.sm, theme.spacing.sm}
+	item_holderf.style = resolve_style(ctx, item_holder, theme.dropdown.body)
+	item_holderf.z_offset = 100
 	lui.submit_widget(ctx, item_holder, item_holderf)
 	lui.push_parent(ctx, item_holder)
+	return true
 }
 
 end_dropdown :: proc(ctx: ^lui.Core_Context) {
-	lui.pop_parent(ctx)
-	lui.pop_parent(ctx)
+	if state.active_dropdown_state.is_active {
+		lui.pop_parent(ctx)
+		lui.pop_parent(ctx)
+	}
+	state.active_dropdown_state = nil
 }
 
-dropdown_item :: proc(ctx: ^lui.Core_Context) {
+dropdown_item :: proc(ctx: ^lui.Core_Context, item_label: string) -> bool {
+	if !state.active_dropdown_state.is_active { return false }
+	itemh := lui.reserve_widget(ctx, state.active_dropdown_state.counter)
+	state.active_dropdown_state.counter += 1
+	active := state.active_dropdown_state.selected == itemh.hash
 
+	itemhf := lui.Form{}
+	itemhf.layout.sizing = {lui.grow(20), lui.fit(20)}
+	itemhf.layout.child_gap = theme.spacing.sm
+	itemhf.layout.padding = theme.spacing.md
+	itemhf.text = lui.create_text(ctx, lui.text(item_label, .None))
+	itemhf.style = resolve_style(ctx, itemh, theme.dropdown.item_on if active else theme.dropdown.item_off)
+	itemhf.animation = theme.control_animation
+	lui.submit_widget(ctx, itemh, itemhf)
+
+	events := lui.get_widget_mouse_events(ctx, itemh, .Left)
+	if .Clicked in events {
+		state.active_dropdown_state.selected = itemh.hash
+		return true
+	}
+
+	return false
 }

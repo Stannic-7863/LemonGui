@@ -1,5 +1,6 @@
 package example
 
+import "core:reflect"
 import "core:fmt"
 import "core:time"
 
@@ -46,11 +47,12 @@ main :: proc() {
 	}
 
 	widgets.state.text_user_data = backend_ctx.font_engine
+	selected_palette := widgets.Default_Palette.Mono_Dark
 
 	for handle_events(ctp, &backend_ctx) {
 		defer free_all(context.temp_allocator)
 		ui.begin(ctp)
-		widgets.build_theme(ctp, widgets.PALETTE_EVERFOREST_DARK, widgets.DEFAULT_SPACING, font)
+		widgets.build_theme(ctp, widgets.DEFAULT_PALETTES[selected_palette], widgets.DEFAULT_SPACING, font)
 
 		{
 			root := ui.reserve_widget(ctp, "__root")
@@ -72,6 +74,14 @@ main :: proc() {
 				widgets.radio_item(ctp, "Item 1")
 				widgets.radio_item(ctp, "Item 2")
 				widgets.end_radio(ctp)
+
+				widgets.begin_dropdown(ctp, "__test_dropdown", "Dropdown item selector")
+				for palette in widgets.Default_Palette {
+					if widgets.dropdown_item(ctp, reflect.enum_string(palette)) {
+						selected_palette = palette
+					}
+				}
+				widgets.end_dropdown(ctp)
 
 				widgets.text_box(ctp, "__test_tex_box", "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.")
 				widgets.end_container(ctp)
