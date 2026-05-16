@@ -30,17 +30,14 @@ main :: proc() {
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
 
 	sdl_backend.init_font(&backend_ctx)
-	font_11 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 12)
-	font_12 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 13)
-	font_13 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 14)
-	font_14 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 15)
-	font_16 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 16)
-	font_20 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 20)
-	font_28 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 28)
-	font_40 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 40)
+	font_12 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 12)
+	font_13 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 13)
+	font_14 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 16)
+	font_20 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 20)
+	font_28 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 28)
 	defer sdl_backend.de_init_font(&backend_ctx)
 
-	widgets.theme.font = {
+	font := widgets.Font{
 		f_xs = font_12,
 		f_sm = font_13,
 		f_md = font_14,
@@ -48,12 +45,12 @@ main :: proc() {
 		f_lg = font_28,
 	}
 
-	widgets.global_state.text_user_data = backend_ctx.font_engine
+	widgets.state.text_user_data = backend_ctx.font_engine
 
 	for handle_events(ctp, &backend_ctx) {
 		defer free_all(context.temp_allocator)
 		ui.begin(ctp)
-		widgets.build_theme(ctp)
+		widgets.build_theme(ctp, widgets.PALETTE_EVERFOREST_DARK, widgets.DEFAULT_SPACING, font)
 
 		{
 			root := ui.reserve_widget(ctp, "__root")
