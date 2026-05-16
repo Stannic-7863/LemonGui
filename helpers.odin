@@ -318,11 +318,8 @@ _get_override_transform_value :: proc(transform: [2]Override_Transform, widget_s
 	return offset_value
 }
 
-_get_clip_value :: proc(ctx: ^Core_Context, widget: ^Widget, axis: Axis) -> f32 #no_bounds_check {
-	if widget.form.clip == 0 {
-		return 0
-	}
-	clip := &ctx.clips[widget.form.clip]
+get_clip_value :: proc(ctx: ^Core_Context, clip_index: Clip_Index, axis: Axis) -> f32 #no_bounds_check {
+	clip := &ctx.clips[clip_index]
 	return clip.info[axis].value
 }
 
