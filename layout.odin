@@ -124,18 +124,14 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 	positioning_loop: for &widget, i in ctx.widgets {
 		_position_layout_widget_children(ctx, &widget)
-
-		widget_style := get_style(ctx, widget.form.style)
 		_write_widget_persistant_data(ctx, &widget)
-
+		widget_style := get_style(ctx, widget.form.style)
 		if is_point_in_rect(widget.rect, ctx.mouse.position, widget_style.border) &&
 		   .Disable_Hover not_in widget.form.event_flags &&
 		   !ctx.mouse.hover_is_locked {
 
 			if hovered_widget != nil {
-				if hovered_widget.form.z_offset > widget.form.z_offset {
-					continue
-				}
+				if hovered_widget.form.z_offset > widget.form.z_offset { continue }
 			}
 
 			for p := widget.clip_parent; p != -1; {
@@ -576,8 +572,6 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #n
 
 		if IGNORE_FLAGS & child.form.layout.flags[axis] == {} {
 			total_size[axis] += child.rect.size[axis] + _get_axis_spacing(axis, child.form.layout.margin)
-		} else {
-			total_size[axis] -= layout.child_gap
 		}
 
 		if IGNORE_FLAGS & child.form.layout.flags[other_axis] == {} {
@@ -646,8 +640,8 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #n
 		}
 	}
 
-	clip_axis := _get_clip_value(ctx, widget, axis)
-	clip_other_axis := _get_clip_value(ctx, widget, other_axis)
+	clip_axis := get_clip_value(ctx, widget.form.clip, axis)
+	clip_other_axis := get_clip_value(ctx, widget.form.clip, other_axis)
 
 	for child_index := widget.first; child_index != -1; {
 		child := get_widget(ctx, child_index)
@@ -711,5 +705,7 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #n
 		child.rect.position[other_axis] += offset_other_axis
 		child.rect.size[axis] += expand_axis
 		child.rect.size[other_axis] += expand_other_axis
+		child.rect.clip_offset[axis] = get_clip_value(ctx, child.form.clip, axis)
+		child.rect.clip_offset[other_axis] = get_clip_value(ctx, child.form.clip, other_axis)
 	}
 }
