@@ -289,7 +289,7 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 		switch cmd_kind in cmd.kind {
 		case ui.Command_Rect:
 			r := Gpu_Render_Command{}
-			r.f1 = cmd_kind.border.radius.wzyx
+			r.f1 = cmd_kind.border.radius
 			r.f2 = ui.vec4f32_to_axis(cmd_kind.border.thickness)
 			r.color = cmd_kind.color / 255
 			r.border_color = cmd_kind.border.color / 255
@@ -352,7 +352,7 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 
 						r := Gpu_Render_Command{}
 
-						r.position_and_size.xy = position
+						r.position_and_size.xy = position + cmd.rect.scroll_offset
 						r.position_and_size.zw = {width, -height}
 						r.f1 = {uv0.x, uv1.x, uv2.x, uv3.x}
 						r.f2 = {uv0.y, uv1.y, uv2.y, uv3.y}

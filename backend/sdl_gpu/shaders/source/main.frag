@@ -23,7 +23,7 @@ layout(location = 0) out vec4 out_color;
 
 float rect_select_side(vec2 pos, vec4 s) {
     s.xy = pos.x < 0 ? s.xw : s.yz;
-    s.x = pos.y > 0 ? s.x : s.y;
+    s.x = pos.y < 0 ? s.x : s.y;
     return s.x;
 }
 
