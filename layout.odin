@@ -668,14 +668,18 @@ _position_layout_widget_children :: proc(ctx: ^Core_Context, widget: ^Widget) #n
 			}
 		}
 
-		NO_CLIP :: Layout_Flags{.No_Positioning, .No_Size_Propagation, .No_Positioning_Relative}
+		NO_CLIP :: Layout_Flags{.No_Clip_Offset}
 
 		if NO_CLIP & child.form.layout.flags[axis] == {} {
 			child.rect.scroll_offset[axis] = clip_axis + widget.rect.scroll_offset[axis]
+		} else {
+			child.rect.scroll_offset[axis] = widget.rect.scroll_offset[axis]
 		}
 
 		if NO_CLIP & child.form.layout.flags[other_axis] == {} {
 			child.rect.scroll_offset[other_axis] = clip_other_axis + widget.rect.scroll_offset[other_axis]
+		} else {
+			child.rect.scroll_offset[other_axis] = widget.rect.scroll_offset[other_axis]
 		}
 
 		child_overrides := get_override(ctx, child.form.override)
