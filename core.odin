@@ -28,6 +28,7 @@ Rect :: struct {
 	position:      Vec2f32,
 	size:          Vec2f32,
 	content_size:  Vec2f32,
+	clip_offset:   Vec2f32,
 	scroll_offset: Vec2f32,
 }
 
