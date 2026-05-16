@@ -156,7 +156,6 @@ de_init :: proc(backend_ctx: ^Backend_Context) {
 
 	sdl.ReleaseGPUTexture(backend_ctx.gpu, backend_ctx.dummy_texture)
 	sdl.ReleaseGPUGraphicsPipeline(backend_ctx.gpu, backend_ctx.pipeline)
-	sdl.Quit()
 }
 
 de_init_font :: proc(backend_ctx: ^Backend_Context) {

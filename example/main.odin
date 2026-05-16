@@ -24,6 +24,7 @@ main :: proc() {
 		sdl.ReleaseWindowFromGPUDevice(gpu, window)
 		sdl.DestroyGPUDevice(gpu)
 		sdl.DestroyWindow(window)
+		sdl.Quit()
 	}
 
 	backend_ctx := sdl_backend.init(
