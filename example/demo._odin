@@ -259,10 +259,25 @@ perf_chart :: proc(ctp: ^ui.Core_Context, sty: Perf_Chart_Styles, record: []Perf
 }
 
 main :: proc() {
+	sdl.SetLogPriorities(.VERBOSE)
+	assert(sdl.Init({.VIDEO}))
+
+	window := sdl.CreateWindow("Demo", 800, 600, {.RESIZABLE})
+	gpu := sdl.CreateGPUDevice({.SPIRV}, false, nil)
+	assert(sdl.ClaimWindowForGPUDevice(gpu, window))
+	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .IMMEDIATE))
+
+	defer {
+		sdl.ReleaseWindowFromGPUDevice(gpu, window)
+		sdl.DestroyGPUDevice(gpu)
+		sdl.DestroyWindow(window)
+		sdl.Quit()
+	}
+
 	backend_ctx := sdl_backend.init(
-		"ui debug",
-		"./backend/sdl_gpu/shaders/compiled/main.vert.sprv",
-		"./backend/sdl_gpu/shaders/compiled/main.frag.sprv",
+		window, gpu,
+		"./../backend/sdl_gpu/shaders/compiled/main.vert.sprv",
+		"./../backend/sdl_gpu/shaders/compiled/main.frag.sprv",
 		context.allocator
 	)
 	defer sdl_backend.de_init(&backend_ctx)
@@ -273,21 +288,22 @@ main :: proc() {
 
 	ctx.measure_text_width = sdl_backend.measure_text_width
 	ctx.measure_text_height = sdl_backend.measure_text_height
+	ctx.measure_text_hover_index = sdl_backend.measure_text_hover_index
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
 
 	sdl_backend.init_font(&backend_ctx)
-	font_11 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 12)
-	font_12 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 13)
-	font_13 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 14)
-	font_14 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 15)
-	font_16 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 16)
-	font_20 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 20)
-	font_28 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 28)
-	font_40 := sdl_backend.add_font(&backend_ctx, "./assets/JetBrainsMono-Regular.ttf", 40)
+	font_11 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 12)
+	font_12 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 13)
+	font_13 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 14)
+	font_14 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 15)
+	font_16 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 16)
+	font_20 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 20)
+	font_28 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 28)
+	font_40 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 40)
 	defer sdl_backend.de_init_font(&backend_ctx)
 
-	selected_tab := Tab.Clips
+	selected_tab := Tab.Performance
 	perf := Perf_State{}
 
 	for handle_events(ctp, &backend_ctx) {
@@ -1164,7 +1180,11 @@ main :: proc() {
 		ui.pop_parent(ctp)
 		ui.end(ctp)
 		perf_state_update(&perf, ctp.timers)
-		sdl_backend.render(&backend_ctx, &ctx)
+
+		backend_ctx.cmd_buf = sdl.AcquireGPUCommandBuffer(gpu)
+		assert(sdl.WaitAndAcquireGPUSwapchainTexture(backend_ctx.cmd_buf, window, &backend_ctx.render_texture, nil, nil))
+		sdl_backend.render(&backend_ctx, ctp)
+		assert(sdl.SubmitGPUCommandBuffer(backend_ctx.cmd_buf))
 	}
 }
 

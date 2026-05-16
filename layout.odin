@@ -137,7 +137,10 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 			for p := widget.clip_parent; p != -1; {
 				clip_parent := get_widget(ctx, p)
 				p = clip_parent.parent
-				if !is_point_in_rect(clip_parent.rect, ctx.mouse.position, get_style(ctx, clip_parent.form.style).border) {continue positioning_loop}
+				if widget.form.z_offset > clip_parent.form.z_offset { continue }
+				if !is_point_in_rect(clip_parent.rect, ctx.mouse.position, get_style(ctx, clip_parent.form.style).border) {
+					continue positioning_loop
+				}
 			}
 
 			hovered_widget = &widget

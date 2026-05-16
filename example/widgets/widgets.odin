@@ -693,7 +693,6 @@ container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> 
 
 	append(&state.container_stack, Container_Stack_Item{cont = cont, conti = conti})
 
-	fmt.println(title_label, conti.rect)
 	return true
 }
 
