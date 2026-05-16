@@ -59,7 +59,7 @@ grow :: proc "contextless" (min: f32 = 0, max: f32 = max(f32)) -> Grow {
 	return Grow{min = min, max = max}
 }
 
-percent :: proc "contextless" (value: f32 = 1) -> Percent {
+percent :: proc "contextless" (value: f32 = 0) -> Percent {
 	return Percent{value = value}
 }
 
