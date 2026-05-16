@@ -46,6 +46,8 @@ Backend_Context :: struct {
 	font_sampler:        ^sdl.GPUSampler,
 	dummy_texture:       ^sdl.GPUTexture,
 	pipeline:            ^sdl.GPUGraphicsPipeline,
+	cmd_buf:             ^sdl.GPUCommandBuffer,
+	render_texture:           ^sdl.GPUTexture,
 	render_commands_buf: Gpu_Dynamic_Buffer,
 	clip_buf:            Gpu_Dynamic_Buffer,
 	clip_idx_buf:        Gpu_Dynamic_Buffer,
@@ -57,14 +59,7 @@ Backend_Context :: struct {
 	batch:               [dynamic]Gpu_Batch,
 }
 
-init :: proc(window_title: cstring, vert_path, frag_path: string, allocator: runtime.Allocator) -> Backend_Context {
-	sdl.SetLogPriorities(.VERBOSE)
-	assert(sdl.Init({.VIDEO}))
-
-	window := sdl.CreateWindow(window_title, 800, 600, {.RESIZABLE})
-	gpu := sdl.CreateGPUDevice({.SPIRV}, false, nil)
-	assert(sdl.ClaimWindowForGPUDevice(gpu, window))
-
+init :: proc(window: ^sdl.Window, gpu: ^sdl.GPUDevice, vert_path, frag_path: string, allocator: runtime.Allocator) -> Backend_Context {
 	vert_shader := load_shader(gpu, vert_path, .VERTEX, {.SPIRV}, 1, 0, 1)
 	frag_shader := load_shader(gpu, frag_path, .FRAGMENT, {.SPIRV}, 0, 1, 2)
 	pipeline := sdl.CreateGPUGraphicsPipeline(
@@ -113,8 +108,6 @@ init :: proc(window_title: cstring, vert_path, frag_path: string, allocator: run
 	backend_ctx.clip_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.clip_idx_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.dummy_texture = sdl.CreateGPUTexture(gpu, {height = 1, width = 1, format = .R8G8B8A8_UNORM, usage = {.SAMPLER}, layer_count_or_depth = 1, num_levels = 1})
-
-	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .IMMEDIATE))
 	return backend_ctx
 }
 
@@ -163,9 +156,6 @@ de_init :: proc(backend_ctx: ^Backend_Context) {
 
 	sdl.ReleaseGPUTexture(backend_ctx.gpu, backend_ctx.dummy_texture)
 	sdl.ReleaseGPUGraphicsPipeline(backend_ctx.gpu, backend_ctx.pipeline)
-	sdl.ReleaseWindowFromGPUDevice(backend_ctx.gpu, backend_ctx.window)
-	sdl.DestroyGPUDevice(backend_ctx.gpu)
-	sdl.DestroyWindow(backend_ctx.window)
 	sdl.Quit()
 }
 
@@ -183,7 +173,7 @@ de_init_gpu_dynamic_buffer :: proc(backend_ctx: ^Backend_Context, buffer: ^Gpu_D
 	sdl.ReleaseGPUTransferBuffer(backend_ctx.gpu, buffer.tansfer)
 }
 
-update_dynamic_buffer :: proc(backend_ctx: ^Backend_Context, buf: ^Gpu_Dynamic_Buffer, command_buffer: ^sdl.GPUCommandBuffer, data: rawptr) {
+update_dynamic_buffer :: proc(backend_ctx: ^Backend_Context, buf: ^Gpu_Dynamic_Buffer, data: rawptr) {
 	if buf.byte_size > buf.prev_byte_size {
 		buf.prev_byte_size = buf.byte_size
 		sdl.ReleaseGPUBuffer(backend_ctx.gpu, buf.data)
@@ -198,7 +188,7 @@ update_dynamic_buffer :: proc(backend_ctx: ^Backend_Context, buf: ^Gpu_Dynamic_B
 		mem.copy(tmem, data, buf.byte_size)
 		sdl.UnmapGPUTransferBuffer(backend_ctx.gpu, buf.tansfer)
 
-		copy_pass := sdl.BeginGPUCopyPass(command_buffer)
+		copy_pass := sdl.BeginGPUCopyPass(backend_ctx.cmd_buf)
 		sdl.UploadToGPUBuffer(copy_pass, {transfer_buffer = buf.tansfer}, {size = u32(buf.byte_size), buffer = buf.data}, false)
 		sdl.EndGPUCopyPass(copy_pass)
 	}
@@ -225,31 +215,24 @@ render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
 
 	feed_backend(backend_ctx, core_ctx)
 
-	command_buf := sdl.AcquireGPUCommandBuffer(backend_ctx.gpu)
-
 	backend_ctx.render_commands_buf.byte_size = len(backend_ctx.render_commands) * size_of(Gpu_Render_Command)
-	update_dynamic_buffer(backend_ctx, &backend_ctx.render_commands_buf, command_buf, raw_data(backend_ctx.render_commands))
+	update_dynamic_buffer(backend_ctx, &backend_ctx.render_commands_buf, raw_data(backend_ctx.render_commands))
 
 	backend_ctx.clip_buf.byte_size = len(backend_ctx.clips) * size_of(Clip)
-	update_dynamic_buffer(backend_ctx, &backend_ctx.clip_buf, command_buf, raw_data(backend_ctx.clips))
+	update_dynamic_buffer(backend_ctx, &backend_ctx.clip_buf, raw_data(backend_ctx.clips))
 
 	backend_ctx.clip_idx_buf.byte_size = len(backend_ctx.clip_idx) * size_of(i32)
-	update_dynamic_buffer(backend_ctx, &backend_ctx.clip_idx_buf, command_buf, raw_data(backend_ctx.clip_idx))
+	update_dynamic_buffer(backend_ctx, &backend_ctx.clip_idx_buf, raw_data(backend_ctx.clip_idx))
 
-	swapchain_texture: ^sdl.GPUTexture
-	assert(sdl.WaitAndAcquireGPUSwapchainTexture(command_buf, backend_ctx.window, &swapchain_texture, nil, nil))
-
-	swapchain_target := sdl.GPUColorTargetInfo {
-		texture  = swapchain_texture,
+	render_target := sdl.GPUColorTargetInfo {
+		texture  = backend_ctx.render_texture,
 		load_op  = .CLEAR,
 		store_op = .STORE,
 	}
 
-	render_pass := sdl.BeginGPURenderPass(command_buf, &swapchain_target, 1, nil)
-	geometry_pass(backend_ctx, core_ctx, render_pass, command_buf, &projection_mat)
+	render_pass := sdl.BeginGPURenderPass(backend_ctx.cmd_buf, &render_target, 1, nil)
+	geometry_pass(backend_ctx, core_ctx, render_pass, backend_ctx.cmd_buf, &projection_mat)
 	sdl.EndGPURenderPass(render_pass)
-
-	assert(sdl.SubmitGPUCommandBuffer(command_buf))
 }
 
 geometry_pass :: proc(

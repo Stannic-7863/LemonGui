@@ -12,8 +12,22 @@ import sdl "vendor:sdl3"
 import sdl_backend "../backend/sdl_gpu"
 
 main :: proc() {
+	sdl.SetLogPriorities(.VERBOSE)
+	assert(sdl.Init({.VIDEO}))
+
+	window := sdl.CreateWindow("Ui debug", 800, 600, {.RESIZABLE})
+	gpu := sdl.CreateGPUDevice({.SPIRV}, false, nil)
+	assert(sdl.ClaimWindowForGPUDevice(gpu, window))
+	assert(sdl.SetGPUSwapchainParameters(gpu, window, .SDR, .IMMEDIATE))
+
+	defer {
+		sdl.ReleaseWindowFromGPUDevice(gpu, window)
+		sdl.DestroyGPUDevice(gpu)
+		sdl.DestroyWindow(window)
+	}
+
 	backend_ctx := sdl_backend.init(
-		"ui debug",
+		window, gpu,
 		"./../backend/sdl_gpu/shaders/compiled/main.vert.sprv",
 		"./../backend/sdl_gpu/shaders/compiled/main.frag.sprv",
 		context.allocator
@@ -94,7 +108,11 @@ main :: proc() {
 		}
 
 		ui.end(ctp)
+
+		backend_ctx.cmd_buf = sdl.AcquireGPUCommandBuffer(gpu)
+		assert(sdl.WaitAndAcquireGPUSwapchainTexture(backend_ctx.cmd_buf, window, &backend_ctx.render_texture, nil, nil))
 		sdl_backend.render(&backend_ctx, ctp)
+		assert(sdl.SubmitGPUCommandBuffer(backend_ctx.cmd_buf))
 	}
 }
 

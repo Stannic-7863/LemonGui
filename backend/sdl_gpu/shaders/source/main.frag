@@ -79,7 +79,7 @@ float sdf_clip_rect(vec2 frag_pos, vec4 pos_size, vec4 radius) {
 
 void main() {
     if (in_flags.z > 0) {
-        for (int i = 0; i < in_flags.z; i++) {
+        for (int i = in_flags.z - 1; i >= 0; i--) {
             int idx = clips_indices[in_flags.y + i];
             Clip clip = clips[idx];
             float d = sdf_clip_rect(gl_FragCoord.xy, clip.position_and_size, clip.radius);
