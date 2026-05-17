@@ -105,7 +105,7 @@ void main() {
         vec4 border_col_premul = vec4(border_col.rgb * border_col.a, border_col.a);
 
         out_color = fill_col * fill_mask;
-        out_color += border_col_premul * outer_mask * border_mask;
+        out_color += border_col_premul * max(0.0, outer_mask - fill_mask);
     } else {
         vec4 t = texture(font_sampler, in_uv);
         out_color = vec4(in_color.rgb * in_color.a, in_color.a) * t.a;
