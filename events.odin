@@ -153,6 +153,7 @@ Widget_Key_Event :: enum u8 {
 	Pressed,
 	Down,
 	Long_Down,
+	Repeat
 }
 
 Event_Flag :: enum u8 {
@@ -172,10 +173,12 @@ Keyboard_Events :: [Keyboard_Key]bit_set[Widget_Key_Event]
 Mouse_Context :: struct {
 	last_click:              [Mouse_Button]time.Time,
 	down_start:              [Mouse_Button]time.Time,
+	repeat_last:             [Mouse_Button]time.Time,
 	mapped_events:           [Mouse_Button]bit_set[Key_Event],
 	events:                  Mouse_Events,
 	double_click_timeout:    time.Duration,
 	long_down_timeout:       time.Duration,
+	repeat_timeout:          time.Duration,
 	old_position:            Vec2f32,
 	position:                Vec2f32,
 	delta:                   Vec2f32,
@@ -196,10 +199,12 @@ Mouse_Context :: struct {
 Keyboard_Context :: struct {
 	last_click:           [Keyboard_Key]time.Time,
 	down_start:           [Keyboard_Key]time.Time,
+	repeat_last:          [Keyboard_Key]time.Time,
 	mapped_events:        [Keyboard_Key]bit_set[Key_Event],
 	events:               Keyboard_Events,
 	double_click_timeout: time.Duration,
 	long_down_timeout:    time.Duration,
+	repeat_timeout:       time.Duration,
 	focused:              Hash,
 	pressed_char:         []rune,
 }
@@ -249,6 +254,10 @@ _handle_mouse_down :: proc(ctx: ^Core_Context, button: Mouse_Button, event: Key_
 	ctx.mouse.events[button] += {.Down}
 	if time.since(ctx.mouse.down_start[button]) > ctx.mouse.long_down_timeout {
 		ctx.mouse.events[button] += {.Long_Down}
+		if time.since(ctx.mouse.repeat_last[button]) > ctx.mouse.repeat_timeout {
+		    ctx.mouse.events[button] += {.Repeat}
+			ctx.mouse.repeat_last[button] = time.now()
+		}
 	}
 	_handle_mouse_event_locking(ctx)
 }
@@ -272,6 +281,10 @@ _handle_keyboard_down :: proc(ctx: ^Core_Context, key: Keyboard_Key, event: Key_
 	ctx.keyboard.events[key] += {.Down}
 	if time.since(ctx.keyboard.down_start[key]) > ctx.keyboard.long_down_timeout {
 		ctx.keyboard.events[key] += {.Long_Down}
+		if time.since(ctx.keyboard.repeat_last[key]) > ctx.keyboard.repeat_timeout {
+		    ctx.keyboard.events[key] += {.Repeat}
+			ctx.keyboard.repeat_last[key] = time.now()
+		}
 	}
 }
 
