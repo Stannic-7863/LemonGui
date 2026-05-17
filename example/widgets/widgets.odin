@@ -1,5 +1,8 @@
 package widgets
 
+import "base:intrinsics"
+import "base:runtime"
+import "core:reflect"
 import "core:fmt"
 import "core:time"
 import lui "../../"
@@ -61,13 +64,16 @@ Theme :: struct {
     font:    Font,
 
     container: struct {
-    	body:         Interaction_Style,
-    	title:        Interaction_Style,
-    	button:       Interaction_Style,
-    	title_bar:    Interaction_Style,
-    	scroll_track: Interaction_Style,
-    	scroll_thumb: Interaction_Style,
-       	docked_text:      lui.Text_Index,
+    	body:          Interaction_Style,
+    	title:         Interaction_Style,
+    	button:        Interaction_Style,
+    	title_bar:     Interaction_Style,
+    	scroll_track:  Interaction_Style,
+    	scroll_thumb:  Interaction_Style,
+    	inline_body:   Interaction_Style,
+        inline_button: Interaction_Style,
+        inline_title:  Interaction_Style,
+        docked_text:      lui.Text_Index,
         resize_text:      lui.Text_Index,
         undocked_text:    lui.Text_Index,
      	collapsed_text:   lui.Text_Index,
@@ -131,6 +137,14 @@ Theme :: struct {
     	item_on:  Interaction_Style,
      	item_off: Interaction_Style,
       	body:     Interaction_Style,
+    },
+
+    spinbox: struct {
+        dec:    Interaction_Style,
+        inc:    Interaction_Style,
+        input:  Interaction_Style,
+        inc_text: lui.Text_Index,
+        dec_text: lui.Text_Index,
     },
 
     control_animation: lui.Animation_Index,
@@ -440,20 +454,6 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     s := &theme.spacing
     f := &theme.font
 
-    transparent := lui.create_style(ctx, {text   = {color = p.fg_primary, font = f.f_md}})
-
-    surface := lui.create_style(ctx, {
-        color  = p.bg_elevated,
-        border = {color = p.border_subtle, thickness = 1, radius = 6},
-        text   = {color = p.fg_primary, font = f.f_md},
-    })
-
-    surface_hover := lui.create_style(ctx, {
-        color  = p.bg_elevated,
-        border = {color = p.border_strong, thickness = 1, radius = 6},
-        text   = {color = p.fg_primary, font = f.f_md},
-    })
-
     accent := lui.create_style(ctx, {
         color  = p.accent,
         border = {color = p.accent, thickness = 1, radius = 6},
@@ -472,17 +472,10 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
         text   = {color = p.bg_sunken, font = f.f_md},
     })
 
-    danger := lui.create_style(ctx, {
-        color  = p.danger,
-        border = {color = p.danger, thickness = 1, radius = 6},
-        text   = {color = p.bg_sunken, font = f.f_md},
-    })
-
     text_md := lui.create_style(ctx, {color = 0, text = {color = p.fg_primary, font = f.f_md}})
     text_sm := lui.create_style(ctx, {color = 0, text = {color = p.fg_secondary, font = f.f_sm}})
 
     track := lui.create_style(ctx, {color  = p.bg_sunken, border = {color = p.border_subtle, thickness = 1, radius = 999}})
-
     track_fill := lui.create_style(ctx, {color  = p.accent, border = {color = p.border_subtle, thickness = 1, radius = 999}})
 
     thumb := lui.create_style(ctx, {color  = p.bg_base, border = {color = p.border_strong, thickness = 1, radius = 999}})
@@ -506,16 +499,22 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     }
 
     {
-	    body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {1, {0, 1}}, radius = {0, 0, 6, 6}}})
-	   	title_bar := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = {1, {1, 0}}, radius = {6, 6, 0, 0}}})
+	    body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {2, {0, 2}}, radius = {0, 0, 6, 6}}})
+	   	title_bar := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = {2, {2, 0}}, radius = {6, 6, 0, 0}}})
 	    title := lui.create_style(ctx, {text = {color = p.fg_primary, font = f.f_md}})
 	   	button := lui.create_style(ctx, {
 	    	color = p.bg_elevated,
 	       	border = {color = p.border_subtle, radius = 4},
 	       	text = {color = p.fg_primary, font = f.f_md}}
 	    )
-	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {4, 0, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
-	    button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {4, 0, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
+	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = 4}, text = {color = p.bg_elevated, font = f.f_md}})
+	    button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = 4}, text = {color = p.bg_elevated, font = f.f_md}})
+
+	    inline_button := lui.create_style(ctx, {color = p.bg_base, border = {radius = 4}, text = {color = p.fg_primary, font = f.f_md}})
+	    inline_button_h := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 4}, text = {color = p.fg_primary, font = f.f_md}})
+	    inline_button_p := lui.create_style(ctx, {color = p.accent, border = {radius = 4}, text = {color = p.bg_base, font = f.f_md}})
+
+	    inline_body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_strong, thickness = {{2, 0}, {0, 0}}}})
 
 		scroll_track := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {{1, 0}, 0}}})
 		scroll_thumb := lui.create_style(ctx, {color = p.accent, border = {radius = 999}})
@@ -527,12 +526,33 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 		theme.container.scroll_track = si(scroll_track, scroll_track, scroll_track)
 		theme.container.scroll_thumb = si(scroll_thumb, scroll_thumb, scroll_thumb)
 
+		theme.container.inline_title = si(title, title, title)
+		theme.container.inline_button = si(inline_button, inline_button_h, inline_button_p)
+		theme.container.inline_body = si(inline_body, inline_body, inline_body)
+
 	   	theme.container.collapsed_text   = lui.create_text(ctx, lui.text("▶", .None))
 	   	theme.container.uncollapsed_text = lui.create_text(ctx, lui.text("▼", .None))
 	   	theme.container.docked_text      = lui.create_text(ctx, lui.text("■", .None))
 	   	theme.container.undocked_text    = lui.create_text(ctx, lui.text("□", .None))
 	   	theme.container.resize_text      = lui.create_text(ctx, lui.text("󰑝", .None))
-		theme.container.scroll_thumb_width = 8
+		theme.container.scroll_thumb_width = 4
+    }
+
+    {
+        inc_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, radius = {0, 4, 4, 0}}, text = {color = p.fg_primary, font = f.f_md}})
+	    inc_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {0, 4, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
+	    inc_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {0, 4, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
+
+        dec_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, radius = {4, 0, 0, 4}}, text = {color = p.fg_primary, font = f.f_md}})
+	    dec_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {4, 0, 0, 4}}, text = {color = p.bg_elevated, font = f.f_md}})
+	    dec_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {4, 0, 0, 4}}, text = {color = p.bg_elevated, font = f.f_md}})
+
+        theme.spinbox.inc = si(inc_n, inc_h, inc_p)
+        theme.spinbox.dec = si(dec_n, dec_h, dec_p)
+        theme.spinbox.input = si(text_box, text_box, text_box)
+
+        theme.spinbox.inc_text = lui.create_text(ctx, lui.text(">", .None))
+        theme.spinbox.dec_text = lui.create_text(ctx, lui.text("<", .None))
     }
 
     theme.button.style = si(accent, accent_hover, accent_press)
@@ -748,6 +768,73 @@ end_container :: proc(ctx: ^lui.Core_Context) {
 	lui.pop_parent(ctx)
 }
 
+inline_container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> bool {
+	cont := lui.reserve_widget(ctx, key)
+
+	cont_state, ok := &state.container_state[cont.hash]
+	if !ok {
+		state.container_state[cont.hash] = {}
+		cont_state = &state.container_state[cont.hash]
+	}
+
+	contf := lui.Form{}
+	contf.layout.sizing = {lui.grow(), lui.fit()}
+	contf.layout.direction = .Y
+	lui.submit_widget(ctx, cont, contf)
+
+	lui.push_parent(ctx, cont)
+
+	bar := lui.reserve_widget(ctx, "__internal_inline_cont_title_bar")
+	barf := lui.Form{}
+	barf.layout.sizing = {lui.grow(), lui.fit()}
+	lui.submit_widget(ctx, bar, barf)
+
+	lui.push_parent(ctx, bar)
+
+	collapse := lui.reserve_widget(ctx, "__internal_inline_cont_collapse_button")
+	collapsef := lui.Form{}
+	collapsef.layout.sizing = {lui.fit(), lui.fit()}
+	collapsef.layout.padding = {theme.spacing.sm, 0}
+	collapsef.text = theme.container.collapsed_text if .Collapsed in cont_state.flags else theme.container.uncollapsed_text
+	collapsef.style = resolve_style(ctx, collapse, theme.container.inline_button)
+	lui.submit_widget(ctx, collapse, collapsef)
+
+	collapse_event := lui.get_widget_mouse_events(ctx, collapse, .Left)
+	if .Clicked in collapse_event { cont_state.flags ~= {.Collapsed} }
+
+	labelw := lui.reserve_widget(ctx, "__internal_inline_cont_title_label")
+	labelf := lui.Form{}
+	labelf.layout.sizing = lui.sizing()
+	labelf.text = lui.create_text(ctx, lui.text(title_label, .None))
+	labelf.style = resolve_style(ctx, labelw, theme.container.inline_title)
+	lui.submit_widget(ctx, labelw, labelf)
+
+	lui.pop_parent(ctx)
+
+	if .Collapsed in cont_state.flags {
+	    lui.pop_parent(ctx)
+	    return false
+	}
+
+	conti := lui.reserve_widget(ctx, "__internal_inline_cont_content_holder")
+	contif := lui.Form{}
+	contif.layout.sizing = {lui.grow(), lui.grow()}
+	contif.layout.direction = .Y
+	contif.layout.padding = {{theme.spacing.md, 0}, theme.spacing.md}
+	contif.layout.child_gap = theme.spacing.sm
+	contif.style = resolve_style(ctx, conti, theme.container.inline_body)
+	lui.submit_widget(ctx, conti, contif)
+
+	lui.push_parent(ctx, conti)
+
+	return true
+}
+
+end_inline_container :: proc(ctx: ^lui.Core_Context) {
+    lui.pop_parent(ctx)
+    lui.pop_parent(ctx)
+}
+
 button :: proc(ctx: ^lui.Core_Context, key: lui.Key, label: string) -> lui.Mouse_Events {
 	button := lui.reserve_widget(ctx, key)
 	buttonf := lui.Form{}
@@ -761,16 +848,18 @@ button :: proc(ctx: ^lui.Core_Context, key: lui.Key, label: string) -> lui.Mouse
 	return lui.get_widget_mouse_events_all(ctx, button)
 }
 
-slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, value: ^f32, min: f32 = 0, max: f32 = 1) -> bool {
-
+slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, slider_label: string, value: ^$T, min: T, max: T, temp_alloc := context.temp_allocator) -> bool where intrinsics.type_is_float(T) {
 	cont := lui.reserve_widget(ctx, key)
 	contf := lui.Form{}
 	contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
 	contf.layout.padding = theme.spacing.md
 	contf.layout.child_gap = theme.spacing.sm
+	contf.layout.placement = {.Center, .Center}
 	lui.submit_widget(ctx, cont, contf)
 
 	lui.push_parent(ctx, cont)
+
+	label(ctx, "__internal_slider_label", slider_label)
 
 	changed := false
 	{
@@ -779,10 +868,10 @@ slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, value: ^f32, min: f32 = 0, 
 	    track := lui.reserve_widget(ctx, "__internal_slider_track")
 	    track_events := lui.get_widget_mouse_events(ctx, track, .Left)
 
-	    usable_w := track.rect.size.x - theme.slider.thumb_size.x
+	    usable_w := T(track.rect.size.x - theme.slider.thumb_size.x)
 
 	    if .Pressed in track_events && usable_w > 0 {
-	        t = clamp((ctx.mouse.position.x - track.rect.position.x - theme.slider.thumb_size.x * 0.5) / usable_w, 0, 1)
+	        t = clamp(T(ctx.mouse.position.x - track.rect.position.x - theme.slider.thumb_size.x * 0.5) / usable_w, 0, 1)
 	        value^ = min + t * (max - min)
 	        changed = true
 	    }
@@ -798,7 +887,7 @@ slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, value: ^f32, min: f32 = 0, 
 	    fill  := lui.reserve_widget(ctx, "__internal_slider_fill")
 	    fillf := lui.Form{}
 	    fillf.event_flags = {.Disable_Hover}
-	    fillf.layout.sizing = {lui.fixed(usable_w > 0 ? t * usable_w : 0), lui.fixed(theme.slider.track_height)}
+	    fillf.layout.sizing = {lui.fixed(f32(usable_w > 0 ? t * usable_w : 0)), lui.fixed(theme.slider.track_height)}
 	    fillf.layout.placement = {.Negative, .Center}
 	    fillf.style = resolve_style(ctx, track, theme.slider.track_fill)
 	    fillf.animation = theme.control_animation
@@ -807,7 +896,7 @@ slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, value: ^f32, min: f32 = 0, 
 	    control := lui.reserve_widget(ctx, "__internal_slider_control")
 
 	    if lui.is_widget_active(ctx, control) && usable_w > 0 {
-	        t = clamp(t + ctx.mouse.delta.x / usable_w, 0, 1)
+	        t = clamp(t + T(ctx.mouse.delta.x) / usable_w, 0, 1)
 	        value^ = min + t * (max - min)
 	        changed = true
 	    }
@@ -820,7 +909,7 @@ slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, value: ^f32, min: f32 = 0, 
 	    lui.submit_widget(ctx, control, controlf)
 
 		lui.push_parent(ctx, control)
-		tooltip(ctx, "__internal_slider_thumb_tooltip", control, fmt.tprintf("%0.2f", value^))
+		tooltip(ctx, "__internal_slider_thumb_tooltip", control, fmt.aprintf("%0.2f", value^, allocator = temp_alloc))
 		lui.pop_parent(ctx)
 
 	    lui.pop_parent(ctx)
@@ -963,10 +1052,22 @@ label :: proc(ctx: ^lui.Core_Context, key: lui.Key, text: string) {
 	lui.submit_widget(ctx, labelw, labelf)
 }
 
-progress_bar :: proc(ctx: ^lui.Core_Context, key: lui.Key, value: f32, min: f32 = 0, max: f32 = 1) {
+progress_bar :: proc(ctx: ^lui.Core_Context, key: lui.Key, progress_label: string, value: f32, min: f32 = 0, max: f32 = 1) {
+	cont := lui.reserve_widget(ctx, key)
+	contf := lui.Form{}
+	contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
+	contf.layout.padding = theme.spacing.md
+	contf.layout.child_gap = theme.spacing.sm
+	contf.layout.placement = {.Center, .Center}
+	lui.submit_widget(ctx, cont, contf)
+
+	lui.push_parent(ctx, cont)
+
+	label(ctx, "__internal_progress_label", progress_label)
+
 	t := clamp((value - min) / (max - min), 0, 1)
 
-	track := lui.reserve_widget(ctx, key)
+	track := lui.reserve_widget(ctx, "__internal_progress_track")
 	trackf := lui.Form{}
 	trackf.event_flags = {.Disable_Hover}
 	trackf.layout.sizing = {lui.grow(), lui.fixed(theme.progress_bar.track_height)}
@@ -982,6 +1083,8 @@ progress_bar :: proc(ctx: ^lui.Core_Context, key: lui.Key, value: f32, min: f32 
 	fillf.layout.sizing = {lui.fixed(t * track.rect.size.x), lui.grow()}
 	fillf.style = resolve_style(ctx, track, theme.progress_bar.fill)
 	lui.submit_widget(ctx, fill, fillf)
+
+	lui.pop_parent(ctx)
 
 	lui.pop_parent(ctx)
 }
@@ -1116,4 +1219,118 @@ dropdown_item :: proc(ctx: ^lui.Core_Context, item_label: string) -> bool {
 	}
 
 	return false
+}
+
+spinbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, spinbox_label: string, value: ^int, min, max: int, step: int, temp_alloc := context.temp_allocator) -> bool {
+    cont := lui.reserve_widget(ctx, key)
+    contf := lui.Form{}
+    contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
+    contf.layout.padding = theme.spacing.md
+    contf.layout.child_gap = theme.spacing.sm
+    contf.layout.placement = {.Negative, .Center}
+    lui.submit_widget(ctx, cont, contf)
+
+    lui.push_parent(ctx, cont)
+
+    label(ctx, "__internal_spinbox_label", spinbox_label)
+
+    changed := false
+
+    button_dec := lui.reserve_widget(ctx, "__internal_spinbox_decrement")
+    button_decf := lui.Form{}
+    button_decf.layout.sizing = {lui.fit(), lui.fit()}
+    button_decf.layout.padding = theme.spacing.sm
+    button_decf.text = theme.spinbox.dec_text
+    button_decf.style = resolve_style(ctx, button_dec, theme.spinbox.dec)
+    lui.submit_widget(ctx, button_dec, button_decf)
+
+    input := lui.reserve_widget(ctx, "__internal_spinbox_val")
+    inputf := lui.Form{}
+    inputf.layout.sizing = {lui.fit(), lui.fit()}
+    inputf.layout.placement = {.Center, .Center}
+    inputf.layout.padding = {theme.spacing.lg, theme.spacing.sm}
+    inputf.text = lui.create_text(ctx, lui.text(fmt.aprintf("%v", value^, allocator = temp_alloc), .None))
+    inputf.style = resolve_style(ctx, input, theme.spinbox.input)
+    lui.submit_widget(ctx, input, inputf)
+
+    button_inc := lui.reserve_widget(ctx, "__internal_spinbox_increment")
+    button_incf := lui.Form{}
+    button_incf.layout.sizing = {lui.fit(), lui.fit()}
+    button_incf.layout.padding = theme.spacing.sm
+    button_incf.text = theme.spinbox.inc_text
+    button_incf.style = resolve_style(ctx, button_inc, theme.spinbox.inc)
+    lui.submit_widget(ctx, button_inc, button_incf)
+
+    event_dec := lui.get_widget_mouse_events(ctx, button_dec, .Left)
+    event_inc := lui.get_widget_mouse_events(ctx, button_inc, .Left)
+
+    if .Clicked in event_dec || (.Long_Down in event_dec && .Repeat in event_dec) { value^ -= step }
+    if .Clicked in event_inc || (.Long_Down in event_inc && .Repeat in event_inc) { value^ += step }
+
+    value^ = clamp(value^, min, max)
+
+    lui.pop_parent(ctx)
+
+    return changed
+}
+
+display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string, value: any, temp_alloc := context.temp_allocator) {
+
+    display_others :: proc(ctx: ^lui.Core_Context, type: string, info: ^runtime.Type_Info, field: reflect.Struct_Field, value: any, temp_alloc := context.temp_allocator) {
+        #partial switch v in info.variant {
+		case runtime.Type_Info_Named:
+		    display_others(ctx, v.name, v.base, field, value, temp_alloc)
+		case runtime.Type_Info_Struct:
+		    name := fmt.aprintf("Struct|%s|%s|", type, field.name, allocator = temp_alloc)
+			display_struct(ctx, name, name, value)
+		case runtime.Type_Info_Enum:
+		    name := fmt.aprintf("Enum|%s|%s", type, field.name, allocator = temp_alloc)
+			begin_dropdown(ctx, name, name)
+			for name, i in v.names {
+				if dropdown_item(ctx, name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
+			}
+			end_dropdown(ctx)
+		}
+	}
+
+	if !reflect.is_struct(type_info_of(value.id)) { return }
+	if inline_container(ctx, key, title_label) {
+		for field in reflect.struct_fields_zipped(value.id) {
+			field_any := reflect.struct_field_value(value, field)
+			field_base := field_any
+			field_base.id = reflect.typeid_base(field_any.id)
+			switch &a in field_base {
+			case f16:    slider(ctx, field.name, field.name, (^f16)  (field_base.data), 0, 100)
+			case f32:    slider(ctx, field.name, field.name, (^f32)  (field_base.data), 0, 100)
+			case f64:    slider(ctx, field.name, field.name, (^f64)  (field_base.data), 0, 100)
+			case f16le:  slider(ctx, field.name, field.name, (^f16le)(field_base.data), 0, 100)
+			case f32le:  slider(ctx, field.name, field.name, (^f32le)(field_base.data), 0, 100)
+			case f64le:  slider(ctx, field.name, field.name, (^f64le)(field_base.data), 0, 100)
+			case f16be:  slider(ctx, field.name, field.name, (^f16be)(field_base.data), 0, 100)
+			case f32be:  slider(ctx, field.name, field.name, (^f32be)(field_base.data), 0, 100)
+			case f64be:  slider(ctx, field.name, field.name, (^f64be)(field_base.data), 0, 100)
+
+			case string:    text_box(ctx, field.name, (^string)(field_base.data)^)
+			case cstring:   text_box(ctx, field.name, string((^cstring)(field_base.data)^))
+
+			case bool: toggle(ctx, field.name, field.name, (^bool)(field_base.data))
+
+			case int:
+			case i32:
+			case i32be:
+			case i32le:
+			case i64:
+			case i64be:
+			case i64le:
+			case typeid:
+			case:
+				info := type_info_of(field_any.id)
+				#partial switch v in info.variant {
+				case runtime.Type_Info_Named: display_others(ctx, v.name, info, field, field_any, temp_alloc)
+				case:                         display_others(ctx, "Anon", info, field, field_any, temp_alloc)
+				}
+			}
+		}
+		end_inline_container(ctx)
+	}
 }

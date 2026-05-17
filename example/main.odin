@@ -11,6 +11,27 @@ import widgets "widgets"
 import sdl "vendor:sdl3"
 import sdl_backend "../backend/sdl_gpu"
 
+Test_Enum :: enum {
+	Foo,
+	Bar,
+	Baz,
+	Foo_Bar_Baz
+}
+
+Test_Enum_Bitset :: bit_set[Test_Enum]
+
+Test_Struct :: struct {
+	sum_bool: bool,
+	field_1: f32,
+	field_2: int,
+	str:     string,
+	e:       ui.Align,
+	eb:      Test_Enum_Bitset,
+	anon_struct: struct {
+		b : f32
+	}
+}
+
 main :: proc() {
 	sdl.SetLogPriorities(.VERBOSE)
 	assert(sdl.Init({.VIDEO}))
@@ -44,6 +65,7 @@ main :: proc() {
 	ctx.measure_text_hover_index = sdl_backend.measure_text_hover_index
 	ctx.mouse.double_click_timeout = time.Millisecond * 300
 	ctx.mouse.long_down_timeout = time.Millisecond * 1000
+	ctx.mouse.repeat_timeout = time.Millisecond * 200
 
 	sdl_backend.init_font(&backend_ctx)
 	font_12 := sdl_backend.add_font(&backend_ctx, "./assets/Hermit.otf", 12)
@@ -81,9 +103,25 @@ main :: proc() {
 		@static slider_val := f32(0.0)
 		@static checkbox_bool := false
 		if widgets.container(ctp, "__test_container", "Text Container") {
+
+		    @static spinbox_value := 0
+		    widgets.spinbox(ctp, "__text_spin_box", "Spin Box", &spinbox_value, -10, 10, 1)
+
+		    if widgets.inline_container(ctp, "__test_inline_container", "Inline Contaienr") {
+				widgets.button(ctp, "__test_button", "Button! Press Me!")
+				widgets.slider(ctp, "__test_slider", "Slideer", &slider_val, -5, 5)
+
+				widgets.begin_radio(ctp, "__test_radio", "Radio Buttons. Only one can be selected at a time")
+				widgets.radio_item(ctp, "Item 1")
+				widgets.radio_item(ctp, "Item 2")
+				widgets.end_radio(ctp)
+
+				widgets.end_inline_container(ctp)
+			}
+
 			if widgets.container(ctp, "__test_container_nested", "Nested Container") {
 				widgets.button(ctp, "__test_button", "Button! Press Me!")
-				widgets.slider(ctp, "__test_slider", &slider_val, -5, 5)
+				widgets.slider(ctp, "__test_slider", "Slider", &slider_val, -5, 5)
 
 				widgets.begin_radio(ctp, "__test_radio", "Radio Buttons. Only one can be selected at a time")
 				widgets.radio_item(ctp, "Item 1")
@@ -102,9 +140,12 @@ main :: proc() {
 				widgets.end_container(ctp)
 			}
 
-			widgets.progress_bar(ctp, "__test_progress_bar", slider_val, -5, 5)
+			widgets.progress_bar(ctp, "__test_progress_bar", "Prgress", slider_val, -5, 5)
 			widgets.checkbox(ctp, "__test_checkbox", "checkbox", &checkbox_bool)
 			widgets.toggle(ctp, "__test_toggle", "toggle", &checkbox_bool)
+			@static t := Test_Struct{}
+			t.str = "tset sr"
+			widgets.display_struct(ctp, "__test_display_struct", "Test", t)
 			widgets.end_container(ctp)
 		}
 
