@@ -408,20 +408,20 @@ measure_text_height :: proc(style: ui.Text_Style) -> f32 {
 	return f32(ttf.GetFontHeight(font))
 }
 
-measure_text_hover_index :: proc(text: string, point: Vec2f32, style: ui.Text_Style, user_data: rawptr) -> (int) {
+measure_text_hover_index :: proc(text: string, point: Vec2f32, style: ui.Text_Style, user_data: rawptr) -> (int, bool) {
 	engine := cast(^ttf.TextEngine)user_data
 	font := cast(^ttf.Font)style.font
 
-	if engine == nil || font == nil { return 0 }
+	if engine == nil || font == nil { return 0, false }
 
 	text := ttf.CreateText(engine, font, cast(cstring)raw_data(text), uint(len(text)))
 	defer ttf.DestroyText(text)
-	if text == nil { return 0 }
+	if text == nil { return 0, false }
 
 	substring: ttf.SubString
 	if ttf.GetTextSubStringForPoint(text, i32(point.x), 0, &substring) {
-		return int(substring.offset)
+		return int(substring.offset), true
 	}
 
-	return 0
+	return 0, false
 }

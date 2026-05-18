@@ -12,7 +12,7 @@ import "core:time"
 import lui "../../"
 
 Color_Palette :: struct {
-    bg_elevated:   lui.Color `lui:"column,labels=abcd,min=0,max=255,color"`,
+    bg_elevated:   lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
     bg_base:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
     bg_sunken:     lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
     fg_primary:    lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
@@ -502,13 +502,9 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 	    body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {2, {0, 2}}, radius = {0, 0, 6, 6}}})
 	   	title_bar := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = {2, {2, 0}}, radius = {6, 6, 0, 0}}})
 	    title := lui.create_style(ctx, {text = {color = p.fg_primary, font = f.f_md}})
-	   	button := lui.create_style(ctx, {
-	    	color = p.bg_elevated,
-	       	border = {color = p.border_subtle, radius = 4, thickness = 1},
-	       	text = {color = p.fg_primary, font = f.f_md}}
-	    )
-	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = 4}, text = {color = p.bg_elevated, font = f.f_md}})
-	    button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = 4}, text = {color = p.bg_elevated, font = f.f_md}})
+	   	button := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 6}, text = {color = p.fg_primary, font = f.f_md}})
+	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = 6}, text = {color = p.bg_elevated, font = f.f_md}})
+	    button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = 6}, text = {color = p.bg_elevated, font = f.f_md}})
 
 	    inline_button := lui.create_style(ctx, {color = p.bg_base, border = {radius = 4}, text = {color = p.fg_primary, font = f.f_md}})
 	    inline_button_h := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 4}, text = {color = p.fg_primary, font = f.f_md}})
@@ -561,7 +557,7 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     theme.slider.track = si(track, track, track)
     theme.slider.track_fill = si(track_fill, track_fill, track_fill)
     theme.slider.thumb_size = {14, 18}
-    theme.slider.track_height = 6
+    theme.slider.track_height = 8
 
     theme.checkbox.size = {18, 18}
     theme.checkbox.check_off = si(thumb, thumb_h, thumb_p)
@@ -648,7 +644,7 @@ container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> 
 	cont_barf := lui.Form{}
 	cont_barf.layout.sizing = {lui.grow(), lui.fit()}
 	cont_barf.event_flags = {.Lock_Active, .Lock_Hover}
-	cont_barf.layout.padding.x.y = theme.spacing.lg
+	cont_barf.layout.padding = {2, 2}
 	cont_barf.style = resolve_style(ctx, cont_bar, theme.container.title_bar)
 	lui.submit_widget(ctx, cont_bar, cont_barf)
 
@@ -666,7 +662,7 @@ container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> 
 		cont_collapsef.style = resolve_style(ctx, cont_collapse, theme.container.button)
 		lui.submit_widget(ctx, cont_collapse, cont_collapsef)
 		lui.push_parent(ctx, cont_collapse)
-		tooltip(ctx, "__internal_cont_collapse_tooltip", cont_collapse, "Collapse/Uncollapsed Container")
+		tooltip(ctx, "__internal_cont_collapse_tooltip", cont_collapse, "Collapse/Uncollapse Container")
 		lui.pop_parent(ctx)
 	}
 

@@ -171,7 +171,7 @@ Core_Context :: struct {
 	render_commands:          [dynamic]Render_Command,
 	measured_words:           [dynamic]Measured_Word,
 	persistant:               Persistant_Data,
-	measure_text_hover_index: proc(text: string, point: Vec2f32, style: Text_Style, user_data: rawptr) -> int,
+	measure_text_hover_index: proc(text: string, point: Vec2f32, style: Text_Style, user_data: rawptr) -> (int, bool),
 	measure_text_width:       proc(text: string, style: Text_Style) -> f32,
 	measure_text_height:      proc(style: Text_Style) -> f32,
 	mouse:                    Mouse_Context,
@@ -408,6 +408,7 @@ begin :: proc(ctx: ^Core_Context) {
 	clear(&ctx.styles)
 	clear(&ctx.overrides)
 	clear(&ctx.anims)
+	clear(&ctx.selections)
 
 	// Valid 0 states
 	append(&ctx.text, Text{})

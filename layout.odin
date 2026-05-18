@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:fmt"
 import "core:container/lru"
 import "core:time"
 import "core:unicode/utf8"
@@ -168,15 +169,17 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 	spacing := style.text.line_spacing
 	lines := ctx.lines[hovered_widget.text_info.lines_range.start:hovered_widget.text_info.lines_range.end]
 	for line in lines {
-		if ctx.mouse.position.y - spacing < line.position.y || ctx.mouse.position.y > line.position.y + height + spacing { continue }
+		pos := line.position
+		pos += hovered_widget.rect.scroll_offset
+		if ctx.mouse.position.y - spacing < pos.y || ctx.mouse.position.y > pos.y + height + spacing { continue }
 		_get_measured_words(ctx, line.line, style.text)
 		space_width := ctx.measure_text_width(" ", style.text)
 		accumulated_width := f32(0)
 		for w in ctx.measured_words {
-			if ctx.mouse.position.x >= line.position.x + accumulated_width && ctx.mouse.position.x <= line.position.x + accumulated_width + w.width {
-				p := line.position.x + accumulated_width
-				index := ctx.measure_text_hover_index(w.word, ctx.mouse.position - line.position - {accumulated_width, 0}, style.text, text.user_data)
-				if index != -1 {
+			if ctx.mouse.position.x >= pos.x + accumulated_width && ctx.mouse.position.x <= pos.x + accumulated_width + w.width {
+				p := pos.x + accumulated_width
+				index, ok := ctx.measure_text_hover_index(w.word, ctx.mouse.position - pos - {accumulated_width, 0}, style.text, text.user_data)
+				if ok {
 					ctx.mouse.hovered_character, _ = utf8.decode_rune_in_string(w.word[index:])
 					ctx.mouse.hovered_character_index = w.start + index + line.start
 				} else {
