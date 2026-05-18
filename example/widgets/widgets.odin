@@ -1,5 +1,9 @@
 package widgets
 
+import "core:unicode/utf8"
+import "core:unicode/utf16"
+import "core:strconv"
+import "core:strings"
 import "base:intrinsics"
 import "base:runtime"
 import "core:reflect"
@@ -8,24 +12,20 @@ import "core:time"
 import lui "../../"
 
 Color_Palette :: struct {
-    bg_base:      lui.Color,
-    bg_elevated:  lui.Color,
-    bg_sunken:    lui.Color,
-
-    fg_primary:   lui.Color,
-    fg_secondary: lui.Color,
-    fg_muted:     lui.Color,
-
-    accent:       lui.Color,
-    accent_hover: lui.Color,
-    accent_press: lui.Color,
-
-    border_subtle: lui.Color,
-    border_strong: lui.Color,
-
-    danger:  lui.Color,
-    warning: lui.Color,
-    success: lui.Color,
+    bg_elevated:   lui.Color `lui:"column,labels=abcd,min=0,max=255,color"`,
+    bg_base:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    bg_sunken:     lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    fg_primary:    lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    fg_secondary:  lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    fg_muted:      lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    accent:        lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    accent_hover:  lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    accent_press:  lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    border_subtle: lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    border_strong: lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    danger:        lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    warning:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    success:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
 }
 
 Spacing :: struct {
@@ -504,7 +504,7 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 	    title := lui.create_style(ctx, {text = {color = p.fg_primary, font = f.f_md}})
 	   	button := lui.create_style(ctx, {
 	    	color = p.bg_elevated,
-	       	border = {color = p.border_subtle, radius = 4},
+	       	border = {color = p.border_subtle, radius = 4, thickness = 1},
 	       	text = {color = p.fg_primary, font = f.f_md}}
 	    )
 	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = 4}, text = {color = p.bg_elevated, font = f.f_md}})
@@ -605,7 +605,7 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
         return {}
     }
 
-    theme.control_animation = lui.create_animation(ctx, anim, duration = time.Millisecond * 200)
+    theme.control_animation = lui.create_animation(ctx, anim, duration = time.Millisecond * 1)
 }
 
 resolve_style :: proc(ctx: ^lui.Core_Context, info: lui.Widget_Info, style: Interaction_Style) -> lui.Style_Index {
@@ -619,7 +619,7 @@ container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> 
 	cont_state, ok := &state.container_state[cont.hash]
 
 	if !ok {
-		state.container_state[cont.hash] = {flags = {.Docked}}
+		state.container_state[cont.hash] = {flags = {.Docked}, size = {256 * 3, 256 * 2}}
 		cont_state = &state.container_state[cont.hash]
 	}
 
@@ -706,7 +706,7 @@ container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> 
 	contif.layout.padding = theme.spacing.md
 	contif.layout.direction = .Y
 	contif.layout.child_gap = theme.spacing.md
-	contif.clip = lui.create_clip(ctx, lui.clip({}, lui.clip_auto(5, -max(conti.rect.content_size.y - conti.rect.size.y, 0), 0), conti.hash))
+	contif.clip = lui.create_clip(ctx, lui.clip({}, lui.clip_auto(20, -max(conti.rect.content_size.y - conti.rect.size.y, 0), 0), conti.hash))
 	contif.style = resolve_style(ctx, conti, theme.container.body)
 	lui.submit_widget(ctx, conti, contif)
 	lui.push_parent(ctx, conti)
@@ -852,7 +852,6 @@ slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, slider_label: string, value
 	cont := lui.reserve_widget(ctx, key)
 	contf := lui.Form{}
 	contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
-	contf.layout.padding = theme.spacing.md
 	contf.layout.child_gap = theme.spacing.sm
 	contf.layout.placement = {.Center, .Center}
 	lui.submit_widget(ctx, cont, contf)
@@ -868,7 +867,7 @@ slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, slider_label: string, value
 	    track := lui.reserve_widget(ctx, "__internal_slider_track")
 	    track_events := lui.get_widget_mouse_events(ctx, track, .Left)
 
-	    usable_w := T(track.rect.size.x - theme.slider.thumb_size.x)
+	    usable_w := T(track.rect.size.x - theme.slider.thumb_size.x - 1)
 
 	    if .Pressed in track_events && usable_w > 0 {
 	        t = clamp(T(ctx.mouse.position.x - track.rect.position.x - theme.slider.thumb_size.x * 0.5) / usable_w, 0, 1)
@@ -991,7 +990,6 @@ begin_radio :: proc(ctx: ^lui.Core_Context, key: lui.Key, radio_label: string) {
 	holderf := lui.Form{}
 	holderf.layout.sizing = lui.sizing(lui.grow())
 	holderf.layout.direction = .Y
-	holderf.layout.padding = theme.spacing.md
 	holderf.layout.child_gap = theme.spacing.sm
 	holderf.text = lui.create_text(ctx, lui.text(radio_label, preferred_min = 256))
 	holderf.style = resolve_style(ctx, holder, theme.label.md)
@@ -1183,6 +1181,7 @@ begin_dropdown :: proc(ctx: ^lui.Core_Context, key: lui.Key, dropdown_label: str
 	item_holderf.layout.child_gap = theme.spacing.sm
 	item_holderf.layout.padding = {theme.spacing.sm, theme.spacing.sm}
 	item_holderf.style = resolve_style(ctx, item_holder, theme.dropdown.body)
+	item_holderf.clip = lui.create_clip(ctx, lui.clip({}, lui.clip_auto(5, -max(item_holder.rect.content_size.y - item_holder.rect.size.y, 0), 0), item_holder.hash))
 	item_holderf.z_offset = 100
 	lui.submit_widget(ctx, item_holder, item_holderf)
 	lui.push_parent(ctx, item_holder)
@@ -1221,7 +1220,7 @@ dropdown_item :: proc(ctx: ^lui.Core_Context, item_label: string) -> bool {
 	return false
 }
 
-spinbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, spinbox_label: string, value: ^int, min, max: int, step: int, temp_alloc := context.temp_allocator) -> bool {
+spinbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, spinbox_label: string, value: ^$T, min, max: T, step: T, temp_alloc := context.temp_allocator) -> bool where intrinsics.type_is_integer(T) {
     cont := lui.reserve_widget(ctx, key)
     contf := lui.Form{}
     contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
@@ -1274,22 +1273,207 @@ spinbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, spinbox_label: string, val
     return changed
 }
 
-display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string, value: any, temp_alloc := context.temp_allocator) {
+stack :: proc(ctx: ^lui.Core_Context, key: lui.Key, stack_label: string, direction := lui.Axis.X) {
+    cont := lui.reserve_widget(ctx, key)
+    contf := lui.Form{}
+    contf.layout.sizing = {lui.grow(), lui.grow()}
+    contf.layout.direction = direction
+    contf.layout.child_gap = theme.spacing.sm
+    lui.submit_widget(ctx, cont, contf)
+    lui.push_parent(ctx, cont)
 
+    label(ctx, "__internal_stack_label", stack_label)
+}
+
+end_stack :: proc(ctx: ^lui.Core_Context) {
+    lui.pop_parent(ctx)
+}
+
+color_rect :: proc(ctx: ^lui.Core_Context, key: lui.Key, color: lui.Color, temp_alloc := context.temp_allocator) {
+    cont := lui.reserve_widget(ctx, key)
+    contf := lui.Form{}
+    contf.layout.sizing = {lui.fixed(theme.spacing.lg), lui.fixed(theme.spacing.lg)}
+    contf.style = lui.create_style(ctx, {color = color})
+    lui.submit_widget(ctx, cont, contf)
+    lui.push_parent(ctx, cont)
+    color_label := fmt.aprintf("Hex:#%X%X%X%X RGBA:%i %i %i %i", u8(color.r), u8(color.g), u8(color.b), u8(color.a), u8(color.r), u8(color.g), u8(color.b), u8(color.a))
+    tooltip(ctx, "__internal_color_rect_tooltip", cont, color_label)
+    lui.pop_parent(ctx)
+}
+
+display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string, value: any, temp_alloc := context.temp_allocator) {
     display_others :: proc(ctx: ^lui.Core_Context, type: string, info: ^runtime.Type_Info, field: reflect.Struct_Field, value: any, temp_alloc := context.temp_allocator) {
-        #partial switch v in info.variant {
+    	tag_value := reflect.struct_tag_get(field.tag, "lui")
+
+     	#partial switch v in info.variant {
 		case runtime.Type_Info_Named:
 		    display_others(ctx, v.name, v.base, field, value, temp_alloc)
 		case runtime.Type_Info_Struct:
-		    name := fmt.aprintf("Struct|%s|%s|", type, field.name, allocator = temp_alloc)
+		    name := fmt.aprintf("Struct|%s|%s", type, field.name, allocator = temp_alloc)
 			display_struct(ctx, name, name, value)
 		case runtime.Type_Info_Enum:
 		    name := fmt.aprintf("Enum|%s|%s", type, field.name, allocator = temp_alloc)
-			begin_dropdown(ctx, name, name)
-			for name, i in v.names {
-				if dropdown_item(ctx, name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
+			ok := false
+			for attr in strings.split_iterator(&tag_value, ",") {
+				if attr == "dropdown" {
+					begin_dropdown(ctx, name, name)
+					for name, i in v.names {
+						if dropdown_item(ctx, name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
+					}
+					end_dropdown(ctx)
+					ok = true
+				}
+				if attr == "radio" {
+					begin_radio(ctx, name, name)
+					for name, i in v.names {
+						if radio_item(ctx, name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
+					}
+					end_radio(ctx)
+					ok = true
+				}
 			}
-			end_dropdown(ctx)
+			if !ok {
+				begin_dropdown(ctx, name, name)
+				for name, i in v.names {
+					if dropdown_item(ctx, name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
+				}
+				end_dropdown(ctx)
+			}
+		case runtime.Type_Info_Array:
+			if v.count <= 4 && v.elem.id == f32 {
+			    labels := [4]string{"x", "y", "z", "w"}
+				direction := lui.Axis.X
+				min := f32(0)
+				max := f32(100)
+				add_color_rect := false
+ 				for attr in strings.split_iterator(&tag_value, ",") {
+					if attr == "row" { direction = .X }
+					if attr == "column" { direction = .Y }
+					if attr == "color" { add_color_rect = true }
+					if strings.starts_with(attr, "labels=") { for i in 0..<len(attr[7:]) { labels[i] = attr[7:][i:i+1] } }
+					if strings.starts_with(attr, "max=") { max, _ = strconv.parse_f32(attr[4:]) }
+					if strings.starts_with(attr, "min=") { min, _ = strconv.parse_f32(attr[4:])}
+				}
+
+				name := fmt.aprintf("[%i]f32|%s|%s ", v.count, type, field.name, allocator = temp_alloc)
+				stack(ctx, name, name, direction)
+ 			    for i in 0..<v.count {
+   					slider(ctx, fmt.aprint(name, labels[i]), labels[i], (&([^]f32)(value.data)[i]), min, max)
+				}
+				if add_color_rect {
+					color := lui.Color{}
+					copy(color[:v.count], ([^]f32)(value.data)[:v.count])
+					color_rect(ctx, "color_rect", color)
+				}
+				end_stack(ctx)
+			}
+		case runtime.Type_Info_Union:
+			name := fmt.aprintf("Union|%s|%s", type, field.name, allocator = temp_alloc)
+			if inline_container(ctx, name, name) {
+
+				begin_dropdown(ctx, name, name)
+				for varient_info in v.variants {
+					varient_name := fmt.aprint(varient_info)
+					if dropdown_item(ctx, varient_name) {
+						reflect.set_union_variant_type_info(value, varient_info)
+					}
+				}
+				end_dropdown(ctx)
+				display_others(ctx, "Union_Varient", reflect.union_variant_type_info(value), field, reflect.get_union_variant(value), temp_alloc)
+				end_inline_container(ctx)
+			}
+		case runtime.Type_Info_String:
+			str := string{}
+			switch v.encoding {
+			case .UTF_8: str, _ = reflect.as_string(value)
+			case .UTF_16:
+				str16, _ := reflect.as_string16(value)
+				str = transmute(string)make([]u8, len(str16), allocator = temp_alloc)
+				utf16.decode_to_utf8(transmute([]u8)str, transmute([]u16)str16)
+			}
+
+			ok := false
+			for attr in strings.split_iterator(&tag_value, ",") {
+				if attr == "label" { label(ctx, str, str); ok = true }
+				if attr == "input" {  }
+				if attr == "textbox" { text_box(ctx, str, str, .Words); ok = true }
+			}
+			if !ok { label(ctx, str, str) }
+		case runtime.Type_Info_Float:
+			min := -100.0
+			max := 100.0
+
+			for attr in strings.split_iterator(&tag_value, ",") {
+				if strings.starts_with(attr, "min=") { min, _ = strconv.parse_f64(attr[4:]) }
+				if strings.starts_with(attr, "max=") { max, _ = strconv.parse_f64(attr[4:]) }
+			}
+
+			switch field.type.size {
+			case 2: // f16
+				valf16 := f16(0)
+				switch value.id {
+				case f16: valf16 = (^f16)(value.data)^
+				case f16le: valf16 = (f16)((^f16le)(value.data)^)
+				case f16be: valf16 = (f16)((^f16be)(value.data)^)
+				}
+				slider(ctx, field.name, field.name, &valf16, f16(min), f16(max), temp_alloc)
+				switch value.id {
+				case f16: (^f16)(value.data)^ = valf16
+				case f16le: (^f16le)(value.data)^ = f16le(valf16)
+				case f16be: (^f16be)(value.data)^ = f16be(valf16)
+				}
+			case 4: // f32
+				valf32 := f32(0)
+				switch value.id {
+				case f32: valf32 = (^f32)(value.data)^
+				case f32le: valf32 = (f32)((^f32le)(value.data)^)
+				case f32be: valf32 = (f32)((^f32be)(value.data)^)
+				}
+				slider(ctx, field.name, field.name, &valf32, f32(min), f32(max), temp_alloc)
+				switch value.id {
+				case f32: (^f32)(value.data)^ = valf32
+				case f32le: (^f32le)(value.data)^ = f32le(valf32)
+				case f32be: (^f32be)(value.data)^ = f32be(valf32)
+				}
+			case 8: // f64
+				valf64 := f64(0)
+				switch value.id {
+				case f64: valf64 = (^f64)(value.data)^
+				case f64le: valf64 = (f64)((^f64le)(value.data)^)
+				case f64be: valf64 = (f64)((^f64be)(value.data)^)
+				}
+				slider(ctx, field.name, field.name, &valf64, min, max, temp_alloc)
+				switch value.id {
+				case f64: (^f64)(value.data)^ = valf64
+				case f64le: (^f64le)(value.data)^ = f64le(valf64)
+				case f64be: (^f64be)(value.data)^ = f64be(valf64)
+				}
+			}
+		case runtime.Type_Info_Boolean:
+			val := false
+			switch value.id {
+			case bool: val = (^bool)(value.data)^
+			case b8: val = bool((^b8)(value.data)^)
+			case b16: val = bool((^b16)(value.data)^)
+			case b32: val = bool((^b32)(value.data)^)
+			case b64: val = bool((^b64)(value.data)^)
+			}
+
+			ok := false
+			for attr in strings.split_iterator(&tag_value, ",") {
+				if attr == "toggle" { toggle(ctx, field.name, field.name, &val); ok = true }
+				if attr == "checkbox" { checkbox(ctx, field.name, field.name, &val); ok = true }
+			}
+
+			if !ok { toggle(ctx, field.name, field.name, &val) }
+
+			switch value.id {
+			case bool: (^bool)(value.data)^ = (bool)(val)
+			case b8:   (^b8) (value.data)^ = (b8)(val)
+			case b16:  (^b16)(value.data)^ = (b16)(val)
+			case b32:  (^b32)(value.data)^ = (b32)(val)
+			case b64:  (^b64)(value.data)^ = (b64)(val)
+			}
 		}
 	}
 
@@ -1300,28 +1484,34 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 			field_base := field_any
 			field_base.id = reflect.typeid_base(field_any.id)
 			switch &a in field_base {
-			case f16:    slider(ctx, field.name, field.name, (^f16)  (field_base.data), 0, 100)
-			case f32:    slider(ctx, field.name, field.name, (^f32)  (field_base.data), 0, 100)
-			case f64:    slider(ctx, field.name, field.name, (^f64)  (field_base.data), 0, 100)
-			case f16le:  slider(ctx, field.name, field.name, (^f16le)(field_base.data), 0, 100)
-			case f32le:  slider(ctx, field.name, field.name, (^f32le)(field_base.data), 0, 100)
-			case f64le:  slider(ctx, field.name, field.name, (^f64le)(field_base.data), 0, 100)
-			case f16be:  slider(ctx, field.name, field.name, (^f16be)(field_base.data), 0, 100)
-			case f32be:  slider(ctx, field.name, field.name, (^f32be)(field_base.data), 0, 100)
-			case f64be:  slider(ctx, field.name, field.name, (^f64be)(field_base.data), 0, 100)
-
-			case string:    text_box(ctx, field.name, (^string)(field_base.data)^)
-			case cstring:   text_box(ctx, field.name, string((^cstring)(field_base.data)^))
-
-			case bool: toggle(ctx, field.name, field.name, (^bool)(field_base.data))
-
 			case int:
+			case i16:
+			case i16le:
+			case i16be:
 			case i32:
 			case i32be:
 			case i32le:
 			case i64:
 			case i64be:
 			case i64le:
+			case i128:
+			case i128le:
+			case i128be:
+
+			case uint:
+			case u16:
+			case u16le:
+			case u16be:
+			case u32:
+			case u32be:
+			case u32le:
+			case u64:
+			case u64be:
+			case u64le:
+			case u128:
+			case u128le:
+			case u128be:
+
 			case typeid:
 			case:
 				info := type_info_of(field_any.id)

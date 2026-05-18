@@ -11,25 +11,59 @@ import widgets "widgets"
 import sdl "vendor:sdl3"
 import sdl_backend "../backend/sdl_gpu"
 
-Test_Enum :: enum {
-	Foo,
-	Bar,
-	Baz,
-	Foo_Bar_Baz
+Entity_Type :: enum {
+    Player,
+    Enemy,
+    Npc
 }
 
-Test_Enum_Bitset :: bit_set[Test_Enum]
+Weapon :: enum {
+    Axe,
+    Sword,
+    Lance,
+}
 
-Test_Struct :: struct {
-	sum_bool: bool,
-	field_1: f32,
-	field_2: int,
-	str:     string,
-	e:       ui.Align,
-	eb:      Test_Enum_Bitset,
-	anon_struct: struct {
-		b : f32
-	}
+Onion :: struct {
+	saturation:    f32,
+	hunger:        f32,
+	smell_factor:  f32,
+}
+
+Steak_Stage :: enum {
+	Under,
+	Rare,
+	Medium_Rare,
+	Weldone,
+	Over,
+}
+
+Steak :: struct {
+	saturation: f32,
+	hunger:     f32,
+	stage:      Steak_Stage,
+}
+
+Food :: union {
+	Steak,
+	Onion
+}
+
+Weapons :: bit_set[Weapon]
+
+Vec2f32 :: [2]f32
+Vec4f32 :: [4]f32
+
+Entity :: struct {
+	name:     string16	  `lui:"textbox"`,
+    position: Vec2f32     `lui:"row"`,
+    size:     Vec2f32     `lui:"row"`,
+    type:     Entity_Type `lui:"radio"`,
+    quat:     Vec4f32,
+    weapons:  Weapons,
+    is_alive: bool        `lui:"checkbox"`,
+    damage:   f32         `lui:"min=0,max=50"`,
+    health:   int,
+    food:     Food,
 }
 
 main :: proc() {
@@ -100,10 +134,12 @@ main :: proc() {
 			ui.push_parent(ctp, root)
 		}
 
+
 		@static slider_val := f32(0.0)
 		@static checkbox_bool := false
 		if widgets.container(ctp, "__test_container", "Text Container") {
 
+		    widgets.display_struct(ctp, "__theme_editor", "Theme", widgets.DEFAULT_PALETTES[selected_palette])
 		    @static spinbox_value := 0
 		    widgets.spinbox(ctp, "__text_spin_box", "Spin Box", &spinbox_value, -10, 10, 1)
 
@@ -143,9 +179,9 @@ main :: proc() {
 			widgets.progress_bar(ctp, "__test_progress_bar", "Prgress", slider_val, -5, 5)
 			widgets.checkbox(ctp, "__test_checkbox", "checkbox", &checkbox_bool)
 			widgets.toggle(ctp, "__test_toggle", "toggle", &checkbox_bool)
-			@static t := Test_Struct{}
-			t.str = "tset sr"
-			widgets.display_struct(ctp, "__test_display_struct", "Test", t)
+			@static t := Entity{}
+			t.name = "An Entity"
+			widgets.display_struct(ctp, "__test_display_struct", "Entity", t)
 			widgets.end_container(ctp)
 		}
 
