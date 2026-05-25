@@ -2,4 +2,5 @@
 *.spall
 *.a
 *.o
+*.so
 ui_shader.odin
