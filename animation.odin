@@ -53,9 +53,9 @@ Animation_State :: struct {
 }
 
 _resolve_animations :: proc(ctx: ^Core_Context) {
-	for owner, &state in ctx.persistant.anim_states {
+	for owner, &state in ctx.persistent.anim_states {
 		if state.type == .Creation || state.type == .Update {
-			if lookup, ok := ctx.persistant.curr_lookup[owner]; ok {
+			if lookup, ok := ctx.persistent.curr_lookup[owner]; ok {
 				new_rect := lookup.info.rect
 				new_text := lookup.text_position
 				if new_rect.position != state.end.rect.position || new_rect.size != state.end.rect.size || new_text != state.end.text_position {
@@ -68,20 +68,20 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 		}
 	}
 
-	for owner, &state in ctx.persistant.anim_states {
+	for owner, &state in ctx.persistent.anim_states {
 		ended := state.update(&state, ctx.timers.frame_time)
-		if ended {delete_key(&ctx.persistant.anim_states, owner); continue}
+		if ended {delete_key(&ctx.persistent.anim_states, owner); continue}
 		switch state.type {
 		case .Destruction:
 			border := state.now.style.border
 			for &r in border.radius {r = min(min(state.now.rect.size.x, state.now.rect.size.y) / 2, r)}
 			cmd := Render_Command{}
 			cmd.kind = Command_Rect{state.now.style.color, border}
-			cmd.rect = state.now.rect
-			cmd.z_index = state.z_index
+			cmd.rect = {position = state.now.rect.position, size = state.now.rect.size}
+			cmd.z = state.z_index
 			append(&ctx.render_commands, cmd)
 		case .Creation, .Update:
-			lookup := ctx.persistant.curr_lookup[owner]
+			lookup := ctx.persistent.curr_lookup[owner]
 			widget := get_widget(ctx, lookup.info.index)
 			widget.form.style = create_style(ctx, state.now.style)
 			widget.rect = state.now.rect
@@ -89,13 +89,13 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 		}
 	}
 
-	for curr_candid in ctx.persistant.curr_candids {
-		curr_lookup := ctx.persistant.curr_lookup[curr_candid]
+	for curr_candid in ctx.persistent.curr_candids {
+		curr_lookup := ctx.persistent.curr_lookup[curr_candid]
 		curr_anim := ctx.anims[curr_lookup.form.animation]
 		curr_style := ctx.styles[curr_lookup.form.style]
 
-		if curr_candid not_in ctx.persistant.prev_candids {
-			state, ok := ctx.persistant.anim_states[curr_candid]
+		if curr_candid not_in ctx.persistent.prev_candids {
+			state, ok := ctx.persistent.anim_states[curr_candid]
 			start := Animation_Data{}
 			if ok {start = state.now} else {start = curr_anim.hooks.on_created(curr_lookup.info, curr_style, curr_lookup.text_position)}
 			state = Animation_State {
@@ -107,7 +107,7 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 				duration = curr_anim.duration,
 				update = curr_anim.hooks.update,
 			}
-			ctx.persistant.anim_states[curr_candid] = state
+			ctx.persistent.anim_states[curr_candid] = state
 			widget := get_widget(ctx, curr_lookup.info.index)
 			widget.form.style = create_style(ctx, state.now.style)
 			widget.rect = state.now.rect
@@ -115,8 +115,8 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 			continue
 		}
 
-		prev_lookup := ctx.persistant.prev_lookup[curr_candid]
-		prev_style := ctx.persistant.prev_styles[prev_lookup.form.style]
+		prev_lookup := ctx.persistent.prev_lookup[curr_candid]
+		prev_style := ctx.persistent.prev_styles[prev_lookup.form.style]
 
 		prev_data := Animation_Data {
 			rect          = prev_lookup.info.rect,
@@ -130,7 +130,7 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 		}
 
 		if curr_anim.hooks.compare(prev_data, curr_data) {
-			state, ok := ctx.persistant.anim_states[curr_candid]
+			state, ok := ctx.persistent.anim_states[curr_candid]
 			if ok {prev_data = state.now}
 			state = Animation_State {
 				owner_hash = curr_candid,
@@ -141,7 +141,7 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 				duration   = curr_anim.duration,
 				update     = curr_anim.hooks.update,
 			}
-			ctx.persistant.anim_states[curr_candid] = state
+			ctx.persistent.anim_states[curr_candid] = state
 			widget := get_widget(ctx, curr_lookup.info.index)
 			widget.form.style = create_style(ctx, state.now.style)
 			widget.rect = state.now.rect
@@ -149,12 +149,12 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 		}
 	}
 
-	for prev_candid in ctx.persistant.prev_candids {
-		if prev_candid not_in ctx.persistant.curr_candids {
-			prev_lookup := ctx.persistant.prev_lookup[prev_candid]
-			prev_anim := ctx.persistant.prev_anims[prev_lookup.form.animation]
-			prev_style := ctx.persistant.prev_styles[prev_lookup.form.style]
-			state, ok := ctx.persistant.anim_states[prev_candid]
+	for prev_candid in ctx.persistent.prev_candids {
+		if prev_candid not_in ctx.persistent.curr_candids {
+			prev_lookup := ctx.persistent.prev_lookup[prev_candid]
+			prev_anim := ctx.persistent.prev_anims[prev_lookup.form.animation]
+			prev_style := ctx.persistent.prev_styles[prev_lookup.form.style]
+			state, ok := ctx.persistent.anim_states[prev_candid]
 			end := prev_anim.hooks.on_destroyed(prev_lookup.info, prev_style, prev_lookup.text_position)
 			start := Animation_Data{}
 			if ok {start = state.now} else {start = {
@@ -162,7 +162,6 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 					style         = prev_style,
 					text_position = prev_lookup.text_position,
 				}}
-			start.rect.position += start.rect.scroll_offset
 			state = Animation_State {
 				z_index    = prev_lookup.z_index + prev_lookup.form.z_offset,
 				owner_hash = prev_candid,
@@ -173,13 +172,13 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 				duration   = prev_anim.duration,
 				update     = prev_anim.hooks.update,
 			}
-			ctx.persistant.anim_states[prev_candid] = state
+			ctx.persistent.anim_states[prev_candid] = state
 			border := state.now.style.border
 			for &r in border.radius {r = min(min(state.now.rect.size.x, state.now.rect.size.y) / 2, r)}
 			cmd := Render_Command{}
 			cmd.kind = Command_Rect{state.now.style.color, border}
-			cmd.rect = state.now.rect
-			cmd.z_index = state.z_index
+			cmd.rect = {position = state.now.rect.position, size = state.now.rect.size}
+			cmd.z = state.z_index
 			append(&ctx.render_commands, cmd)
 		}
 	}
@@ -216,12 +215,12 @@ ANIM_ALL :: Animation_Hooks {
 	},
 	on_created = proc(info: Widget_Info, style: Style, text_position: Vec2f32) -> (start: Animation_Data) {
 		rect := Rect{}
-		rect.position = info.rect.position + info.rect.size / 2 + info.rect.scroll_offset
+		rect.position = info.rect.position + info.rect.size / 2
 		rect.size = {}
 		return {rect = rect, style = style, text_position = text_position}
 	},
 	on_destroyed = proc(info: Widget_Info, style: Style, text_position: Vec2f32) -> (end: Animation_Data) {
-		return {rect = {position = info.rect.position + info.rect.size / 2 + info.rect.scroll_offset}, style = style, text_position = text_position + info.rect.scroll_offset}
+		return {rect = {position = info.rect.position + info.rect.size / 2}, style = style, text_position = text_position}
 	},
 }
 

@@ -36,12 +36,19 @@ Spacing :: struct {
     xl: f32,
 }
 
+Font_Info :: struct {
+	font_size: f32,
+	font_id:   int,
+	font:      rawptr,
+	font_name: string,
+}
+
 Font :: struct {
-	f_xs: rawptr,
-	f_sm: rawptr,
-	f_md: rawptr,
-	f_lg: rawptr,
-	f_xl: rawptr,
+	f_xs: Font_Info,
+	f_sm: Font_Info,
+	f_md: Font_Info,
+	f_lg: Font_Info,
+	f_xl: Font_Info,
 }
 
 Interaction_State :: enum {
@@ -184,7 +191,6 @@ State :: struct {
 	container_stack:    [dynamic]Container_Stack_Item,
 	active_radio_state:    ^Radio_State,
 	active_dropdown_state: ^Dropdown_State,
-	text_user_data:         rawptr
 }
 
 theme := Theme{}
@@ -276,26 +282,26 @@ DEFAULT_PALETTES := [Default_Palette]Color_Palette {
         success       = { 106, 106, 106, 255 },
     },
 
-    .Gruvbox_Dark = {
-        bg_base       = {  30,  33,  34, 255 },
-        bg_elevated   = {  40,  43,  44, 255 },
-        bg_sunken     = {  36,  39,  40, 255 },
+   .Gruvbox_Dark = {
+    	bg_base       = {  29,  32,  33, 255 },
+    	bg_elevated   = {  50,  48,  47, 255 },
+    	bg_sunken     = {  40,  40,  40, 255 },
 
-        fg_primary    = { 199, 184, 157, 255 },
-        fg_secondary  = { 192, 177, 150, 255 },
-        fg_muted      = {  87,  90,  91, 255 },
+    	fg_primary    = { 235, 219, 178, 255 },
+    	fg_secondary  = { 213, 196, 161, 255 },
+    	fg_muted      = { 146, 131, 116, 255 },
 
-        accent        = { 116, 150, 137, 255 },
-        accent_hover  = { 169, 182, 101, 255 },
-        accent_press  = { 109, 141, 173, 255 },
+    	accent        = { 131, 165, 152, 255 },
+    	accent_hover  = { 184, 187,  38, 255 },
+    	accent_press  = { 131, 165, 152, 255 },
 
-        border_subtle = {  50,  53,  54, 255 },
-        border_strong = {  87,  90,  91, 255 },
+    	border_subtle = {  60,  56,  54, 255 },
+    	border_strong = { 102,  92,  84, 255 },
 
-        danger        = { 236, 107, 100, 255 },
-        warning       = { 214, 182, 118, 255 },
-        success       = { 169, 182, 101, 255 },
-    },
+    	danger        = { 251,  73,  52, 255 },
+    	warning       = { 250, 189,  47, 255 },
+    	success       = { 184, 187,  38, 255 },
+   	},
 
     .Gruvbox_Light = {
         bg_base       = { 242, 229, 188, 255 },
@@ -446,6 +452,17 @@ DEFAULT_PALETTES := [Default_Palette]Color_Palette {
 }
 
 build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spacing, font: Font) {
+
+	make_text_style :: proc(color: lui.Color, font: Font_Info) -> lui.Text_Style {
+    	return {
+        	color = color,
+        	font = font.font,
+        	font_id = font.font_id,
+        	font_name = font.font_name,
+        	font_size = font.font_size,
+    	}
+	}
+
 	theme.font = font
 	theme.palette = palette
 	theme.spacing = spacing
@@ -457,23 +474,23 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     accent := lui.create_style(ctx, {
         color  = p.accent,
         border = {color = p.accent, thickness = 1, radius = 6},
-        text   = {color = p.bg_sunken, font = f.f_md},
+        text   = {color = p.bg_sunken, font = f.f_md.font, font_id = f.f_md.font_id, font_name = f.f_md.font_name, font_size = f.f_md.font_size},
     })
 
     accent_hover := lui.create_style(ctx, {
         color  = p.accent_hover,
         border = {color = p.accent_hover, thickness = 1, radius = 6},
-        text   = {color = p.bg_sunken, font = f.f_md},
+        text   = make_text_style(p.bg_sunken, f.f_md),
     })
 
     accent_press := lui.create_style(ctx, {
         color  = p.accent_press,
         border = {color = p.accent_press, thickness = 1, radius = 6},
-        text   = {color = p.bg_sunken, font = f.f_md},
+        text   = make_text_style(p.bg_sunken, f.f_md),
     })
 
-    text_md := lui.create_style(ctx, {color = 0, text = {color = p.fg_primary, font = f.f_md}})
-    text_sm := lui.create_style(ctx, {color = 0, text = {color = p.fg_secondary, font = f.f_sm}})
+    text_md := lui.create_style(ctx, {color = 0, text = make_text_style(p.fg_primary, f.f_md)})
+    text_sm := lui.create_style(ctx, {color = 0, text = make_text_style(p.fg_secondary, f.f_sm)})
 
     track := lui.create_style(ctx, {color  = p.bg_sunken, border = {color = p.border_subtle, thickness = 1, radius = 999}})
     track_fill := lui.create_style(ctx, {color  = p.accent, border = {color = p.border_subtle, thickness = 1, radius = 999}})
@@ -485,13 +502,13 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     text_box := lui.create_style(ctx, {
         color  = p.bg_sunken,
         border = {color = p.border_subtle, thickness = 1, radius = 6},
-        text   = {color = p.fg_primary, font = f.f_md, selection_background = p.accent, selection_border = {radius = 4}},
+        text = make_text_style(p.fg_primary, f.f_md)
     })
 
     tooltip := lui.create_style(ctx, {
         color  = p.bg_base,
         border = {color = p.border_subtle, thickness = 1, radius = 6},
-        text   = {color = p.fg_primary, font = f.f_sm},
+        text   = make_text_style(p.fg_primary, f.f_sm),
     })
 
     si :: proc(normal, hover, press: lui.Style_Index) -> Interaction_Style {
@@ -501,14 +518,14 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     {
 	    body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {2, {0, 2}}, radius = {0, 0, 6, 6}}})
 	   	title_bar := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = {2, {2, 0}}, radius = {6, 6, 0, 0}}})
-	    title := lui.create_style(ctx, {text = {color = p.fg_primary, font = f.f_md}})
-	   	button := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 6}, text = {color = p.fg_primary, font = f.f_md}})
-	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = 6}, text = {color = p.bg_elevated, font = f.f_md}})
-	    button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = 6}, text = {color = p.bg_elevated, font = f.f_md}})
+	    title := lui.create_style(ctx, {text = make_text_style(p.fg_primary, f.f_md)})
+	   	button := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 6}, text = make_text_style(p.fg_primary, f.f_md)})
+	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = 6}, text = make_text_style(p.bg_elevated, f.f_md)})
+	    button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = 6}, text = make_text_style(p.bg_elevated, f.f_md)})
 
-	    inline_button := lui.create_style(ctx, {color = p.bg_base, border = {radius = 4}, text = {color = p.fg_primary, font = f.f_md}})
-	    inline_button_h := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 4}, text = {color = p.fg_primary, font = f.f_md}})
-	    inline_button_p := lui.create_style(ctx, {color = p.accent, border = {radius = 4}, text = {color = p.bg_base, font = f.f_md}})
+	    inline_button := lui.create_style(ctx, {color = p.bg_base, border = {radius = 4}, text = make_text_style(p.fg_primary, f.f_md)})
+	    inline_button_h := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 4}, text = make_text_style(p.fg_primary, f.f_md)})
+		inline_button_p := lui.create_style(ctx, {color = p.accent, border = {radius = 4}, text = make_text_style(p.bg_base, f.f_md)})
 
 	    inline_body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_strong, thickness = {{2, 0}, {0, 0}}}})
 
@@ -535,13 +552,13 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     }
 
     {
-        inc_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, radius = {0, 4, 4, 0}}, text = {color = p.fg_primary, font = f.f_md}})
-	    inc_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {0, 4, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
-	    inc_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {0, 4, 4, 0}}, text = {color = p.bg_elevated, font = f.f_md}})
+        inc_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, radius = {0, 4, 4, 0}, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
+	    inc_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {0, 4, 4, 0}}, text = make_text_style(p.bg_elevated, f.f_md)})
+	    inc_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {0, 4, 4, 0}}, text = make_text_style(p.bg_elevated, f.f_md)})
 
-        dec_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, radius = {4, 0, 0, 4}}, text = {color = p.fg_primary, font = f.f_md}})
-	    dec_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {4, 0, 0, 4}}, text = {color = p.bg_elevated, font = f.f_md}})
-	    dec_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {4, 0, 0, 4}}, text = {color = p.bg_elevated, font = f.f_md}})
+        dec_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, radius = {4, 0, 0, 4}, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
+	    dec_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {4, 0, 0, 4}}, text = make_text_style(p.bg_elevated, f.f_md)})
+	    dec_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {4, 0, 0, 4}}, text = make_text_style(p.bg_elevated, f.f_md)})
 
         theme.spinbox.inc = si(inc_n, inc_h, inc_p)
         theme.spinbox.dec = si(dec_n, dec_h, dec_p)
@@ -573,12 +590,12 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     theme.radio.item_toggle_off = si(thumb, thumb_h, thumb_p)
 
     {
-        dropdown_label := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1, radius = 6}, text = {color = p.fg_primary, font = f.f_md}})
-        dropdown_label_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1, radius = 6}, text = {color = p.fg_primary, font = f.f_md}})
+        dropdown_label := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1, radius = 6}, text = make_text_style(p.fg_primary, f.f_md)})
+        dropdown_label_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1, radius = 6}, text = make_text_style(p.fg_primary, f.f_md)})
         dropdown_body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1, radius = 6}})
-        dropdown_item := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1}, text = {color = p.fg_primary, font = f.f_md}})
-        dropdown_item_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1}, text = {color = p.fg_primary, font = f.f_md}})
-        dropdown_item_p := lui.create_style(ctx, {color = p.accent, border = {color = p.border_subtle, thickness = 1}, text = {color = p.bg_base, font = f.f_md}})
+        dropdown_item := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
+        dropdown_item_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
+        dropdown_item_p := lui.create_style(ctx, {color = p.accent, border = {color = p.border_subtle, thickness = 1}, text = make_text_style(p.bg_base, f.f_md)})
 
 	    theme.dropdown.label = si(dropdown_label, dropdown_label_h, dropdown_label_h)
 	    theme.dropdown.body = si(dropdown_body, dropdown_body, dropdown_body)
@@ -591,7 +608,7 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 
     theme.progress_bar.track = si(track, track, track)
     theme.progress_bar.fill = si(track_fill, track_fill, track_fill)
-    theme.progress_bar.track_height = 6
+    theme.progress_bar.track_height = 8
 
     theme.text_box.style = si(text_box, text_box, text_box)
     theme.tooltip.style = si(tooltip, tooltip, tooltip)
@@ -602,6 +619,20 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     }
 
     theme.control_animation = lui.create_animation(ctx, anim, duration = time.Millisecond * 1)
+}
+
+init_state :: proc(allocator := context.allocator) {
+	state.container_stack = make([dynamic]Container_Stack_Item, allocator)
+	state.container_state = make(map[lui.Hash]Container_State, allocator)
+	state.dropdown_state = make(map[lui.Hash]Dropdown_State, allocator)
+	state.radio_state = make(map[lui.Hash]Radio_State, allocator)
+}
+
+deinit_state :: proc() {
+	delete(state.container_stack)
+	delete(state.container_state)
+	delete(state.dropdown_state)
+	delete(state.radio_state)
 }
 
 resolve_style :: proc(ctx: ^lui.Core_Context, info: lui.Widget_Info, style: Interaction_Style) -> lui.Style_Index {
@@ -1088,7 +1119,7 @@ text_box :: proc(ctx: ^lui.Core_Context, key: lui.Key, text: string, wrap: lui.T
 	contf := lui.Form{}
 	contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
 	contf.layout.padding = theme.spacing.md
-	contf.text = lui.create_text(ctx, lui.text(text, wrap, user_data = state.text_user_data))
+	contf.text = lui.create_text(ctx, lui.text(text, wrap))
 	contf.style = resolve_style(ctx, cont, theme.text_box.style)
 	contf.selection = lui.create_selection(ctx, lui.selection(cont.hash))
 	events := lui.get_widget_mouse_events(ctx, cont, .Left)
@@ -1220,7 +1251,6 @@ spinbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, spinbox_label: string, val
     cont := lui.reserve_widget(ctx, key)
     contf := lui.Form{}
     contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
-    contf.layout.padding = theme.spacing.md
     contf.layout.child_gap = theme.spacing.sm
     contf.layout.placement = {.Negative, .Center}
     lui.submit_widget(ctx, cont, contf)
@@ -1292,7 +1322,7 @@ color_rect :: proc(ctx: ^lui.Core_Context, key: lui.Key, color: lui.Color, temp_
     contf.style = lui.create_style(ctx, {color = color})
     lui.submit_widget(ctx, cont, contf)
     lui.push_parent(ctx, cont)
-    color_label := fmt.aprintf("Hex:#%X%X%X%X RGBA:%i %i %i %i", u8(color.r), u8(color.g), u8(color.b), u8(color.a), u8(color.r), u8(color.g), u8(color.b), u8(color.a))
+    color_label := fmt.aprintf("Hex:#%X%X%X%X RGBA:%i %i %i %i", u8(color.r), u8(color.g), u8(color.b), u8(color.a), u8(color.r), u8(color.g), u8(color.b), u8(color.a), allocator = temp_alloc)
     tooltip(ctx, "__internal_color_rect_tooltip", cont, color_label)
     lui.pop_parent(ctx)
 }
@@ -1354,7 +1384,7 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 				name := fmt.aprintf("[%i]f32|%s|%s ", v.count, type, field.name, allocator = temp_alloc)
 				stack(ctx, name, name, direction)
  			    for i in 0..<v.count {
-   					slider(ctx, fmt.aprint(name, labels[i]), labels[i], (&([^]f32)(value.data)[i]), min, max)
+   					slider(ctx, fmt.aprint(name, labels[i], allocator = temp_alloc), labels[i], (&([^]f32)(value.data)[i]), min, max)
 				}
 				if add_color_rect {
 					color := lui.Color{}
@@ -1369,7 +1399,7 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 
 				begin_dropdown(ctx, name, name)
 				for varient_info in v.variants {
-					varient_name := fmt.aprint(varient_info)
+					varient_name := fmt.aprint(varient_info, allocator = temp_alloc)
 					if dropdown_item(ctx, varient_name) {
 						reflect.set_union_variant_type_info(value, varient_info)
 					}
@@ -1403,7 +1433,6 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 				if strings.starts_with(attr, "min=") { min, _ = strconv.parse_f64(attr[4:]) }
 				if strings.starts_with(attr, "max=") { max, _ = strconv.parse_f64(attr[4:]) }
 			}
-
 			switch field.type.size {
 			case 2: // f16
 				valf16 := f16(0)
@@ -1470,6 +1499,18 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 			case b32:  (^b32)(value.data)^ = (b32)(val)
 			case b64:  (^b64)(value.data)^ = (b64)(val)
 			}
+		case runtime.Type_Info_Integer:
+			if v.signed {
+				switch field.type.size {
+				case 1:
+				case 2:
+				case 4:
+				case 8:
+				case 16:
+				}
+			} else {
+
+			}
 		}
 	}
 
@@ -1477,44 +1518,10 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 	if inline_container(ctx, key, title_label) {
 		for field in reflect.struct_fields_zipped(value.id) {
 			field_any := reflect.struct_field_value(value, field)
-			field_base := field_any
-			field_base.id = reflect.typeid_base(field_any.id)
-			switch &a in field_base {
-			case int:
-			case i16:
-			case i16le:
-			case i16be:
-			case i32:
-			case i32be:
-			case i32le:
-			case i64:
-			case i64be:
-			case i64le:
-			case i128:
-			case i128le:
-			case i128be:
-
-			case uint:
-			case u16:
-			case u16le:
-			case u16be:
-			case u32:
-			case u32be:
-			case u32le:
-			case u64:
-			case u64be:
-			case u64le:
-			case u128:
-			case u128le:
-			case u128be:
-
-			case typeid:
-			case:
-				info := type_info_of(field_any.id)
-				#partial switch v in info.variant {
-				case runtime.Type_Info_Named: display_others(ctx, v.name, info, field, field_any, temp_alloc)
-				case:                         display_others(ctx, "Anon", info, field, field_any, temp_alloc)
-				}
+			info := type_info_of(field_any.id)
+			#partial switch v in info.variant {
+			case runtime.Type_Info_Named: display_others(ctx, v.name, info, field, field_any, temp_alloc)
+			case:                         display_others(ctx, "Anon", info, field, field_any, temp_alloc)
 			}
 		}
 		end_inline_container(ctx)

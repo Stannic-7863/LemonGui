@@ -1,2 +1,5 @@
 *.json
 *.spall
+*.a
+*.o
+ui_shader.odin

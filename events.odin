@@ -193,7 +193,7 @@ Mouse_Context :: struct {
 	hover_is_locked:         bool,
 	active_disabled:         bool,
 	hovered_character:       rune,
-	hovered_character_index: int,
+	hovered_character_index: i32,
 }
 
 Keyboard_Context :: struct {

@@ -31,8 +31,8 @@ offset :: proc "contextless" (x: Override_Transform = nil, y: Override_Transform
 	return {.X = x, .Y = y}
 }
 
-text :: proc "contextless" (text: string, wrap_mode: Text_Wrap_Mode = .Words, preferred_min: f32 = 0, preferred_max: f32 = max(f32), user_data : rawptr = nil) -> Text {
-	return Text{text = text, preferred_min = preferred_min, preferred_max = preferred_max, wrap_mode = wrap_mode, user_data = user_data}
+text :: proc "contextless" (text: string, wrap_mode: Text_Wrap_Mode = .Words, preferred_min: f32 = 0, preferred_max: f32 = max(f32)) -> Text {
+	return Text{text = text, preferred_min = preferred_min, preferred_max = preferred_max, wrap_mode = wrap_mode}
 }
 
 layout :: proc "contextless" (sizing: [2]Sizing, placement: [2]Placement = {}, child_gap: f32 = 0, direction: Axis = .X) -> Layout {
@@ -86,7 +86,7 @@ text_style :: proc "contextless" (
 }
 
 style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, border: Border_Style = {}, text: Text_Style = {}) -> Style {
-	return {color = color, border = border, text = text}
+	return {color = color, border = border, text = text, image_tint = image_tint}
 }
 
 border :: proc "contextless" (color: [4]Color = 0, radius: Vec4f32 = 0, thickness: [2]Vec2f32 = {}) -> Border_Style {
@@ -101,35 +101,38 @@ axis_from_vec4f32 :: proc "contextless" (vec4: Vec4f32) -> [2]Vec2f32 {
 	return {{vec4[3], vec4[1]}, {vec4[0], vec4[2]}}
 }
 
-vec4f32_to_axis :: proc "contextless" (vec: [2]Vec2f32) -> Vec4f32 {
+vec4f32_from_axis :: proc "contextless" (vec: [2]Vec2f32) -> Vec4f32 {
 	return {vec.y.x, vec.x.y, vec.y.y, vec.x.x}
 }
 
 color_from_hex :: proc "contextless" (hex: u32) -> Color {
-	rgba := (transmute([4]u8)hex)
-	return {f32(rgba.r), f32(rgba.g), f32(rgba.b), f32(rgba.a)}
+    return {
+        f32((hex >> 24) & 0xFF),
+        f32((hex >> 16) & 0xFF),
+        f32((hex >>  8) & 0xFF),
+        f32((hex      ) & 0xFF),
+    }
 }
 
 selection :: proc (hash: Hash) -> Text_Selection {
 	return {hash = hash}
 }
 
-set_selection_anchor :: proc (ctx: ^Core_Context, index: Selection_Index, anchor: int) {
+set_selection_anchor :: proc (ctx: ^Core_Context, index: Selection_Index, anchor: i32) {
 	selection := get_selection(ctx, index)
 	selection.anchor = anchor
 }
 
-set_selection_cursor :: proc (ctx: ^Core_Context, index: Selection_Index, cursor: int) {
+set_selection_cursor :: proc (ctx: ^Core_Context, index: Selection_Index, cursor: i32) {
 	selection := get_selection(ctx, index)
 	selection.cursor = cursor
 }
 
-set_selection :: proc (ctx: ^Core_Context, index: Selection_Index, anchor, cursor: int) {
+set_selection :: proc (ctx: ^Core_Context, index: Selection_Index, anchor, cursor: i32) {
 	selection := get_selection(ctx, index)
 	selection.anchor = anchor
 	selection.cursor = cursor
 }
-// EVENTS
 
 is_mouse_pressed :: proc(ctx: ^Core_Context, button: Mouse_Button) -> bool {
 	return .Pressed in ctx.mouse.mapped_events[button]
@@ -163,7 +166,7 @@ get_widget_mouse_events :: proc(ctx: ^Core_Context, info: Widget_Info, button: M
 }
 
 is_widget_on_screen :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {
-	p := widget.rect.position + widget.rect.scroll_offset
+	p := widget.rect.position
 	return !(p.x + widget.rect.size.x < 0 || p.y + widget.rect.size.y < 0 || p.x > ctx.window_size.x || p.y > ctx.window_size.y)
 }
 
@@ -176,7 +179,7 @@ is_point_in_rect :: proc(rect: Rect, point: Vec2f32, border_style: Border_Style)
 	}
 
 	half_size := rect.size / 2
-	rel_pos := point - (rect.position + rect.scroll_offset + half_size)
+	rel_pos := point - (rect.position + half_size)
 
 	border_radius.xy = rel_pos.x > 0 ? border_radius.xy : border_radius.zw
 	border_radius.x = rel_pos.y > 0 ? border_radius.x : border_radius.y
@@ -196,7 +199,7 @@ create_clip :: proc(ctx: ^Core_Context, clip: Clip) -> Clip_Index {
 	clip := clip
 
 	if clip.hash != 0 {
-		persistant_clip := ctx.persistant.clips[clip.hash]
+		persistant_clip := ctx.persistent.clips[clip.hash]
 		for clip_kind, axis in clip.info {
 			if clip_kind.kind == .Auto {
 				clip.info[axis].value = persistant_clip[axis]
@@ -213,7 +216,7 @@ create_selection :: proc(ctx: ^Core_Context, selection: Text_Selection) -> Selec
 	selection := selection
 
 	if selection.hash != 0 {
-		persistant_selection := ctx.persistant.selections[selection.hash]
+		persistant_selection := ctx.persistent.selections[selection.hash]
 		selection.anchor = persistant_selection.anchor
 		selection.cursor = persistant_selection.cursor
 	}
@@ -290,8 +293,8 @@ sort_render_commands :: proc(commands: []Render_Command) #no_bounds_check {
 	i, j := 0, length - 1
 
 	loop: for {
-		for (commands[i].z_index - p.z_index) < 0 {i += 1}
-		for (p.z_index - commands[j].z_index) < 0 {j -= 1}
+		for (commands[i].z - p.z) < 0 {i += 1}
+		for (p.z - commands[j].z) < 0 {j -= 1}
 
 		if i >= j {
 			break loop

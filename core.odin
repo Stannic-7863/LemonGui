@@ -16,7 +16,7 @@ Widget_Index :: distinct i32
 Animation_Index :: distinct i32
 Selection_Index :: distinct i32
 Override_Range :: distinct Range
-Text_Line_Range :: distinct Range
+Text_Lines_Range :: distinct Range
 
 Vec2f32 :: [2]f32
 Vec4f32 :: [4]f32
@@ -29,7 +29,6 @@ Rect :: struct {
 	size:          Vec2f32,
 	content_size:  Vec2f32,
 	clip_offset:   Vec2f32,
-	scroll_offset: Vec2f32,
 }
 
 Text_Wrap_Mode :: enum u8 {
@@ -42,11 +41,10 @@ Text :: struct {
 	preferred_min: f32,
 	preferred_max: f32,
 	wrap_mode:     Text_Wrap_Mode,
-	user_data:     rawptr,
 }
 
 Text_Info :: struct {
-	lines_range: Text_Line_Range,
+	lines_range: Text_Lines_Range,
 	size:        Vec2f32, // We use previous frame x size, and current frame y size during sizing passes
 	position:    Vec2f32,
 	min_width:   f32,
@@ -57,14 +55,13 @@ Text_Info :: struct {
 Text_Line :: struct {
 	line:     string,
 	position: Vec2f32,
-	start:    int,
-	end:      int,
-	width:    f32
+	width:    f32,
+	range:    Range,
 }
 
 Text_Selection :: struct {
-	cursor: int,
-	anchor: int,
+	cursor: i32,
+	anchor: i32,
 	hash:   Hash,
 }
 
@@ -125,7 +122,7 @@ Clip_Kind :: enum u8 {
 }
 
 Widget :: struct {
-	info:                    Widget_Info, // This will contain a Rect from previous frame.
+	info:                    Widget_Info,
 	form:                    Form,
 	text_info:               Text_Info,
 	rect:                    Rect, // Info about current frame processed rect
@@ -170,10 +167,11 @@ Core_Context :: struct {
 	clip_stack:               [dynamic]Widget_Index,
 	render_commands:          [dynamic]Render_Command,
 	measured_words:           [dynamic]Measured_Word,
-	persistant:               Persistant_Data,
+	persistent:               Persistent_Data,
 	measure_text_hover_index: proc(text: string, point: Vec2f32, style: Text_Style, user_data: rawptr) -> (int, bool),
-	measure_text_width:       proc(text: string, style: Text_Style) -> f32,
-	measure_text_height:      proc(style: Text_Style) -> f32,
+	measure_text_width:       proc(text: string, style: Text_Style, user_data: rawptr) -> f32,
+	measure_text_height:      proc(style: Text_Style, user_data: rawptr) -> f32,
+	text_user_data:           rawptr, // Will be passed into above three callbacks
 	mouse:                    Mouse_Context,
 	keyboard:                 Keyboard_Context,
 	window_size:              Vec2f32,
@@ -207,7 +205,7 @@ Lookup_Data :: struct {
 	text_max_width: f32,
 }
 
-Persistant_Data :: struct {
+Persistent_Data :: struct {
 	// all prev curr pairs are swapped at the end of layout. The curr things are clear at frame start
 	prev_styles:  [dynamic]Style,
 	prev_anims:   [dynamic]Animation,
@@ -223,7 +221,7 @@ Persistant_Data :: struct {
 
 init_context :: proc(size: int, words_to_cache: int, allocator: runtime.Allocator) -> Core_Context {
 	ctx: Core_Context
-	lru.init(&ctx.persistant.cached_words, words_to_cache, allocator, allocator)
+	lru.init(&ctx.persistent.cached_words, words_to_cache, allocator, allocator)
 
 	ctx.text = make([dynamic]Text, allocator)
 	ctx.clips = make([dynamic]Clip, allocator)
@@ -238,18 +236,18 @@ init_context :: proc(size: int, words_to_cache: int, allocator: runtime.Allocato
 	ctx.measured_words = make([dynamic]Measured_Word, allocator)
 	ctx.render_commands = make([dynamic]Render_Command, allocator)
 
-	ctx.persistant.prev_styles = make([dynamic]Style, allocator)
-	ctx.persistant.prev_anims = make([dynamic]Animation, allocator)
+	ctx.persistent.prev_styles = make([dynamic]Style, allocator)
+	ctx.persistent.prev_anims = make([dynamic]Animation, allocator)
 
-	ctx.persistant.anim_states = make(map[Hash]Animation_State, allocator)
-	ctx.persistant.prev_lookup = make(map[Hash]Lookup_Data, allocator)
-	ctx.persistant.curr_lookup = make(map[Hash]Lookup_Data, allocator)
+	ctx.persistent.anim_states = make(map[Hash]Animation_State, allocator)
+	ctx.persistent.prev_lookup = make(map[Hash]Lookup_Data, allocator)
+	ctx.persistent.curr_lookup = make(map[Hash]Lookup_Data, allocator)
 
-	ctx.persistant.clips = make(map[Hash]Vec2f32, allocator)
-	ctx.persistant.selections = make(map[Hash]Text_Selection, allocator)
+	ctx.persistent.clips = make(map[Hash]Vec2f32, allocator)
+	ctx.persistent.selections = make(map[Hash]Text_Selection, allocator)
 
-	ctx.persistant.prev_candids = make(map[Hash]struct{}, allocator)
-	ctx.persistant.curr_candids = make(map[Hash]struct{}, allocator)
+	ctx.persistent.prev_candids = make(map[Hash]struct{}, allocator)
+	ctx.persistent.curr_candids = make(map[Hash]struct{}, allocator)
 
 	return ctx
 }
@@ -268,19 +266,19 @@ deinit_context :: proc(ctx: ^Core_Context) {
 	delete(ctx.measured_words)
 	delete(ctx.render_commands)
 
-	delete(ctx.persistant.prev_styles)
-	delete(ctx.persistant.prev_anims)
+	delete(ctx.persistent.prev_styles)
+	delete(ctx.persistent.prev_anims)
 
-	delete(ctx.persistant.anim_states)
-	delete(ctx.persistant.prev_lookup)
-	delete(ctx.persistant.curr_lookup)
+	delete(ctx.persistent.anim_states)
+	delete(ctx.persistent.prev_lookup)
+	delete(ctx.persistent.curr_lookup)
 
-	delete(ctx.persistant.clips)
-	delete(ctx.persistant.selections)
+	delete(ctx.persistent.clips)
+	delete(ctx.persistent.selections)
 
-	delete(ctx.persistant.prev_candids)
-	delete(ctx.persistant.curr_candids)
-	lru.destroy(&ctx.persistant.cached_words, false)
+	delete(ctx.persistent.prev_candids)
+	delete(ctx.persistent.curr_candids)
+	lru.destroy(&ctx.persistent.cached_words, false)
 }
 
 reserve_widget :: proc(ctx: ^Core_Context, key: Key) -> Widget_Info {
@@ -297,7 +295,7 @@ reserve_widget :: proc(ctx: ^Core_Context, key: Key) -> Widget_Info {
 submit_widget :: proc(ctx: ^Core_Context, info: Widget_Info, form: Form) {
 	form := form
 	widget := get_widget(ctx, info.index)
-	ctx.persistant.curr_lookup[info.hash] = {
+	ctx.persistent.curr_lookup[info.hash] = {
 		info = info,
 		form = form,
 	}
@@ -314,7 +312,7 @@ submit_widget :: proc(ctx: ^Core_Context, info: Widget_Info, form: Form) {
 		form.z_offset += parent.form.z_offset
 	}
 
-	if form.animation != 0 {ctx.persistant.curr_candids[widget.info.hash] = {}}
+	if form.animation != 0 {ctx.persistent.curr_candids[widget.info.hash] = {}}
 
 	widget.form = form
 }
@@ -372,7 +370,7 @@ _generate_widget_hash :: proc(info: ^Widget_Info) {
 }
 
 _read_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	data, ok := ctx.persistant.prev_lookup[widget.info.hash]
+	data, ok := ctx.persistent.prev_lookup[widget.info.hash]
 	widget.info.rect = data.info.rect
 	widget.text_info.size = data.text_size
 	widget.text_info.min_width = data.text_min_width
@@ -380,7 +378,7 @@ _read_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
 }
 
 _write_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	data := &ctx.persistant.curr_lookup[widget.info.hash]
+	data := &ctx.persistent.curr_lookup[widget.info.hash]
 	data.info.rect = widget.rect
 	data.text_size = widget.text_info.size
 	data.text_position = widget.text_info.position
@@ -418,8 +416,8 @@ begin :: proc(ctx: ^Core_Context) {
 	append(&ctx.anims, Animation{})
 	append(&ctx.selections, Text_Selection{})
 
-	clear(&ctx.persistant.curr_lookup)
-	clear(&ctx.persistant.curr_candids)
+	clear(&ctx.persistent.curr_lookup)
+	clear(&ctx.persistent.curr_candids)
 
 	ctx.timers.frame_time = time.diff(ctx.timers.frame_start, time.now())
 	ctx.timers.frame_start = time.now()

@@ -1,7 +1,7 @@
 package sdl_gpu_backend
 
 import "base:runtime"
-import ui "./../../"
+import lui "./../../"
 import "vendor:sdl3/ttf"
 
 import "core:fmt"
@@ -47,7 +47,7 @@ Backend_Context :: struct {
 	dummy_texture:       ^sdl.GPUTexture,
 	pipeline:            ^sdl.GPUGraphicsPipeline,
 	cmd_buf:             ^sdl.GPUCommandBuffer,
-	render_texture:           ^sdl.GPUTexture,
+	render_texture:      ^sdl.GPUTexture,
 	render_commands_buf: Gpu_Dynamic_Buffer,
 	clip_buf:            Gpu_Dynamic_Buffer,
 	clip_idx_buf:        Gpu_Dynamic_Buffer,
@@ -193,7 +193,7 @@ update_dynamic_buffer :: proc(backend_ctx: ^Backend_Context, buf: ^Gpu_Dynamic_B
 	}
 }
 
-render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
+render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^lui.Core_Context) {
 	clear(&backend_ctx.render_commands)
 	clear(&backend_ctx.batch)
 	clear(&backend_ctx.clips)
@@ -236,7 +236,7 @@ render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
 
 geometry_pass :: proc(
 	backend_ctx: ^Backend_Context,
-	core_ctx: ^ui.Core_Context,
+	core_ctx: ^lui.Core_Context,
 	render_pass: ^sdl.GPURenderPass,
 	command_buf: ^sdl.GPUCommandBuffer,
 	projection: ^matrix[4, 4]f32,
@@ -262,17 +262,16 @@ geometry_pass :: proc(
 	}
 }
 
-feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) {
+feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^lui.Core_Context) {
 	batch_start := int(0)
 	active_atlast_texture: ^sdl.GPUTexture
 
 	for &cmd, cmd_index in core_ctx.render_commands {
-		cmd.rect.position += cmd.rect.scroll_offset
 		switch cmd_kind in cmd.kind {
-		case ui.Command_Rect:
+		case lui.Command_Rect:
 			r := Gpu_Render_Command{}
 			r.f1 = cmd_kind.border.radius
-			r.f2 = ui.vec4f32_to_axis(cmd_kind.border.thickness)
+			r.f2 = lui.vec4f32_from_axis(cmd_kind.border.thickness)
 			r.color = cmd_kind.color / 255
 			r.border_color = cmd_kind.border.color / 255
 			r.position_and_size.xy = cmd.rect.position
@@ -286,18 +285,18 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 				r.flags[2] = 0
 			}
 			append(&backend_ctx.render_commands, r)
-		case ui.Command_Clip_Start:
+		case lui.Command_Clip_Start:
 			c := Clip{}
 			c.position_and_size.xy = cmd.rect.position
 			c.position_and_size.zw = cmd.rect.size
 			c.radius = cmd_kind.border_radius
 			append(&backend_ctx.clips, c)
 			append(&backend_ctx.clip_stack, i32(len(backend_ctx.clips)) - 1)
-		case ui.Command_Clip_End:
+		case lui.Command_Clip_End:
 			pop_safe(&backend_ctx.clip_stack)
-		case ui.Command_Image:
-		case ui.Command_Custom:
-		case ui.Command_Text:
+		case lui.Command_Image:
+		case lui.Command_Custom:
+		case lui.Command_Text:
 			for line in cmd_kind.lines {
 				text := ttf.CreateText(backend_ctx.font_engine, cast(^ttf.Font)cmd_kind.style.font, cast(cstring)raw_data(line.line), len(line.line))
 				defer ttf.DestroyText(text)
@@ -334,7 +333,7 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 
 						r := Gpu_Render_Command{}
 
-						r.position_and_size.xy = position + cmd.rect.scroll_offset
+						r.position_and_size.xy = position
 						r.position_and_size.zw = {width, -height}
 						r.f1 = {uv0.x, uv1.x, uv2.x, uv3.x}
 						r.f2 = {uv0.y, uv1.y, uv2.y, uv3.y}
@@ -371,7 +370,6 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^ui.Core_Context) 
 }
 
 load_shader :: proc(gpu: ^sdl.GPUDevice, path: string, stage: sdl.GPUShaderStage, format: sdl.GPUShaderFormat, num_ubo, num_samplers, num_storage_buffers: u32) -> ^sdl.GPUShader {
-
 	source, read_err := os.read_entire_file_from_path(path, context.allocator)
 	defer delete(source, context.allocator)
 
@@ -396,19 +394,19 @@ load_shader :: proc(gpu: ^sdl.GPUDevice, path: string, stage: sdl.GPUShaderStage
 	return shader
 }
 
-measure_text_width :: proc(text: string, style: ui.Text_Style) -> f32 {
+measure_text_width :: proc(text: string, style: lui.Text_Style, user_data: rawptr) -> f32 {
 	font := cast(^ttf.Font)(style.font)
 	w, h: i32
 	ttf.GetStringSize(font, cast(cstring)raw_data(text), len(text), &w, &h)
 	return f32(w)
 }
 
-measure_text_height :: proc(style: ui.Text_Style) -> f32 {
+measure_text_height :: proc(style: lui.Text_Style, user_data: rawptr) -> f32 {
 	font := cast(^ttf.Font)(style.font)
 	return f32(ttf.GetFontHeight(font))
 }
 
-measure_text_hover_index :: proc(text: string, point: Vec2f32, style: ui.Text_Style, user_data: rawptr) -> (int, bool) {
+measure_text_hover_index :: proc(text: string, point: Vec2f32, style: lui.Text_Style, user_data: rawptr) -> (int, bool) {
 	engine := cast(^ttf.TextEngine)user_data
 	font := cast(^ttf.Font)style.font
 
