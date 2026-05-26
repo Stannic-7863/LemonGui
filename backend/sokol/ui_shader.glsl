@@ -221,6 +221,7 @@ vec4 render_text() {
 }
 
 void main() {
+	frag_color = vec4(0);
     do_clip_test();
 
     frag_color = (out_flags.x == 0) ? render_rect() : render_text();

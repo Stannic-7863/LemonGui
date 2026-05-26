@@ -229,7 +229,7 @@ main :: proc() {
 		colors = {0 = {
 			blend = {
 				enabled          = true,
-				dst_factor_rgb   = .ONE_MINUS_DST_ALPHA,
+				dst_factor_rgb   = .ONE_MINUS_SRC_ALPHA,
 				src_factor_rgb   = .ONE,
 				dst_factor_alpha = .ONE_MINUS_SRC_ALPHA,
 				src_factor_alpha = .ONE,
@@ -349,7 +349,7 @@ main :: proc() {
 		// Open the swapchain pass and blit the UI target onto the screen.
 		// load_action is LOAD so anything drawn before this pass (e.g. a 3D scene)
 		// is preserved and the UI composites on top via alpha blending.
-		sgfx.begin_pass({ action = {colors = {0 = {load_action = .LOAD}}}, swapchain = { width = i32(ctx.window_size.x), height = i32(ctx.window_size.y)}})
+		sgfx.begin_pass({ action = {colors = {0 = {load_action = .CLEAR}}}, swapchain = { width = i32(ctx.window_size.x), height = i32(ctx.window_size.y)}})
 
 		sgfx.apply_pipeline(swap_pipeline)
 		sgfx.apply_bindings(swap_binding)
