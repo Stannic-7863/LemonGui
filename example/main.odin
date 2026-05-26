@@ -229,10 +229,10 @@ main :: proc() {
 		colors = {0 = {
 			blend = {
 				enabled          = true,
-				src_factor_rgb   = .SRC_ALPHA,
-				dst_factor_rgb   = .ONE_MINUS_SRC_ALPHA,
-				src_factor_alpha = .ONE,
+				dst_factor_rgb   = .ONE_MINUS_DST_ALPHA,
+				src_factor_rgb   = .ONE,
 				dst_factor_alpha = .ONE_MINUS_SRC_ALPHA,
+				src_factor_alpha = .ONE,
 			},
 		}},
 	})
@@ -253,8 +253,6 @@ main :: proc() {
 	// resized: true on the frame a window resize event was received.
 	// running: false when the user closes the window or presses Escape.
 	for resize in handle_events(ctp, window) {
-		defer free_all(context.temp_allocator)
-
 		// Clears per-frame state: resets the widget tree, clears render commands,
 		// and resets input event flags that are only valid for one frame (Pressed, Released).
 		lui.begin(ctp)
@@ -275,16 +273,15 @@ main :: proc() {
 			lui.push_parent(ctp, root)
 		}
 
-		@static slider_val    := f32(0.0)
-		@static checkbox_bool := false
-
 		// container returns true while it is open. Widgets added inside the block
 		// become children of that container. end_container must be called inside
 		// the same block — omitting it corrupts the parent stack.
 		if widgets.container(ctp, "__test_container", "Text Container") {
+			@static slider_val    := f32(0.0)
+			@static checkbox_bool := false
+		    @static spinbox_value := 0
 
 		    widgets.display_struct(ctp, "__theme_editor", "Theme", widgets.DEFAULT_PALETTES[selected_palette])
-		    @static spinbox_value := 0
 		    widgets.spinbox(ctp, "__text_spin_box", "Spin Box", &spinbox_value, -10, 10, 1)
 
 		    // inline_container container has no clip and can't be undocked.
@@ -329,8 +326,9 @@ main :: proc() {
 			t.name = "An Entity"
 			widgets.display_struct(ctp, "__test_display_struct", "Entity", t)
 			widgets.end_container(ctp)
-
 		}
+
+		lui.pop_parent(ctp)
 
 		// Runs the layout pass over the widget tree built above, computes final
 		// positions and sizes, and emits draw commands into ctx.render_commands.
@@ -363,6 +361,7 @@ main :: proc() {
 		sgfx.commit()
 
 		assert(sdl.GL_SwapWindow(window))
+		free_all(context.temp_allocator)
 	}
 }
 

@@ -110,68 +110,72 @@ _emit_render_commands :: proc(ctx: ^Core_Context) {
 			_add_render_command(ctx, rect, hash, Command_Image{widget.form.image, style.image_tint}, &z, widget.form.z_offset)
 		}
 
-		if widget.form.text != 0 {
-			lines := ctx.lines[widget.text_info.lines_range.start:widget.text_info.lines_range.end]
-			line_height := ctx.measure_text_height(style.text, ctx.text_user_data)
-			s_kind := Command_Rect{color = style.text.selection_background, border = style.text.selection_border}
-			emit_selection: if widget.form.selection != 0 {
-				selection := get_selection(ctx, widget.form.selection)
-				if selection.cursor == selection.anchor { break emit_selection }
-				selection_start, selection_end := min(selection.anchor, selection.cursor), max(selection.anchor, selection.cursor)
-				start_line := i32(0)
-				end_line := i32(0)
-				for line, i in lines {
-					if selection_end >= line.range.start && selection_end <= line.range.end { end_line = i32(i) }
-					if selection_start >= line.range.start && selection_start <= line.range.end { start_line = i32(i) }
-				}
+		if widget.form.text == 0 { continue }
 
-				// Two cases: Either the selection start and end exist on same line or on different lines.
-				if start_line == end_line {
-					// For a single line emit rectangle from selection start (size_of_text(text[:selection_start]))) to selection end.
-				 	line := lines[start_line]
-					rel_start := max(0, selection_start - line.range.start)
-					rel_end := max(0, selection_end - line.range.start)
-					if rel_end < i32(len(line.line)) {
-						w := ctx.measure_text_width(line.line[min(rel_start, rel_end):max(rel_start, rel_end)], style.text, ctx.text_user_data)
-						s := ctx.measure_text_width(line.line[:rel_start], style.text, ctx.text_user_data) if rel_start > 0 else 0
-						s_rect := Render_Rect{position = line.position + {s, 0}, size = {w, line_height}}
-						_add_render_command(ctx, s_rect, hash, s_kind, &z, widget.form.z_offset)
-					}
-				} else {
-					// In case of selection spanning multiple lines, emit the start middle and ends. Since each requires some special handling.
-					// TODO: Selection doesn't respect clips, fix that
-					{
-						line := lines[start_line]
+		lines := ctx.lines[widget.text_info.lines_range.start:widget.text_info.lines_range.end]
 
-						rel_start := max(0, selection_start - line.range.start)
+		defer {
+			t_rect := Render_Rect{position = widget.text_info.position, size = widget.text_info.size}
+			_add_render_command(ctx, t_rect, hash, Command_Text{style.text, lines}, &z, widget.form.z_offset)
+		}
 
-						s := ctx.measure_text_width(line.line[:rel_start], style.text, ctx.text_user_data) if rel_start > 0 else 0
-						w := ctx.measure_text_width(line.line[rel_start:], style.text, ctx.text_user_data)
+		if widget.form.selection == 0 { continue }
 
-						s_rect := Render_Rect{position = line.position + {s, 0}, size = {w, line_height}}
-						_add_render_command(ctx, s_rect, hash, s_kind, &z, widget.form.z_offset)
-					}
+		selection := get_selection(ctx, widget.form.selection)
 
-					for l in start_line + 1 ..< end_line {
-						s_rect := Render_Rect{position = lines[l].position, size = {lines[l].width, line_height}}
-						_add_render_command(ctx, s_rect, hash, s_kind, &z, widget.form.z_offset)
-					}
+		if selection.cursor == selection.anchor { continue }
 
-					{
-						line := lines[end_line]
-						rel_end := max(0, selection_end - line.range.start)
-						w := ctx.measure_text_width(line.line[:rel_end], style.text, ctx.text_user_data)
+		line_height := ctx.measure_text_height(style.text, ctx.text_user_data)
+		s_kind := Command_Rect{color = style.text.selection_background, border = style.text.selection_border}
 
-						s_rect := Render_Rect{position = line.position, size = {w, line_height} }
-						_add_render_command(ctx, s_rect, hash, s_kind, &z, widget.form.z_offset)
-					}
-				}
+		selection_start, selection_end := min(selection.anchor, selection.cursor), max(selection.anchor, selection.cursor)
+		start_line := i32(0)
+		end_line := i32(0)
+		for line, i in lines {
+			if selection_end >= line.range.start && selection_end <= line.range.end { end_line = i32(i) }
+			if selection_start >= line.range.start && selection_start <= line.range.end { start_line = i32(i) }
+		}
+
+		// Two cases: Either the selection start and end exist on same line or on different lines.
+		if start_line == end_line {
+			// For a single line emit rectangle from selection start (size_of_text(text[:selection_start]))) to selection end.
+		 	line := lines[start_line]
+			rel_start := max(0, selection_start - line.range.start)
+			rel_end := max(0, selection_end - line.range.start)
+			if rel_end < i32(len(line.line)) {
+				w := ctx.measure_text_width(line.line[min(rel_start, rel_end):max(rel_start, rel_end)], style.text, ctx.text_user_data)
+				s := ctx.measure_text_width(line.line[:rel_start], style.text, ctx.text_user_data) if rel_start > 0 else 0
+				s_rect := Render_Rect{position = line.position + {s, 0}, size = {w, line_height}}
+				_add_render_command(ctx, s_rect, hash, s_kind, &z, widget.form.z_offset)
 			}
+			continue
+		}
+		// In case of selection spanning multiple lines, emit the start middle and ends. Since each requires some special handling.
+		// TODO: Selection doesn't respect clips, fix that
+		{
+			line := lines[start_line]
 
-			{
-				t_rect := Render_Rect{position = widget.text_info.position, size = widget.text_info.size}
-				_add_render_command(ctx, t_rect, hash, Command_Text{style.text, lines}, &z, widget.form.z_offset)
-			}
+			rel_start := max(0, selection_start - line.range.start)
+
+			s := ctx.measure_text_width(line.line[:rel_start], style.text, ctx.text_user_data) if rel_start > 0 else 0
+			w := ctx.measure_text_width(line.line[rel_start:], style.text, ctx.text_user_data)
+
+			s_rect := Render_Rect{position = line.position + {s, 0}, size = {w, line_height}}
+			_add_render_command(ctx, s_rect, hash, s_kind, &z, widget.form.z_offset)
+		}
+
+		for l in start_line + 1 ..< end_line {
+			s_rect := Render_Rect{position = lines[l].position, size = {lines[l].width, line_height}}
+			_add_render_command(ctx, s_rect, hash, s_kind, &z, widget.form.z_offset)
+		}
+
+		{
+			line := lines[end_line]
+			rel_end := max(0, selection_end - line.range.start)
+			w := ctx.measure_text_width(line.line[:rel_end], style.text, ctx.text_user_data)
+
+			s_rect := Render_Rect{position = line.position, size = {w, line_height} }
+			_add_render_command(ctx, s_rect, hash, s_kind, &z, widget.form.z_offset)
 		}
 	}
 
