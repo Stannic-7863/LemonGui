@@ -847,7 +847,7 @@ inline_container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: stri
 	contif := lui.Form{}
 	contif.layout.sizing = {lui.grow(), lui.grow()}
 	contif.layout.direction = .Y
-	contif.layout.padding = {{theme.spacing.md, 0}, theme.spacing.md}
+	contif.layout.padding = theme.spacing.md
 	contif.layout.child_gap = theme.spacing.sm
 	contif.style = resolve_style(ctx, conti, theme.container.inline_body)
 	lui.submit_widget(ctx, conti, contif)
