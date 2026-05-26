@@ -284,11 +284,7 @@ main :: proc() {
 		    widgets.display_struct(ctp, "__theme_editor", "Theme", widgets.DEFAULT_PALETTES[selected_palette])
 		    widgets.spinbox(ctp, "__text_spin_box", "Spin Box", &spinbox_value, -10, 10, 1)
 
-<<<<<<< HEAD
 		    // inline_container container has no clip and can't be undocked.
-=======
-			// inline_container container has no clip and can't be undocked.
->>>>>>> dcdcda0 (.)
 		    // end_inline_container must be called inside the same if block.
 		    if widgets.inline_container(ctp, "__test_inline_container", "Inline Contaienr") {
 				widgets.button(ctp, "__test_button", "Button! Press Me!")
