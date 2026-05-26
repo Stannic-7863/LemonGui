@@ -47,35 +47,6 @@ Command_Custom :: struct {
 }
 
 _emit_render_commands :: proc(ctx: ^Core_Context) {
-	_on_screen_widget_iter :: proc(ctx: ^Core_Context, index: ^Widget_Index) -> (^Widget, bool) {
-	    for {
-	    	// We only emit widgets which are for now visible on screen.
-	    	// [TODO]: Make this behaviour toggle able, either at compile time or runtime
-	     	// [TODO]: Subtrees can be skipped if parent is not on screen, however due to overrides, we need to check all widgets anyways.
-	      	//         Optimize that
-
-	        if index^ >= Widget_Index(len(ctx.widgets)) { return nil, false }
-	        widget := get_widget(ctx, index^)
-	        if !is_widget_on_screen(ctx, widget) {
-	            if widget.next != -1 {
-	                index^ = widget.next
-	                continue
-	            }
-	            for parent_index := widget.parent; parent_index != -1; {
-	                parent := get_widget(ctx, parent_index)
-	                if parent.next != -1 {
-	                    index^ = parent.next
-	                    return get_widget(ctx, index^), true
-	                }
-	                parent_index = parent.parent
-	            }
-	            return nil, false
-	        }
-	        index^ += 1
-	        return widget, true
-	    }
-	}
-
 	_add_render_command :: proc(ctx: ^Core_Context, rect: Render_Rect, hash: Hash, kind: Render_Command_Kind, z: ^int, offset: int) {
 		append(&ctx.render_commands, Render_Command{hash = hash, rect = rect, kind = kind, z = z^ + offset})
 		z^ += 1
@@ -84,7 +55,7 @@ _emit_render_commands :: proc(ctx: ^Core_Context) {
 	active_clip := Widget_Index(-1)
 	z := 0
 
-	for index := Widget_Index(0); widget in _on_screen_widget_iter(ctx, &index) {
+	for &widget in ctx.widgets {
 		style := get_style(ctx, widget.form.style)
 		target := widget.clip_parent
 
@@ -96,6 +67,8 @@ _emit_render_commands :: proc(ctx: ^Core_Context) {
 
 		rect := Render_Rect{ position = widget.rect.position, size = widget.rect.size }
 		hash := widget.info.hash
+
+		if !is_widget_on_screen(ctx, &widget) {continue}
 
 		if widget.form.clip != 0 && widget.first != -1 {
 			_add_render_command(ctx, rect, hash, Command_Clip_Start{style.border.radius}, &z, widget.form.z_offset)
