@@ -219,9 +219,15 @@ render :: proc(core_ctx: ^lui.Core_Context, backend_ctx: ^Backend_Context) {
 
 	width, height := i32(core_ctx.window_size.x), i32(core_ctx.window_size.y)
 
-	sgfx.update_buffer(backend_ctx.render_cmd_buffer, { ptr = raw_data(backend_ctx.render_commands), size = size_of(Render_Cmd) * len(backend_ctx.render_commands) })
-	sgfx.update_buffer(backend_ctx.clip_buffer, { ptr = raw_data(backend_ctx.clips), size = size_of(Clip) * len(backend_ctx.clips) })
-	sgfx.update_buffer(backend_ctx.clip_idx_buffer, { ptr = raw_data(backend_ctx.clip_indices), size = size_of(i32) * len(backend_ctx.clip_indices) })
+	if len(backend_ctx.render_commands) > 0 {
+		sgfx.update_buffer(backend_ctx.render_cmd_buffer, { ptr = raw_data(backend_ctx.render_commands), size = size_of(Render_Cmd) * len(backend_ctx.render_commands) })
+	}
+	if len(backend_ctx.clips) > 0 {
+		sgfx.update_buffer(backend_ctx.clip_buffer, { ptr = raw_data(backend_ctx.clips), size = size_of(Clip) * len(backend_ctx.clips) })
+	}
+	if len(backend_ctx.clip_indices) > 0 {
+		sgfx.update_buffer(backend_ctx.clip_idx_buffer, { ptr = raw_data(backend_ctx.clip_indices), size = size_of(i32) * len(backend_ctx.clip_indices) })
+	}
 
 	view := matrix[4, 4]f32{
 		2.0 / f32(width), 0, 0, -1,
