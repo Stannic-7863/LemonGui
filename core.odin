@@ -95,7 +95,7 @@ Style :: struct {
 	border:      Border_Style,
 	color:       Color,
 	image_tint:  Color,
-	rect_custom: rawptr
+	rect_custom: rawptr,
 }
 
 Key :: union {

@@ -153,7 +153,7 @@ Widget_Key_Event :: enum u8 {
 	Pressed,
 	Down,
 	Long_Down,
-	Repeat
+	Repeat,
 }
 
 Event_Flag :: enum u8 {

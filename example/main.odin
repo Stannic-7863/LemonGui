@@ -50,7 +50,7 @@ swap_frag_source : cstring = `
 Entity_Type :: enum {
     Player,
     Enemy,
-    Npc
+    Npc,
 }
 
 Weapon :: enum {
@@ -81,7 +81,7 @@ Steak :: struct {
 
 Food :: union {
 	Steak,
-	Onion
+	Onion,
 }
 
 Weapons :: bit_set[Weapon]
@@ -218,7 +218,7 @@ main :: proc() {
 		fragment_func = {source = swap_frag_source},
 		views = { 0 = {texture = { stage = .FRAGMENT, sample_type = .FLOAT, image_type = ._2D, multisampled = false }}},
 		samplers = { 0 = {sampler_type = .FILTERING, stage = .FRAGMENT}},
-		texture_sampler_pairs = { 0 = {glsl_name = "tex", sampler_slot = 0, view_slot = 0, stage = .FRAGMENT}}
+		texture_sampler_pairs = { 0 = {glsl_name = "tex", sampler_slot = 0, view_slot = 0, stage = .FRAGMENT}},
 	})
 
 	// No depth test needed — this is a 2D fullscreen blit.

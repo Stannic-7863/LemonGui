@@ -132,7 +132,7 @@ Theme :: struct {
     progress_bar: struct {
    	    track:  Interaction_Style,
         fill:   Interaction_Style,
-        track_height: f32
+        track_height: f32,
     },
 
     text_box: struct {
@@ -184,7 +184,7 @@ Container_State :: struct {
 
 Container_Stack_Item :: struct {
 	cont: lui.Widget_Info,
-	conti: lui.Widget_Info
+	conti: lui.Widget_Info,
 }
 
 Dropdown_State :: struct {
@@ -517,7 +517,7 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     text_box := lui.create_style(ctx, {
         color  = p.bg_sunken,
         border = {color = p.border_subtle, thickness = 1, radius = 6},
-        text = make_text_style(p.fg_primary, f.f_md)
+        text = make_text_style(p.fg_primary, f.f_md),
     })
 
     tooltip := lui.create_style(ctx, {
@@ -1379,7 +1379,7 @@ end_stack :: proc(ctx: ^lui.Core_Context) {
     lui.pop_parent(ctx)
 }
 
-mouse_indicator :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string, temp_alloc := context.temp_allocator) -> (distance_from_center: lui.Vec2f32, draging: bool) {
+mouse_indicator :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string, temp_alloc := context.temp_allocator) -> (draging: bool) {
 	area := lui.reserve_widget(ctx, key)
 	areaf := lui.Form{}
 	areaf.event_flags = {.Lock_Active, .Lock_Hover}
@@ -1388,7 +1388,7 @@ mouse_indicator :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string
 	lui.submit_widget(ctx, area, areaf)
 
 	events := lui.get_widget_mouse_events(ctx, area, .Left)
-	distance_from_center = ctx.mouse.position - (area.rect.position + area.rect.size / 2)
+	local := ctx.mouse.position - (area.rect.position + area.rect.size / 2)
 	uv := linalg.max(linalg.min(ctx.mouse.position / ctx.window_size, 1), 0)
 	draging = .Down in events
 
@@ -1402,10 +1402,10 @@ mouse_indicator :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string
 	indicatorf.override = lui.create_override(ctx, {offset = {lui.Percent{uv.x}, lui.Percent{uv.y}}}, {offset = {lui.Percent_Self{-0.5}, lui.Percent_Self{-0.5}}})
 	lui.submit_widget(ctx, indicator, indicatorf)
 
-	tooltip(ctx, "__internal_drag_tooltip", area, fmt.aprintf("%s delta: [%.2f, %.2f] [%.2f, %.2f]", drag_label, ctx.mouse.delta.x, ctx.mouse.delta.y, distance_from_center.x, distance_from_center.y, allocator = temp_alloc))
+	tooltip(ctx, "__internal_drag_tooltip", area, fmt.aprintf("%s delta: [%.2f, %.2f] [%.2f, %.2f]", drag_label, ctx.mouse.position.x, ctx.mouse.position.y, local.x, local.y, allocator = temp_alloc))
 	lui.pop_parent(ctx)
 
-	return distance_from_center, .Down in events
+	return .Down in events
 }
 
 track_region :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string, value: ^lui.Vec2f32, reference: lui.Vec2f32, bounds: lui.Vec2f32, temp_alloc := context.temp_allocator) -> (dragging: bool) {
