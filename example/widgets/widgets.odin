@@ -1393,7 +1393,7 @@ track_region :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string, v
 	indicatorf.override = lui.create_override(ctx, {offset = {lui.Percent{uv.x}, lui.Percent{uv.y}}}, {offset = {lui.Percent_Self{-0.5}, lui.Percent_Self{-0.5}}})
 	lui.submit_widget(ctx, indicator, indicatorf)
 
-	tooltip(ctx, "__internal_drag_tooltip", area, fmt.aprintf("%s delta: [%.2f, %.2f] [%.2f, %.2f]", drag_label, value.x, value.y, local.x, local.y))
+	tooltip(ctx, "__internal_drag_tooltip", area, fmt.aprintf("%s delta: [%.2f, %.2f] [%.2f, %.2f]", drag_label, value.x, value.y, local.x, local.y, allocator = temp_alloc))
 	lui.pop_parent(ctx)
 
 	return dragging
