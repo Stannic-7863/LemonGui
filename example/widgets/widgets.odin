@@ -1,5 +1,6 @@
 package widgets
 
+import "core:math/linalg"
 import "core:unicode/utf8"
 import "core:unicode/utf16"
 import "core:strconv"
@@ -152,6 +153,13 @@ Theme :: struct {
         input:  Interaction_Style,
         inc_text: lui.Text_Index,
         dec_text: lui.Text_Index,
+    },
+
+    drag: struct {
+    	area_size:      lui.Vec2f32,
+     	indicator_size: lui.Vec2f32,
+     	area:      Interaction_Style,
+      	indicator: Interaction_Style,
     },
 
     control_animation: lui.Animation_Index,
@@ -601,6 +609,17 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 	    theme.dropdown.body = si(dropdown_body, dropdown_body, dropdown_body)
 	    theme.dropdown.item_on = si(dropdown_item_p, dropdown_item_p, dropdown_item_p)
 	    theme.dropdown.item_off = si(dropdown_item, dropdown_item_h, dropdown_item_p)
+    }
+
+    {
+    	drag_area_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1}})
+     	drag_area_p := lui.create_style(ctx, {color = p.accent_press, border = {color = p.border_subtle, thickness = 1}})
+      	drag_indicator := lui.create_style(ctx, {color = p.success})
+
+      	theme.drag.area = si(drag_area_n, drag_area_n, drag_area_p)
+     	theme.drag.indicator = si(drag_indicator, drag_indicator, drag_indicator)
+      	theme.drag.indicator_size = {4, 4}
+     	theme.drag.area_size = {48, 48}
     }
 
     theme.label.md = si(text_md, text_md, text_md)
@@ -1313,6 +1332,71 @@ stack :: proc(ctx: ^lui.Core_Context, key: lui.Key, stack_label: string, directi
 
 end_stack :: proc(ctx: ^lui.Core_Context) {
     lui.pop_parent(ctx)
+}
+
+mouse_indicator :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string, temp_alloc := context.temp_allocator) -> (distance_from_center: lui.Vec2f32, draging: bool) {
+	area := lui.reserve_widget(ctx, key)
+	areaf := lui.Form{}
+	areaf.event_flags = {.Lock_Active, .Lock_Hover}
+	areaf.layout.sizing = {lui.Fixed{theme.drag.area_size.x}, lui.Fixed{theme.drag.area_size.y}}
+	areaf.style = resolve_style(ctx, area, theme.drag.area)
+	lui.submit_widget(ctx, area, areaf)
+
+	events := lui.get_widget_mouse_events(ctx, area, .Left)
+	distance_from_center = ctx.mouse.position - (area.rect.position + area.rect.size / 2)
+	uv := linalg.max(linalg.min(ctx.mouse.position / ctx.window_size, 1), 0)
+	draging = .Down in events
+
+	lui.push_parent(ctx, area)
+
+	indicator := lui.reserve_widget(ctx, "__internal_drag_area_mouse_rel_window_indicator")
+	indicatorf := lui.Form{}
+	indicatorf.layout.sizing = {lui.Fixed{theme.drag.indicator_size.x}, lui.Fixed{theme.drag.indicator_size.y}}
+	indicatorf.layout.flags = {{.No_Size_Propagation, .No_Positioning_Relative}, {.No_Size_Propagation, .No_Positioning_Relative}}
+	indicatorf.style = resolve_style(ctx, indicator, theme.drag.indicator)
+	indicatorf.override = lui.create_override(ctx, {offset = {lui.Percent{uv.x}, lui.Percent{uv.y}}}, {offset = {lui.Percent_Self{-0.5}, lui.Percent_Self{-0.5}}})
+	lui.submit_widget(ctx, indicator, indicatorf)
+
+	tooltip(ctx, "__internal_drag_tooltip", area, fmt.aprintf("%s delta: [%.2f, %.2f] [%.2f, %.2f]", drag_label, ctx.mouse.delta.x, ctx.mouse.delta.y, distance_from_center.x, distance_from_center.y))
+	lui.pop_parent(ctx)
+
+	return distance_from_center, .Down in events
+}
+
+track_region :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string, value: ^lui.Vec2f32, reference: lui.Vec2f32, bounds: lui.Vec2f32, temp_alloc := context.temp_allocator) -> (dragging: bool) {
+	area := lui.reserve_widget(ctx, key)
+	areaf := lui.Form{}
+	areaf.event_flags = {.Lock_Active, .Lock_Hover}
+	areaf.layout.sizing = {lui.Fixed{theme.drag.area_size.x}, lui.Fixed{theme.drag.area_size.y}}
+	areaf.style = resolve_style(ctx, area, theme.drag.area)
+	lui.submit_widget(ctx, area, areaf)
+
+	events := lui.get_widget_mouse_events(ctx, area, .Left)
+	dragging = .Down in events
+
+	local := (value^ - reference + bounds)
+
+	uv := linalg.max(linalg.min(local / (bounds * 2) , 1), 0)
+	step := ctx.mouse.delta * (bounds * 2) / ctx.window_size
+
+	if dragging { value^ += step }
+
+	value^ = linalg.max(linalg.min(value^, reference + bounds), reference - bounds)
+
+	lui.push_parent(ctx, area)
+
+	indicator := lui.reserve_widget(ctx, "__internal_drag_area_mouse_rel_window_indicator")
+	indicatorf := lui.Form{}
+	indicatorf.layout.sizing = {lui.Fixed{theme.drag.indicator_size.x}, lui.Fixed{theme.drag.indicator_size.y}}
+	indicatorf.layout.flags = {{.No_Size_Propagation, .No_Positioning_Relative}, {.No_Size_Propagation, .No_Positioning_Relative}}
+	indicatorf.style = resolve_style(ctx, indicator, theme.drag.indicator)
+	indicatorf.override = lui.create_override(ctx, {offset = {lui.Percent{uv.x}, lui.Percent{uv.y}}}, {offset = {lui.Percent_Self{-0.5}, lui.Percent_Self{-0.5}}})
+	lui.submit_widget(ctx, indicator, indicatorf)
+
+	tooltip(ctx, "__internal_drag_tooltip", area, fmt.aprintf("%s delta: [%.2f, %.2f] [%.2f, %.2f]", drag_label, value.x, value.y, local.x, local.y))
+	lui.pop_parent(ctx)
+
+	return dragging
 }
 
 color_rect :: proc(ctx: ^lui.Core_Context, key: lui.Key, color: lui.Color, temp_alloc := context.temp_allocator) {

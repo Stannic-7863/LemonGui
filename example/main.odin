@@ -280,11 +280,17 @@ main :: proc() {
 			@static slider_val    := f32(0.0)
 			@static checkbox_bool := false
 		    @static spinbox_value := 0
+			@static dragval := Vec2f32{10, 10}
+			reference := Vec2f32{10, 10}
+			bounds := Vec2f32{10, 10}
 
 		    widgets.display_struct(ctp, "__theme_editor", "Theme", widgets.DEFAULT_PALETTES[selected_palette])
 		    widgets.spinbox(ctp, "__text_spin_box", "Spin Box", &spinbox_value, -10, 10, 1)
 
-		    // inline_container container has no clip and can't be undocked.
+			widgets.mouse_indicator(ctp, "__test_mouse_indicator", "Mouse Indicator")
+			widgets.track_region(ctp, "__test_drag_region", "Drag", &dragval, reference, bounds)
+			fmt.println(dragval)
+			// inline_container container has no clip and can't be undocked.
 		    // end_inline_container must be called inside the same if block.
 		    if widgets.inline_container(ctp, "__test_inline_container", "Inline Contaienr") {
 				widgets.button(ctp, "__test_button", "Button! Press Me!")
