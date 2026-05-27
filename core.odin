@@ -371,7 +371,7 @@ _generate_widget_hash :: proc(info: ^Widget_Info) {
 }
 
 _read_widget_persistant_data :: proc(ctx: ^Core_Context, widget: ^Widget) {
-	data, ok := ctx.persistent.prev_lookup[widget.info.hash]
+	data := ctx.persistent.prev_lookup[widget.info.hash]
 	widget.info.rect = data.info.rect
 	widget.text_info.size = data.text_size
 	widget.text_info.min_width = data.text_min_width

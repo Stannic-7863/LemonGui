@@ -1,6 +1,5 @@
 package core_ui
 
-import "core:fmt"
 import "core:container/lru"
 import "core:time"
 import "core:unicode/utf8"
@@ -114,7 +113,7 @@ _sizing_pass :: proc(ctx: ^Core_Context) {
 }
 
 _positioning_pass :: proc(ctx: ^Core_Context) {
-	prev_hovered, prev_active := ctx.mouse.hovered, ctx.mouse.active
+	prev_active := ctx.mouse.active
 
 	ctx.mouse.active_disabled = false
 	ctx.mouse.hovered_character_index = -1
@@ -123,7 +122,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 	hovered_widget := (^Widget)(nil)
 
-	positioning_loop: for &widget, i in ctx.widgets {
+	positioning_loop: for &widget in ctx.widgets {
 		_position_layout_widget_children(ctx, &widget)
 		_write_widget_persistant_data(ctx, &widget)
 		widget_style := get_style(ctx, widget.form.style)
@@ -163,7 +162,6 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 	if hovered_widget == nil { return }
 	if hovered_widget.form.text == 0 { return }
-	text := get_text(ctx, hovered_widget.form.text)
 	style := get_style(ctx, hovered_widget.form.style)
 	height := ctx.measure_text_height(style.text, ctx.text_user_data)
 	spacing := style.text.line_spacing
@@ -176,7 +174,6 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 		accumulated_width := f32(0)
 		for w in ctx.measured_words {
 			if ctx.mouse.position.x >= pos.x + accumulated_width && ctx.mouse.position.x <= pos.x + accumulated_width + w.width {
-				p := pos.x + accumulated_width
 				index, ok := ctx.measure_text_hover_index(w.word, ctx.mouse.position - pos - {accumulated_width, 0}, style.text, ctx.text_user_data)
 				if ok {
 					ctx.mouse.hovered_character, _ = utf8.decode_rune_in_string(w.word[index:])
@@ -356,7 +353,7 @@ _resolve_grow :: proc(ctx: ^Core_Context, available: f32) {
 
 	for available > 1e-4 && len(ctx.growable) > 0 {
 		smallest, second_smallest, to_add: f32 = max(f32), max(f32), 0
-		for g, i in ctx.growable {
+		for g in ctx.growable {
 			if g.size^ < smallest {
 				second_smallest = smallest
 				smallest = g.size^
@@ -437,8 +434,6 @@ _resolve_word_wrap :: proc(ctx: ^Core_Context) {
 
 			space_width := ctx.measure_text_width(" ", style.text, ctx.text_user_data)
 			start := len(ctx.lines)
-
-			padding := _get_axis_spacing(.X, widget.form.layout.padding)
 
 			for word, index in ctx.measured_words {
 				maximum_width += word.width + f32(word.spaces) * space_width
@@ -553,7 +548,7 @@ _measure_text_width_cached :: proc(ctx: ^Core_Context, word: string, style: Text
 	w, ok := lru.get(&ctx.persistent.cached_words, k)
 
 	if ok {return w} else {
-		w := ctx.measure_text_width(word, style, ctx.text_user_data)
+		w = ctx.measure_text_width(word, style, ctx.text_user_data)
 		lru.set(&ctx.persistent.cached_words, k, w)
 		return w
 	}

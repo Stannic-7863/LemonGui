@@ -1,9 +1,8 @@
 package example
 
-import "vendor:OpenGL"
 import "core:mem"
-import "core:reflect"
 import "core:fmt"
+import "core:reflect"
 import "core:time"
 
 import lui "../"
@@ -103,20 +102,18 @@ Entity :: struct {
 }
 
 main :: proc() {
-	when ODIN_DEBUG {
-		track: mem.Tracking_Allocator
-		mem.tracking_allocator_init(&track, context.allocator)
-		context.allocator = mem.tracking_allocator(&track)
+	track: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&track, context.allocator)
+	context.allocator = mem.tracking_allocator(&track)
 
-		defer {
-			if len(track.allocation_map) > 0 {
-				fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-				for _, entry in track.allocation_map {
-					fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-				}
+	defer {
+		if len(track.allocation_map) > 0 {
+			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			for _, entry in track.allocation_map {
+				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
-			mem.tracking_allocator_destroy(&track)
 		}
+		mem.tracking_allocator_destroy(&track)
 	}
 
 	// SDL is used purely for windowing and input. We deliberately avoid sokol_app

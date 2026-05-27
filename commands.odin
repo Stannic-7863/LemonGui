@@ -53,7 +53,6 @@ _emit_render_commands :: proc(ctx: ^Core_Context) {
 		z^ += 1
 	}
 
-	active_clip := Widget_Index(-1)
 	z := 0
 
 	for &widget in ctx.widgets {

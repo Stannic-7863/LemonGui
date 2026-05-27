@@ -348,7 +348,7 @@ measure_text_height :: proc(style: lui.Text_Style, user_data: rawptr) -> f32 {
     fs.SetFont(&fctx.fs_ctx, int(style.font_id))
     fs.SetSize(&fctx.fs_ctx, style.font_size)
     _, _, line_height := fs.VerticalMetrics(&fctx.fs_ctx)
-    return style.font_size
+    return line_height
 }
 
 measure_text_hover_index :: proc(text: string, point: [2]f32, style: lui.Text_Style, user_data: rawptr) -> (int, bool) {

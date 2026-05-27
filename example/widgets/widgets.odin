@@ -1,7 +1,6 @@
 package widgets
 
 import "core:math/linalg"
-import "core:unicode/utf8"
 import "core:unicode/utf16"
 import "core:strconv"
 import "core:strings"
@@ -483,7 +482,6 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 	theme.spacing = spacing
 
     p := &theme.palette
-    s := &theme.spacing
     f := &theme.font
 
     accent := lui.create_style(ctx, {
@@ -1472,16 +1470,16 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 			for attr in strings.split_iterator(&tag_value, ",") {
 				if attr == "dropdown" {
 					begin_dropdown(ctx, name, name)
-					for name, i in v.names {
-						if dropdown_item(ctx, name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
+					for item_name, i in v.names {
+						if dropdown_item(ctx, item_name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
 					}
 					end_dropdown(ctx)
 					ok = true
 				}
 				if attr == "radio" {
 					begin_radio(ctx, name, name)
-					for name, i in v.names {
-						if radio_item(ctx, name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
+					for item_name, i in v.names {
+						if radio_item(ctx, item_name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
 					}
 					end_radio(ctx)
 					ok = true
@@ -1489,8 +1487,8 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 			}
 			if !ok {
 				begin_dropdown(ctx, name, name)
-				for name, i in v.names {
-					if dropdown_item(ctx, name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
+				for item_name, i in v.names {
+					if dropdown_item(ctx, item_name) { (^runtime.Type_Info_Enum_Value)(value.data)^ = v.values[i] }
 				}
 				end_dropdown(ctx)
 			}
