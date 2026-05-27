@@ -13,7 +13,7 @@ import "core:time"
 import lui "../../"
 
 Color_Palette :: struct {
-    bg_elevated:   lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+    bg_elevated:   lui.Color `lui:"row,labels=rgba,min=0,max=255,color,bind"`,
     bg_base:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
     bg_sunken:     lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
     fg_primary:    lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
@@ -91,7 +91,10 @@ Theme :: struct {
 
     button: struct {
     	style: Interaction_Style,
-     	padding: [2]lui.Vec2f32,
+    },
+
+    mini_button: struct {
+    	style: Interaction_Style,
     },
 
     slider: struct {
@@ -163,6 +166,9 @@ Theme :: struct {
     },
 
     control_animation: lui.Animation_Index,
+
+    binded_text:   lui.Text_Index,
+    unbinded_text: lui.Text_Index,
 }
 
 Container_State_Flag :: enum {
@@ -193,12 +199,13 @@ Radio_State :: struct {
 }
 
 State :: struct {
-	dropdown_state:     map[lui.Hash]Dropdown_State,
-	radio_state:        map[lui.Hash]Radio_State,
-	container_state:    map[lui.Hash]Container_State,
-	container_stack:    [dynamic]Container_Stack_Item,
-	active_radio_state:    ^Radio_State,
-	active_dropdown_state: ^Dropdown_State,
+	display_struct_slider_bind: map[lui.Hash]bool,
+	dropdown_state:             map[lui.Hash]Dropdown_State,
+	radio_state:                map[lui.Hash]Radio_State,
+	container_state:            map[lui.Hash]Container_State,
+	container_stack:            [dynamic]Container_Stack_Item,
+	active_radio_state:         ^Radio_State,
+	active_dropdown_state:      ^Dropdown_State,
 }
 
 theme := Theme{}
@@ -523,6 +530,12 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
         return {.Normal = normal, .Hover = hover, .Press = press}
     }
 
+    mini_button := lui.create_style(ctx, {color = p.bg_base, border = {radius = 4}, text = make_text_style(p.fg_primary, f.f_md)})
+    mini_button_h := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 4}, text = make_text_style(p.fg_primary, f.f_md)})
+    mini_button_p := lui.create_style(ctx, {color = p.accent, border = {radius = 4}, text = make_text_style(p.bg_base, f.f_md)})
+
+    theme.mini_button.style = si(mini_button, mini_button_h, mini_button_p)
+
     {
 	    body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {2, {0, 2}}, radius = {0, 0, 6, 6}}})
 	   	title_bar := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = {2, {2, 0}}, radius = {6, 6, 0, 0}}})
@@ -530,10 +543,6 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 	   	button := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 6}, text = make_text_style(p.fg_primary, f.f_md)})
 	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = 6}, text = make_text_style(p.bg_elevated, f.f_md)})
 	    button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = 6}, text = make_text_style(p.bg_elevated, f.f_md)})
-
-	    inline_button := lui.create_style(ctx, {color = p.bg_base, border = {radius = 4}, text = make_text_style(p.fg_primary, f.f_md)})
-	    inline_button_h := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 4}, text = make_text_style(p.fg_primary, f.f_md)})
-		inline_button_p := lui.create_style(ctx, {color = p.accent, border = {radius = 4}, text = make_text_style(p.bg_base, f.f_md)})
 
 	    inline_body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_strong, thickness = {{2, 0}, {0, 0}}}})
 
@@ -548,7 +557,7 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 		theme.container.scroll_thumb = si(scroll_thumb, scroll_thumb, scroll_thumb)
 
 		theme.container.inline_title = si(title, title, title)
-		theme.container.inline_button = si(inline_button, inline_button_h, inline_button_p)
+		theme.container.inline_button = si(mini_button, mini_button_h, mini_button_p)
 		theme.container.inline_body = si(inline_body, inline_body, inline_body)
 
 	   	theme.container.collapsed_text   = lui.create_text(ctx, lui.text("▶", .None))
@@ -638,6 +647,9 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     }
 
     theme.control_animation = lui.create_animation(ctx, anim, duration = time.Millisecond * 1)
+
+    theme.binded_text = lui.create_text(ctx, lui.text(" ", .None))
+    theme.unbinded_text = lui.create_text(ctx, lui.text(" ", .None))
 }
 
 init_state :: proc(allocator := context.allocator) {
@@ -645,6 +657,7 @@ init_state :: proc(allocator := context.allocator) {
 	state.container_state = make(map[lui.Hash]Container_State, allocator)
 	state.dropdown_state = make(map[lui.Hash]Dropdown_State, allocator)
 	state.radio_state = make(map[lui.Hash]Radio_State, allocator)
+	state.display_struct_slider_bind = make(map[lui.Hash]bool, allocator)
 }
 
 deinit_state :: proc() {
@@ -652,6 +665,7 @@ deinit_state :: proc() {
 	delete(state.container_state)
 	delete(state.dropdown_state)
 	delete(state.radio_state)
+	delete(state.display_struct_slider_bind)
 }
 
 resolve_style :: proc(ctx: ^lui.Core_Context, info: lui.Widget_Info, style: Interaction_Style) -> lui.Style_Index {
@@ -894,6 +908,20 @@ button :: proc(ctx: ^lui.Core_Context, key: lui.Key, label: string) -> lui.Mouse
 	return lui.get_widget_mouse_events_all(ctx, button)
 }
 
+mini_button :: proc(ctx: ^lui.Core_Context, key: lui.Key, label: string) -> lui.Mouse_Events {
+	button := lui.reserve_widget(ctx, key)
+	buttonf := lui.Form{}
+	buttonf.layout.sizing = lui.sizing()
+	buttonf.layout.placement = {.Center, .Center}
+	buttonf.text = lui.create_text(ctx, lui.text(label, .None))
+	buttonf.style = resolve_style(ctx, button, theme.mini_button.style)
+	buttonf.layout.padding = theme.spacing.sm
+	buttonf.animation = theme.control_animation
+	lui.submit_widget(ctx, button, buttonf)
+	return lui.get_widget_mouse_events_all(ctx, button)
+}
+
+
 slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, slider_label: string, value: ^$T, min: T, max: T, temp_alloc := context.temp_allocator) -> bool where intrinsics.type_is_float(T) {
 	cont := lui.reserve_widget(ctx, key)
 	contf := lui.Form{}
@@ -1088,6 +1116,7 @@ radio_item :: proc(ctx: ^lui.Core_Context, item_label: string) -> bool {
 }
 
 label :: proc(ctx: ^lui.Core_Context, key: lui.Key, text: string) {
+	if text == "" { return }
 	labelw := lui.reserve_widget(ctx, key)
 	labelf := lui.Form{}
 	labelf.layout.sizing = lui.sizing()
@@ -1318,16 +1347,32 @@ spinbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, spinbox_label: string, val
     return changed
 }
 
-stack :: proc(ctx: ^lui.Core_Context, key: lui.Key, stack_label: string, direction := lui.Axis.X) {
+stack_grow :: proc(ctx: ^lui.Core_Context, key: lui.Key, stack_label: string, direction := lui.Axis.X, placement := [2]lui.Placement{.Center, .Center}) -> lui.Hash {
     cont := lui.reserve_widget(ctx, key)
     contf := lui.Form{}
     contf.layout.sizing = {lui.grow(), lui.grow()}
     contf.layout.direction = direction
+    contf.layout.placement = placement
     contf.layout.child_gap = theme.spacing.sm
     lui.submit_widget(ctx, cont, contf)
     lui.push_parent(ctx, cont)
 
     label(ctx, "__internal_stack_label", stack_label)
+    return cont.hash
+}
+
+stack_fit :: proc(ctx: ^lui.Core_Context, key: lui.Key, stack_label: string, direction := lui.Axis.X, placement := [2]lui.Placement{.Center, .Center}) -> lui.Hash {
+    cont := lui.reserve_widget(ctx, key)
+    contf := lui.Form{}
+    contf.layout.sizing = {lui.fit(), lui.fit()}
+    contf.layout.direction = direction
+    contf.layout.placement = placement
+    contf.layout.child_gap = theme.spacing.sm
+    lui.submit_widget(ctx, cont, contf)
+    lui.push_parent(ctx, cont)
+
+    label(ctx, "__internal_stack_label", stack_label)
+    return cont.hash
 }
 
 end_stack :: proc(ctx: ^lui.Core_Context) {
@@ -1357,7 +1402,7 @@ mouse_indicator :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string
 	indicatorf.override = lui.create_override(ctx, {offset = {lui.Percent{uv.x}, lui.Percent{uv.y}}}, {offset = {lui.Percent_Self{-0.5}, lui.Percent_Self{-0.5}}})
 	lui.submit_widget(ctx, indicator, indicatorf)
 
-	tooltip(ctx, "__internal_drag_tooltip", area, fmt.aprintf("%s delta: [%.2f, %.2f] [%.2f, %.2f]", drag_label, ctx.mouse.delta.x, ctx.mouse.delta.y, distance_from_center.x, distance_from_center.y))
+	tooltip(ctx, "__internal_drag_tooltip", area, fmt.aprintf("%s delta: [%.2f, %.2f] [%.2f, %.2f]", drag_label, ctx.mouse.delta.x, ctx.mouse.delta.y, distance_from_center.x, distance_from_center.y, allocator = temp_alloc))
 	lui.pop_parent(ctx)
 
 	return distance_from_center, .Down in events
@@ -1451,30 +1496,72 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 			}
 		case runtime.Type_Info_Array:
 			if v.count <= 4 && v.elem.id == f32 {
+
 			    labels := [4]string{"x", "y", "z", "w"}
 				direction := lui.Axis.X
 				min := f32(0)
 				max := f32(100)
 				add_color_rect := false
+				has_bind_state := false
  				for attr in strings.split_iterator(&tag_value, ",") {
 					if attr == "row" { direction = .X }
 					if attr == "column" { direction = .Y }
 					if attr == "color" { add_color_rect = true }
+					if attr == "bind" { has_bind_state = true }
 					if strings.starts_with(attr, "labels=") { for i in 0..<len(attr[7:]) { labels[i] = attr[7:][i:i+1] } }
 					if strings.starts_with(attr, "max=") { max, _ = strconv.parse_f32(attr[4:]) }
 					if strings.starts_with(attr, "min=") { min, _ = strconv.parse_f32(attr[4:])}
 				}
 
+				binded := false
+
 				name := fmt.aprintf("[%i]f32|%s|%s ", v.count, type, field.name, allocator = temp_alloc)
-				stack(ctx, name, name, direction)
- 			    for i in 0..<v.count {
-   					slider(ctx, fmt.aprint(name, labels[i], allocator = temp_alloc), labels[i], (&([^]f32)(value.data)[i]), min, max)
+				stack_grow(ctx, name, "", .X)
+				hash := stack_grow(ctx, "_internal_slider_group_stack", name, direction)
+				if has_bind_state == true {
+					binded, _ = state.display_struct_slider_bind[hash]
 				}
+
+				val := f32(0)
+				modif := false
+ 			    for i in 0..<v.count {
+   					if slider(ctx, fmt.aprint(name, labels[i], allocator = temp_alloc), labels[i], (&([^]f32)(value.data)[i]), min, max) {
+        				val = ([^]f32)(value.data)[i]
+            			modif = true
+        			}
+				}
+
+				if binded && modif {
+					for i in 0..<v.count {
+						([^]f32)(value.data)[i] = val
+					}
+				}
+
+				end_stack(ctx)
+				stack_fit(ctx, "__internal_slider_group_misc_stack", "", direction)
+
+				if has_bind_state {
+					button := lui.reserve_widget(ctx, "_internal_slider_group_bind_button")
+					buttonf := lui.Form{}
+					buttonf.layout.sizing = lui.sizing()
+					buttonf.layout.placement = {.Center, .Center}
+					buttonf.text = theme.binded_text if binded else theme.unbinded_text
+					buttonf.style = resolve_style(ctx, button, theme.mini_button.style)
+					buttonf.layout.padding = theme.spacing.sm
+					buttonf.animation = theme.control_animation
+					lui.submit_widget(ctx, button, buttonf)
+					events := lui.get_widget_mouse_events(ctx, button, .Left)
+					if .Clicked in events {
+						state.display_struct_slider_bind[hash] = !binded
+					}
+				}
+
 				if add_color_rect {
 					color := lui.Color{}
 					copy(color[:v.count], ([^]f32)(value.data)[:v.count])
 					color_rect(ctx, "color_rect", color)
 				}
+				end_stack(ctx)
 				end_stack(ctx)
 			}
 		case runtime.Type_Info_Union:

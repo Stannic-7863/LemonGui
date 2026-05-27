@@ -289,7 +289,6 @@ main :: proc() {
 
 			widgets.mouse_indicator(ctp, "__test_mouse_indicator", "Mouse Indicator")
 			widgets.track_region(ctp, "__test_drag_region", "Drag", &dragval, reference, bounds)
-			fmt.println(dragval)
 			// inline_container container has no clip and can't be undocked.
 		    // end_inline_container must be called inside the same if block.
 		    if widgets.inline_container(ctp, "__test_inline_container", "Inline Contaienr") {
