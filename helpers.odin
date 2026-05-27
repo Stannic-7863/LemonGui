@@ -85,8 +85,8 @@ text_style :: proc "contextless" (
 	return {color = color, selection_background = selection_background, selection_border = selection_border, font_size = font_size, letter_spacing = letter_spacing, line_spacing = line_spacing, font = font, font_name = font_name, font_id = font_id}
 }
 
-style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, border: Border_Style = {}, text: Text_Style = {}) -> Style {
-	return {color = color, border = border, text = text, image_tint = image_tint}
+style :: proc "contextless" (color: Color = 0, image_tint: Color = 255, border: Border_Style = {}, text: Text_Style = {}, rect_custom: rawptr = nil) -> Style {
+	return {color = color, border = border, text = text, image_tint = image_tint, rect_custom = rect_custom}
 }
 
 border :: proc "contextless" (color: [4]Color = 0, radius: Vec4f32 = 0, thickness: [2]Vec2f32 = {}) -> Border_Style {

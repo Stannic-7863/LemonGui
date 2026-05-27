@@ -76,7 +76,7 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 			border := state.now.style.border
 			for &r in border.radius {r = min(min(state.now.rect.size.x, state.now.rect.size.y) / 2, r)}
 			cmd := Render_Command{}
-			cmd.kind = Command_Rect{state.now.style.color, border}
+			cmd.kind = Command_Rect{color = state.now.style.color, border = border, custom = state.now.style.rect_custom}
 			cmd.rect = {position = state.now.rect.position, size = state.now.rect.size}
 			cmd.z = state.z_index
 			append(&ctx.render_commands, cmd)
@@ -176,7 +176,7 @@ _resolve_animations :: proc(ctx: ^Core_Context) {
 			border := state.now.style.border
 			for &r in border.radius {r = min(min(state.now.rect.size.x, state.now.rect.size.y) / 2, r)}
 			cmd := Render_Command{}
-			cmd.kind = Command_Rect{state.now.style.color, border}
+			cmd.kind = Command_Rect{color = state.now.style.color, border = border, custom = state.now.style.rect_custom}
 			cmd.rect = {position = state.now.rect.position, size = state.now.rect.size}
 			cmd.z = state.z_index
 			append(&ctx.render_commands, cmd)

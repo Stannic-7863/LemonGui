@@ -23,6 +23,7 @@ Render_Command :: struct {
 
 Command_Rect :: struct {
 	color:  Vec4f32,
+	custom: rawptr,
 	border: Border_Style,
 }
 
@@ -77,7 +78,7 @@ _emit_render_commands :: proc(ctx: ^Core_Context) {
 
 		border := style.border
 		for &r in border.radius { r = min(min(widget.rect.size.x, widget.rect.size.y) / 2, r) }
-		_add_render_command(ctx, rect, hash, Command_Rect{style.color, border}, &z, widget.form.z_offset)
+		_add_render_command(ctx, rect, hash, Command_Rect{color = style.color, border = border, custom = style.rect_custom}, &z, widget.form.z_offset)
 
 		if widget.form.image != nil {
 			_add_render_command(ctx, rect, hash, Command_Image{widget.form.image, style.image_tint}, &z, widget.form.z_offset)
