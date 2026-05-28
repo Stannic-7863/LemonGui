@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:hash"
 import "core:container/lru"
 import "core:time"
 import "core:unicode/utf8"
@@ -542,7 +543,7 @@ _measure_text_width_cached :: proc(ctx: ^Core_Context, word: string, style: Text
 		font           = style.font,
 		font_size      = style.font_size,
 		letter_spacing = style.letter_spacing,
-		word           = word,
+		word_hash      = Hash(hash.fnv64a(transmute([]u8)word)),
 	}
 
 	w, ok := lru.get(&ctx.persistent.cached_words, k)

@@ -1,7 +1,5 @@
 package example
 
-import "core:mem"
-import "core:fmt"
 import "core:reflect"
 import "core:time"
 
@@ -102,20 +100,6 @@ Entity :: struct {
 }
 
 main :: proc() {
-	track: mem.Tracking_Allocator
-	mem.tracking_allocator_init(&track, context.allocator)
-	context.allocator = mem.tracking_allocator(&track)
-
-	defer {
-		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-			for _, entry in track.allocation_map {
-				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-			}
-		}
-		mem.tracking_allocator_destroy(&track)
-	}
-
 	// SDL is used purely for windowing and input. We deliberately avoid sokol_app
 	// because it forces an init/frame/shutdown callback structure. The loop below
 	// gives us a straightforward sequential flow instead.

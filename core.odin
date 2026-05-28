@@ -66,7 +66,7 @@ Text_Selection :: struct {
 }
 
 Text_Cache_Key :: struct {
-	word:           string,
+	word_hash:      Hash,
 	font:           rawptr,
 	font_size:      f32,
 	letter_spacing: f32,
@@ -362,10 +362,10 @@ _add_widget_to_tree :: proc(ctx: ^Core_Context, widget: ^Widget) {
 _generate_widget_hash :: proc(info: ^Widget_Info) {
 	switch key in info.key {
 	case string:
-		info.hash = cast(Hash)hash.fnv64(transmute([]u8)key)
+		info.hash = cast(Hash)hash.fnv64a(transmute([]u8)key)
 	case int:
 		e := (transmute([size_of(int)]u8)key)
-		info.hash = cast(Hash)hash.fnv64(e[:])
+		info.hash = cast(Hash)hash.fnv64a(e[:])
 	}
 	info.hash = info.hash ~ (info.parent_hash + 0x9e3779b97f4a7c15 + (info.hash << 6) + (info.hash >> 2)) // Boost / split-max hash combine
 }
