@@ -1471,7 +1471,7 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 			    labels := [4]string{"x", "y", "z", "w"}
 				direction := lui.Axis.X
 				min := f32(0)
-				max := f32(100)
+				max := f32(1)
 				add_color_rect := false
 				has_bind_state := false
  				for attr in strings.split_iterator(&tag_value, ",") {
@@ -1559,7 +1559,7 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 			}
 			if !ok { label(ctx, str, str) }
 		case runtime.Type_Info_Float:
-			min := -1.0
+			min := 0.0
 			max := 1.0
 
 			for attr in strings.split_iterator(&tag_value, ",") {
