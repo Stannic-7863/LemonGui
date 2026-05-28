@@ -893,6 +893,82 @@ mini_button :: proc(ctx: ^lui.Core_Context, key: lui.Key, button_text: lui.Text_
 	return lui.get_widget_mouse_events_all(ctx, button)
 }
 
+label :: proc(ctx: ^lui.Core_Context, key: lui.Key, text: string) {
+	if text == "" { return }
+	labelw := lui.reserve_widget(ctx, key)
+	labelf := lui.Form{}
+	labelf.layout.sizing = lui.sizing()
+	labelf.text = lui.create_text(ctx, lui.text(text, .None))
+	labelf.style = resolve_style(ctx, labelw, theme.label.md)
+	lui.submit_widget(ctx, labelw, labelf)
+}
+
+checkbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, checkbox_label: string, state: ^$T) -> bool where intrinsics.type_is_boolean(T) {
+	check := lui.reserve_widget(ctx, key)
+	checkf := lui.Form{}
+	checkf.layout.sizing = lui.sizing()
+	checkf.layout.child_gap = theme.spacing.sm
+	checkf.layout.placement = {.Negative, .Center}
+	lui.submit_widget(ctx, check, checkf)
+
+	lui.push_parent(ctx, check)
+
+	checkc := lui.reserve_widget(ctx, "__internal_check_control")
+	checkcf := lui.Form{}
+	checkcf.layout.sizing = {lui.fixed(theme.checkbox.size.x), lui.fixed(theme.checkbox.size.y)}
+	checkcf.style = resolve_style(ctx, checkc, theme.checkbox.check_on if state^ else theme.checkbox.check_off)
+	checkcf.animation = theme.control_animation
+	lui.submit_widget(ctx, checkc, checkcf)
+
+	label(ctx, "__internal_checkbox_label", checkbox_label)
+
+	lui.pop_parent(ctx)
+
+	events := lui.get_widget_mouse_events(ctx, checkc, .Left)
+	if .Clicked in events {
+		state^ = !state^
+	 	return true
+	}
+
+	return false
+}
+
+toggle :: proc(ctx: ^lui.Core_Context, key: lui.Key, toggle_label: string, state: ^$T) where intrinsics.type_is_boolean(T) {
+	cont := lui.reserve_widget(ctx, key)
+	contf := lui.Form{}
+	contf.layout.sizing = lui.sizing(lui.fit(), lui.fit())
+	contf.layout.child_gap = theme.spacing.sm
+	lui.submit_widget(ctx, cont, contf)
+
+	lui.push_parent(ctx, cont)
+
+	toggleh := lui.reserve_widget(ctx, "__internal_toggle_control_holder")
+	events := lui.get_widget_mouse_events(ctx, toggleh, .Left)
+	if .Clicked in events { state^ = !state^ }
+
+	togglehf := lui.Form{}
+	togglehf.layout.sizing = lui.sizing(lui.fit(theme.toggle.size.x * 2 + theme.spacing.xs * 2), lui.fit())
+	togglehf.layout.padding = theme.spacing.xs
+	togglehf.style = resolve_style(ctx, toggleh, theme.toggle.track_on if state^ else theme.toggle.track_off)
+	togglehf.layout.placement.x = .Negative if !state^ else .Positive
+	lui.submit_widget(ctx, toggleh, togglehf)
+
+	lui.push_parent(ctx, toggleh)
+
+	togglec := lui.reserve_widget(ctx, "__internal_toggle_control")
+	togglecf := lui.Form{}
+	togglecf.event_flags = {.Disable_Hover}
+	togglecf.layout.sizing = lui.sizing(lui.fixed(theme.toggle.size.x), lui.fixed(theme.toggle.size.y))
+	togglecf.style = resolve_style(ctx, togglec, theme.toggle.thumb)
+	lui.submit_widget(ctx, togglec, togglecf)
+
+	lui.pop_parent(ctx)
+
+	label(ctx, "__internal_toggle_label", toggle_label)
+
+	lui.pop_parent(ctx)
+}
+
 slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, slider_label: string, value: ^$T, min: T, max: T, temp_alloc := context.temp_allocator) -> bool where intrinsics.type_is_float(T) {
 	cont := lui.reserve_widget(ctx, key)
 	contf := lui.Form{}
@@ -964,136 +1040,56 @@ slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, slider_label: string, value
     return changed
 }
 
-checkbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, checkbox_label: string, state: ^bool) -> bool {
-	check := lui.reserve_widget(ctx, key)
-	checkf := lui.Form{}
-	checkf.layout.sizing = lui.sizing()
-	checkf.layout.child_gap = theme.spacing.sm
-	checkf.layout.placement = {.Negative, .Center}
-	lui.submit_widget(ctx, check, checkf)
+spinbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, spinbox_label: string, value: ^$T, min, max: T, step: T, temp_alloc := context.temp_allocator) -> bool where intrinsics.type_is_integer(T) {
+    cont := lui.reserve_widget(ctx, key)
+    contf := lui.Form{}
+    contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
+    contf.layout.child_gap = theme.spacing.sm
+    contf.layout.placement = {.Negative, .Center}
+    lui.submit_widget(ctx, cont, contf)
 
-	lui.push_parent(ctx, check)
+    lui.push_parent(ctx, cont)
 
-	checkc := lui.reserve_widget(ctx, "__internal_check_control")
-	checkcf := lui.Form{}
-	checkcf.layout.sizing = {lui.fixed(theme.checkbox.size.x), lui.fixed(theme.checkbox.size.y)}
-	checkcf.style = resolve_style(ctx, checkc, theme.checkbox.check_on if state^ else theme.checkbox.check_off)
-	checkcf.animation = theme.control_animation
-	lui.submit_widget(ctx, checkc, checkcf)
+    label(ctx, "__internal_spinbox_label", spinbox_label)
 
-	label(ctx, "__internal_checkbox_label", checkbox_label)
+    changed := false
 
-	lui.pop_parent(ctx)
+    button_dec := lui.reserve_widget(ctx, "__internal_spinbox_decrement")
+    button_decf := lui.Form{}
+    button_decf.layout.sizing = {lui.fit(), lui.fit()}
+    button_decf.layout.padding = theme.spacing.sm
+    button_decf.text = theme.spinbox.dec_text
+    button_decf.style = resolve_style(ctx, button_dec, theme.spinbox.dec)
+    lui.submit_widget(ctx, button_dec, button_decf)
 
-	events := lui.get_widget_mouse_events(ctx, checkc, .Left)
-	if .Clicked in events {
-		state^ = !state^
-	 	return true
-	}
+    input := lui.reserve_widget(ctx, "__internal_spinbox_val")
+    inputf := lui.Form{}
+    inputf.layout.sizing = {lui.fit(), lui.fit()}
+    inputf.layout.placement = {.Center, .Center}
+    inputf.layout.padding = {theme.spacing.lg, theme.spacing.sm}
+    inputf.text = lui.create_text(ctx, lui.text(fmt.aprintf("%v", value^, allocator = temp_alloc), .None))
+    inputf.style = resolve_style(ctx, input, theme.spinbox.input)
+    lui.submit_widget(ctx, input, inputf)
 
-	return false
-}
+    button_inc := lui.reserve_widget(ctx, "__internal_spinbox_increment")
+    button_incf := lui.Form{}
+    button_incf.layout.sizing = {lui.fit(), lui.fit()}
+    button_incf.layout.padding = theme.spacing.sm
+    button_incf.text = theme.spinbox.inc_text
+    button_incf.style = resolve_style(ctx, button_inc, theme.spinbox.inc)
+    lui.submit_widget(ctx, button_inc, button_incf)
 
-toggle :: proc(ctx: ^lui.Core_Context, key: lui.Key, toggle_label: string, state: ^bool) {
-	cont := lui.reserve_widget(ctx, key)
-	contf := lui.Form{}
-	contf.layout.sizing = lui.sizing(lui.fit(), lui.fit())
-	contf.layout.child_gap = theme.spacing.sm
-	lui.submit_widget(ctx, cont, contf)
+    event_dec := lui.get_widget_mouse_events(ctx, button_dec, .Left)
+    event_inc := lui.get_widget_mouse_events(ctx, button_inc, .Left)
 
-	lui.push_parent(ctx, cont)
+    if .Clicked in event_dec || (.Long_Down in event_dec && .Repeat in event_dec) { value^ -= step }
+    if .Clicked in event_inc || (.Long_Down in event_inc && .Repeat in event_inc) { value^ += step }
 
-	toggleh := lui.reserve_widget(ctx, "__internal_toggle_control_holder")
-	events := lui.get_widget_mouse_events(ctx, toggleh, .Left)
-	if .Clicked in events { state^ = !state^ }
+    value^ = clamp(value^, min, max)
 
-	togglehf := lui.Form{}
-	togglehf.layout.sizing = lui.sizing(lui.fit(theme.toggle.size.x * 2 + theme.spacing.xs * 2), lui.fit())
-	togglehf.layout.padding = theme.spacing.xs
-	togglehf.style = resolve_style(ctx, toggleh, theme.toggle.track_on if state^ else theme.toggle.track_off)
-	togglehf.layout.placement.x = .Negative if !state^ else .Positive
-	lui.submit_widget(ctx, toggleh, togglehf)
+    lui.pop_parent(ctx)
 
-	lui.push_parent(ctx, toggleh)
-
-	togglec := lui.reserve_widget(ctx, "__internal_toggle_control")
-	togglecf := lui.Form{}
-	togglecf.event_flags = {.Disable_Hover}
-	togglecf.layout.sizing = lui.sizing(lui.fixed(theme.toggle.size.x), lui.fixed(theme.toggle.size.y))
-	togglecf.style = resolve_style(ctx, togglec, theme.toggle.thumb)
-	lui.submit_widget(ctx, togglec, togglecf)
-
-	lui.pop_parent(ctx)
-
-	label(ctx, "__internal_toggle_label", toggle_label)
-
-	lui.pop_parent(ctx)
-}
-
-begin_radio :: proc(ctx: ^lui.Core_Context, key: lui.Key, radio_label: string) {
-	holder := lui.reserve_widget(ctx, key)
-	holderf := lui.Form{}
-	holderf.layout.sizing = lui.sizing(lui.grow())
-	holderf.layout.direction = .Y
-	holderf.layout.child_gap = theme.spacing.sm
-	holderf.text = lui.create_text(ctx, lui.text(radio_label, preferred_min = 256))
-	holderf.style = resolve_style(ctx, holder, theme.label.md)
-	lui.submit_widget(ctx, holder, holderf)
-	lui.push_parent(ctx, holder)
-
-	radio_state, ok := &state.radio_state[holder.hash]
-	if !ok {
-		state.radio_state[holder.hash] = {}
-		radio_state = &state.radio_state[holder.hash]
-	}
-	state.active_radio_state = radio_state
-}
-
-end_radio :: proc(ctx: ^lui.Core_Context) {
-	lui.pop_parent(ctx)
-	state.active_radio_state.counter = 0
-	state.active_radio_state = nil
-}
-
-radio_item :: proc(ctx: ^lui.Core_Context, item_label: string) -> bool {
-	holder := lui.reserve_widget(ctx, state.active_radio_state.counter)
-	state.active_radio_state.counter += 1
-
-	holderf := lui.Form{}
-	holderf.layout.sizing = {lui.fit(), lui.fit()}
-	holderf.layout.child_gap = theme.spacing.sm
-	lui.submit_widget(ctx, holder, holderf)
-	lui.push_parent(ctx, holder)
-
-	active := holder.hash == state.active_radio_state.selected
-
-	control := lui.reserve_widget(ctx, "__internal_radio_control")
-	controlf := lui.Form{}
-	controlf.layout.sizing = {lui.fixed(theme.radio.size.x), lui.fixed(theme.radio.size.y)}
-	controlf.style = resolve_style(ctx, control, theme.radio.item_toggle_on if active else theme.radio.item_toggle_off)
-	controlf.animation = theme.control_animation
-	lui.submit_widget(ctx, control, controlf)
-
-	label(ctx, "__internal_radio_label", item_label)
-
-	lui.pop_parent(ctx)
-
-	events := lui.get_widget_mouse_events(ctx, control, .Left)
-	if .Clicked in events {
-		state.active_radio_state.selected = holder.hash
-		return true
-	}
-	return false
-}
-
-label :: proc(ctx: ^lui.Core_Context, key: lui.Key, text: string) {
-	if text == "" { return }
-	labelw := lui.reserve_widget(ctx, key)
-	labelf := lui.Form{}
-	labelf.layout.sizing = lui.sizing()
-	labelf.text = lui.create_text(ctx, lui.text(text, .None))
-	labelf.style = resolve_style(ctx, labelw, theme.label.md)
-	lui.submit_widget(ctx, labelw, labelf)
+    return changed
 }
 
 progress_bar :: proc(ctx: ^lui.Core_Context, key: lui.Key, progress_label: string, value: f32, min: f32 = 0, max: f32 = 1) {
@@ -1189,6 +1185,62 @@ tooltip :: proc(ctx: ^lui.Core_Context, key: lui.Key, parent: lui.Widget_Info, t
 		lui.submit_widget(ctx, cont, contf)
 }
 
+begin_radio :: proc(ctx: ^lui.Core_Context, key: lui.Key, radio_label: string) {
+	holder := lui.reserve_widget(ctx, key)
+	holderf := lui.Form{}
+	holderf.layout.sizing = lui.sizing(lui.grow())
+	holderf.layout.direction = .Y
+	holderf.layout.child_gap = theme.spacing.sm
+	holderf.text = lui.create_text(ctx, lui.text(radio_label, preferred_min = 256))
+	holderf.style = resolve_style(ctx, holder, theme.label.md)
+	lui.submit_widget(ctx, holder, holderf)
+	lui.push_parent(ctx, holder)
+
+	radio_state, ok := &state.radio_state[holder.hash]
+	if !ok {
+		state.radio_state[holder.hash] = {}
+		radio_state = &state.radio_state[holder.hash]
+	}
+	state.active_radio_state = radio_state
+}
+
+end_radio :: proc(ctx: ^lui.Core_Context) {
+	lui.pop_parent(ctx)
+	state.active_radio_state.counter = 0
+	state.active_radio_state = nil
+}
+
+radio_item :: proc(ctx: ^lui.Core_Context, item_label: string) -> bool {
+	holder := lui.reserve_widget(ctx, state.active_radio_state.counter)
+	state.active_radio_state.counter += 1
+
+	holderf := lui.Form{}
+	holderf.layout.sizing = {lui.fit(), lui.fit()}
+	holderf.layout.child_gap = theme.spacing.sm
+	lui.submit_widget(ctx, holder, holderf)
+	lui.push_parent(ctx, holder)
+
+	active := holder.hash == state.active_radio_state.selected
+
+	control := lui.reserve_widget(ctx, "__internal_radio_control")
+	controlf := lui.Form{}
+	controlf.layout.sizing = {lui.fixed(theme.radio.size.x), lui.fixed(theme.radio.size.y)}
+	controlf.style = resolve_style(ctx, control, theme.radio.item_toggle_on if active else theme.radio.item_toggle_off)
+	controlf.animation = theme.control_animation
+	lui.submit_widget(ctx, control, controlf)
+
+	label(ctx, "__internal_radio_label", item_label)
+
+	lui.pop_parent(ctx)
+
+	events := lui.get_widget_mouse_events(ctx, control, .Left)
+	if .Clicked in events {
+		state.active_radio_state.selected = holder.hash
+		return true
+	}
+	return false
+}
+
 begin_dropdown :: proc(ctx: ^lui.Core_Context, key: lui.Key, dropdown_label: string) -> bool {
 	holder := lui.reserve_widget(ctx, key)
 	holderf := lui.Form{}
@@ -1264,58 +1316,6 @@ dropdown_item :: proc(ctx: ^lui.Core_Context, item_label: string) -> bool {
 	}
 
 	return false
-}
-
-spinbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, spinbox_label: string, value: ^$T, min, max: T, step: T, temp_alloc := context.temp_allocator) -> bool where intrinsics.type_is_integer(T) {
-    cont := lui.reserve_widget(ctx, key)
-    contf := lui.Form{}
-    contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
-    contf.layout.child_gap = theme.spacing.sm
-    contf.layout.placement = {.Negative, .Center}
-    lui.submit_widget(ctx, cont, contf)
-
-    lui.push_parent(ctx, cont)
-
-    label(ctx, "__internal_spinbox_label", spinbox_label)
-
-    changed := false
-
-    button_dec := lui.reserve_widget(ctx, "__internal_spinbox_decrement")
-    button_decf := lui.Form{}
-    button_decf.layout.sizing = {lui.fit(), lui.fit()}
-    button_decf.layout.padding = theme.spacing.sm
-    button_decf.text = theme.spinbox.dec_text
-    button_decf.style = resolve_style(ctx, button_dec, theme.spinbox.dec)
-    lui.submit_widget(ctx, button_dec, button_decf)
-
-    input := lui.reserve_widget(ctx, "__internal_spinbox_val")
-    inputf := lui.Form{}
-    inputf.layout.sizing = {lui.fit(), lui.fit()}
-    inputf.layout.placement = {.Center, .Center}
-    inputf.layout.padding = {theme.spacing.lg, theme.spacing.sm}
-    inputf.text = lui.create_text(ctx, lui.text(fmt.aprintf("%v", value^, allocator = temp_alloc), .None))
-    inputf.style = resolve_style(ctx, input, theme.spinbox.input)
-    lui.submit_widget(ctx, input, inputf)
-
-    button_inc := lui.reserve_widget(ctx, "__internal_spinbox_increment")
-    button_incf := lui.Form{}
-    button_incf.layout.sizing = {lui.fit(), lui.fit()}
-    button_incf.layout.padding = theme.spacing.sm
-    button_incf.text = theme.spinbox.inc_text
-    button_incf.style = resolve_style(ctx, button_inc, theme.spinbox.inc)
-    lui.submit_widget(ctx, button_inc, button_incf)
-
-    event_dec := lui.get_widget_mouse_events(ctx, button_dec, .Left)
-    event_inc := lui.get_widget_mouse_events(ctx, button_inc, .Left)
-
-    if .Clicked in event_dec || (.Long_Down in event_dec && .Repeat in event_dec) { value^ -= step }
-    if .Clicked in event_inc || (.Long_Down in event_inc && .Repeat in event_inc) { value^ += step }
-
-    value^ = clamp(value^, min, max)
-
-    lui.pop_parent(ctx)
-
-    return changed
 }
 
 stack_grow :: proc(ctx: ^lui.Core_Context, key: lui.Key, stack_label: string, direction := lui.Axis.X, placement := [2]lui.Placement{.Center, .Center}) -> lui.Hash {
@@ -1559,8 +1559,8 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 			}
 			if !ok { label(ctx, str, str) }
 		case runtime.Type_Info_Float:
-			min := -100.0
-			max := 100.0
+			min := -1.0
+			max := 1.0
 
 			for attr in strings.split_iterator(&tag_value, ",") {
 				if strings.starts_with(attr, "min=") { min, _ = strconv.parse_f64(attr[4:]) }
@@ -1608,29 +1608,22 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 				}
 			}
 		case runtime.Type_Info_Boolean:
+			handle_bool :: proc(ctx: ^lui.Core_Context, name: string, tag: ^string, value: ^($T)) where intrinsics.type_is_boolean(T) {
+				ok := false
+				for attr in strings.split_iterator(tag, ",") {
+					if attr == "toggle" { toggle(ctx, name, name, value); ok = true }
+					if attr == "checkbox" { checkbox(ctx, name, name, value); ok = true }
+				}
+				if !ok { toggle(ctx, name, name, value) }
+			}
+
 			val := false
 			switch value.id {
-			case bool: val = (^bool)(value.data)^
-			case b8: val = bool((^b8)(value.data)^)
-			case b16: val = bool((^b16)(value.data)^)
-			case b32: val = bool((^b32)(value.data)^)
-			case b64: val = bool((^b64)(value.data)^)
-			}
-
-			ok := false
-			for attr in strings.split_iterator(&tag_value, ",") {
-				if attr == "toggle" { toggle(ctx, field.name, field.name, &val); ok = true }
-				if attr == "checkbox" { checkbox(ctx, field.name, field.name, &val); ok = true }
-			}
-
-			if !ok { toggle(ctx, field.name, field.name, &val) }
-
-			switch value.id {
-			case bool: (^bool)(value.data)^ = (bool)(val)
-			case b8:   (^b8) (value.data)^ = (b8)(val)
-			case b16:  (^b16)(value.data)^ = (b16)(val)
-			case b32:  (^b32)(value.data)^ = (b32)(val)
-			case b64:  (^b64)(value.data)^ = (b64)(val)
+			case bool: handle_bool(ctx, field.name, &tag_value, (^bool)(value.data))
+			case b8:   handle_bool(ctx, field.name, &tag_value, (^b8)(value.data))
+			case b16:  handle_bool(ctx, field.name, &tag_value, (^b16)(value.data))
+			case b32:  handle_bool(ctx, field.name, &tag_value, (^b32)(value.data))
+			case b64:  handle_bool(ctx, field.name, &tag_value, (^b64)(value.data))
 			}
 		case runtime.Type_Info_Integer:
 			if v.signed {
