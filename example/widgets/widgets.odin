@@ -73,12 +73,10 @@ Theme :: struct {
     container: struct {
     	body:          Interaction_Style,
     	title:         Interaction_Style,
-    	button:        Interaction_Style,
     	title_bar:     Interaction_Style,
     	scroll_track:  Interaction_Style,
     	scroll_thumb:  Interaction_Style,
     	inline_body:   Interaction_Style,
-        inline_button: Interaction_Style,
         inline_title:  Interaction_Style,
         docked_text:      lui.Text_Index,
         resize_text:      lui.Text_Index,
@@ -538,9 +536,6 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 	    body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {2, {0, 2}}, radius = {0, 0, 6, 6}}})
 	   	title_bar := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = {2, {2, 0}}, radius = {6, 6, 0, 0}}})
 	    title := lui.create_style(ctx, {text = make_text_style(p.fg_primary, f.f_md)})
-	   	button := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 6}, text = make_text_style(p.fg_primary, f.f_md)})
-	    button_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = 6}, text = make_text_style(p.bg_elevated, f.f_md)})
-	    button_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = 6}, text = make_text_style(p.bg_elevated, f.f_md)})
 
 	    inline_body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_strong, thickness = {{2, 0}, {0, 0}}}})
 
@@ -549,13 +544,11 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
 
 	   	theme.container.body = si(body, body, body)
 	   	theme.container.title = si(title, title, title)
-	   	theme.container.button = si(button, button_h, button_p)
 	   	theme.container.title_bar = si(title_bar, title_bar, title_bar)
 		theme.container.scroll_track = si(scroll_track, scroll_track, scroll_track)
 		theme.container.scroll_thumb = si(scroll_thumb, scroll_thumb, scroll_thumb)
 
 		theme.container.inline_title = si(title, title, title)
-		theme.container.inline_button = si(mini_button, mini_button_h, mini_button_p)
 		theme.container.inline_body = si(inline_body, inline_body, inline_body)
 
 	   	theme.container.collapsed_text   = lui.create_text(ctx, lui.text("▶", .None))
@@ -706,42 +699,24 @@ container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> 
 	cont_barf := lui.Form{}
 	cont_barf.layout.sizing = {lui.grow(), lui.fit()}
 	cont_barf.event_flags = {.Lock_Active, .Lock_Hover}
-	cont_barf.layout.padding = {2, 2}
+	cont_barf.layout.padding = theme.spacing.sm
+	cont_barf.layout.placement = {.Negative, .Center}
+	cont_barf.layout.child_gap = theme.spacing.sm
 	cont_barf.style = resolve_style(ctx, cont_bar, theme.container.title_bar)
 	lui.submit_widget(ctx, cont_bar, cont_barf)
 
 	lui.push_parent(ctx, cont_bar)
 
 	{
-		cont_collapse := lui.reserve_widget(ctx, "__internal_cont_collapse")
-		cont_collapse_event := lui.get_widget_mouse_events(ctx, cont_collapse, .Left)
-		if .Clicked in cont_collapse_event { cont_state.flags ~= {.Collapsed} }
-		cont_collapsef := lui.Form{}
-		cont_collapsef.layout.sizing = {lui.fit(), lui.fit()}
-		cont_collapsef.layout.padding = {theme.spacing.sm, 0}
-		cont_collapsef.text = theme.container.collapsed_text if .Collapsed in cont_state.flags else theme.container.uncollapsed_text
-		cont_collapsef.animation = theme.control_animation
-		cont_collapsef.style = resolve_style(ctx, cont_collapse, theme.container.button)
-		lui.submit_widget(ctx, cont_collapse, cont_collapsef)
-		lui.push_parent(ctx, cont_collapse)
-		tooltip(ctx, "__internal_cont_collapse_tooltip", cont_collapse, "Collapse/Uncollapse Container")
-		lui.pop_parent(ctx)
+		collapse_text := theme.container.collapsed_text if .Collapsed in cont_state.flags else theme.container.uncollapsed_text
+		cont_collapse_events := mini_button(ctx, "__internal_cont_collapse", collapse_text, "Collapse/Uncollapse Container")
+		if .Clicked in cont_collapse_events[.Left] { cont_state.flags ~= {.Collapsed} }
 	}
 
 	{
-		cont_dock := lui.reserve_widget(ctx, "__internal_cont_undock")
-		cont_dock_event := lui.get_widget_mouse_events(ctx, cont_dock, .Left)
-		if .Clicked in cont_dock_event { cont_state.flags ~= {.Docked} }
-		cont_dockf := lui.Form{}
-		cont_dockf.layout.sizing = {lui.fit(), lui.fit()}
-		cont_dockf.layout.padding = {theme.spacing.sm, 0}
-		cont_dockf.text = theme.container.docked_text if .Docked in cont_state.flags else theme.container.undocked_text
-		cont_dockf.style = resolve_style(ctx, cont_dock, theme.container.button)
-		cont_dockf.animation = theme.control_animation
-		lui.submit_widget(ctx, cont_dock, cont_dockf)
-		lui.push_parent(ctx, cont_dock)
-		tooltip(ctx, "__internal_cont_dock_tooltip", cont_dock, "Dock/Undock Container")
-		lui.pop_parent(ctx)
+		dock_text := theme.container.docked_text if .Docked in cont_state.flags else theme.container.undocked_text
+		cont_dock_events := mini_button(ctx, "__internal_cont_dock_undock", dock_text, "Dock/Undock Container")
+		if .Clicked in cont_dock_events[.Left] { cont_state.flags ~= {.Docked} }
 	}
 
 	labelw := lui.reserve_widget(ctx, "__internal_cont_title_label")
@@ -810,12 +785,12 @@ end_container :: proc(ctx: ^lui.Core_Context) {
 
 	resizewf := lui.Form{}
 	resizewf.layout.sizing = {lui.fit(), lui.fit()}
-	resizewf.layout.padding.x = theme.spacing.sm
+	resizewf.layout.padding = {theme.spacing.sm, 0}
 	resizewf.layout.flags = {{.No_Size_Propagation, .No_Positioning_Relative}, {.No_Size_Propagation, .No_Positioning_Relative, .No_Clip_Offset}}
 	resizewf.event_flags = {.Lock_Hover, .Lock_Active}
 	resizewf.override = lui.create_override(ctx, {offset = {lui.percent(1), lui.percent(1)}}, {offset = {lui.percent_self(-1), lui.percent_self(-1)}})
 	resizewf.text = theme.container.resize_text
-	resizewf.style = resolve_style(ctx, resizew, theme.container.button)
+	resizewf.style = resolve_style(ctx, resizew, theme.mini_button.style)
 	lui.submit_widget(ctx, resizew, resizewf)
 
 	lui.push_parent(ctx, resizew)
@@ -845,20 +820,14 @@ inline_container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: stri
 	bar := lui.reserve_widget(ctx, "__internal_inline_cont_title_bar")
 	barf := lui.Form{}
 	barf.layout.sizing = {lui.grow(), lui.fit()}
+	barf.layout.placement = {.Negative, .Center}
 	lui.submit_widget(ctx, bar, barf)
 
 	lui.push_parent(ctx, bar)
 
-	collapse := lui.reserve_widget(ctx, "__internal_inline_cont_collapse_button")
-	collapsef := lui.Form{}
-	collapsef.layout.sizing = {lui.fit(), lui.fit()}
-	collapsef.layout.padding = {theme.spacing.sm, 0}
-	collapsef.text = theme.container.collapsed_text if .Collapsed in cont_state.flags else theme.container.uncollapsed_text
-	collapsef.style = resolve_style(ctx, collapse, theme.container.inline_button)
-	lui.submit_widget(ctx, collapse, collapsef)
-
-	collapse_event := lui.get_widget_mouse_events(ctx, collapse, .Left)
-	if .Clicked in collapse_event { cont_state.flags ~= {.Collapsed} }
+	collapse_text := theme.container.collapsed_text if .Collapsed in cont_state.flags else theme.container.uncollapsed_text
+	collapse_events := mini_button(ctx, "__internal_inline_cont_collapse", collapse_text, "Collapse/Uncollapse")
+	if .Clicked in collapse_events[.Left] { cont_state.flags ~= {.Collapsed} }
 
 	labelw := lui.reserve_widget(ctx, "__internal_inline_cont_title_label")
 	labelf := lui.Form{}
@@ -906,19 +875,23 @@ button :: proc(ctx: ^lui.Core_Context, key: lui.Key, label: string) -> lui.Mouse
 	return lui.get_widget_mouse_events_all(ctx, button)
 }
 
-mini_button :: proc(ctx: ^lui.Core_Context, key: lui.Key, label: string) -> lui.Mouse_Events {
+mini_button :: proc(ctx: ^lui.Core_Context, key: lui.Key, button_text: lui.Text_Index, tooltip_label := "") -> lui.Mouse_Events {
 	button := lui.reserve_widget(ctx, key)
 	buttonf := lui.Form{}
 	buttonf.layout.sizing = lui.sizing()
 	buttonf.layout.placement = {.Center, .Center}
-	buttonf.text = lui.create_text(ctx, lui.text(label, .None))
+	buttonf.text = button_text
 	buttonf.style = resolve_style(ctx, button, theme.mini_button.style)
-	buttonf.layout.padding = theme.spacing.sm
+	buttonf.layout.padding = {theme.spacing.sm, 0}
 	buttonf.animation = theme.control_animation
 	lui.submit_widget(ctx, button, buttonf)
+	if tooltip_label != "" {
+		lui.push_parent(ctx, button)
+		tooltip(ctx, "__internal_mini_button_tooltip", button, tooltip_label)
+		lui.pop_parent(ctx)
+	}
 	return lui.get_widget_mouse_events_all(ctx, button)
 }
-
 
 slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, slider_label: string, value: ^$T, min: T, max: T, temp_alloc := context.temp_allocator) -> bool where intrinsics.type_is_float(T) {
 	cont := lui.reserve_widget(ctx, key)
@@ -939,7 +912,7 @@ slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, slider_label: string, value
 	    track := lui.reserve_widget(ctx, "__internal_slider_track")
 	    track_events := lui.get_widget_mouse_events(ctx, track, .Left)
 
-	    usable_w := T(track.rect.size.x - theme.slider.thumb_size.x - 1)
+	    usable_w := T(track.rect.size.x - theme.slider.thumb_size.x)
 
 	    if .Pressed in track_events && usable_w > 0 {
 	        t = clamp(T(ctx.mouse.position.x - track.rect.position.x - theme.slider.thumb_size.x * 0.5) / usable_w, 0, 1)
@@ -958,7 +931,7 @@ slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, slider_label: string, value
 	    fill  := lui.reserve_widget(ctx, "__internal_slider_fill")
 	    fillf := lui.Form{}
 	    fillf.event_flags = {.Disable_Hover}
-	    fillf.layout.sizing = {lui.fixed(f32(usable_w > 0 ? t * usable_w : 0)), lui.fixed(theme.slider.track_height)}
+	    fillf.layout.sizing = {lui.percent(f32(t) * (f32(usable_w) / track.rect.size.x)), lui.fixed(theme.slider.track_height)}
 	    fillf.layout.placement = {.Negative, .Center}
 	    fillf.style = resolve_style(ctx, track, theme.slider.track_fill)
 	    fillf.animation = theme.control_animation
@@ -1180,7 +1153,7 @@ text_box :: proc(ctx: ^lui.Core_Context, key: lui.Key, text: string, wrap: lui.T
 	lui.submit_widget(ctx, cont, contf)
 }
 
-tooltip :: proc(ctx: ^lui.Core_Context, key: lui.Key, parent: lui.Widget_Info, tooltip_text: string) {
+tooltip :: proc(ctx: ^lui.Core_Context, key: lui.Key, parent: lui.Widget_Info, tooltip_label: string) {
     if !lui.is_widget_hovered(ctx, parent) do return
     cont := lui.reserve_widget(ctx, key)
     contf := lui.Form{}
@@ -1189,7 +1162,7 @@ tooltip :: proc(ctx: ^lui.Core_Context, key: lui.Key, parent: lui.Widget_Info, t
     contf.layout.padding = theme.spacing.md
     contf.layout.flags = {{.No_Positioning_Relative, .No_Size_Propagation}, {.No_Positioning_Relative, .No_Size_Propagation}}
     contf.event_flags = {.Disable_Hover}
-    contf.text = lui.create_text(ctx, lui.text(tooltip_text, .None))
+    contf.text = lui.create_text(ctx, lui.text(tooltip_label, .None))
     contf.style = resolve_style(ctx, cont, theme.tooltip.style)
     contf.animation = theme.control_animation
     contf.z_offset = 5000
@@ -1539,17 +1512,8 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 				stack_fit(ctx, "__internal_slider_group_misc_stack", "", direction)
 
 				if has_bind_state {
-					button := lui.reserve_widget(ctx, "_internal_slider_group_bind_button")
-					buttonf := lui.Form{}
-					buttonf.layout.sizing = lui.sizing()
-					buttonf.layout.placement = {.Center, .Center}
-					buttonf.text = theme.binded_text if binded else theme.unbinded_text
-					buttonf.style = resolve_style(ctx, button, theme.mini_button.style)
-					buttonf.layout.padding = theme.spacing.sm
-					buttonf.animation = theme.control_animation
-					lui.submit_widget(ctx, button, buttonf)
-					events := lui.get_widget_mouse_events(ctx, button, .Left)
-					if .Clicked in events {
+					events := mini_button(ctx, "__internal_slider_group_bind_button", theme.binded_text if binded else theme.unbinded_text)
+					if .Clicked in events[.Left] {
 						state.display_struct_slider_bind[hash] = !binded
 					}
 				}
