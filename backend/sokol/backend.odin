@@ -158,28 +158,46 @@ add_font :: proc(backend_ctx: ^Backend_Context, name: string, path: string) -> (
 	return font_id
 }
 
-resize_cmd_buffer :: proc(backend_ctx: ^Backend_Context) {
-	if len(backend_ctx.render_commands) == 0 { return }
-	sgfx.uninit_buffer(backend_ctx.render_cmd_buffer)
-	sgfx.init_buffer(backend_ctx.render_cmd_buffer, {usage = {dynamic_update = true, storage_buffer = true}, size = 2 * size_of(Render_Cmd) * len(backend_ctx.render_commands)})
-	sgfx.uninit_view(backend_ctx.render_cmd_view)
-	sgfx.init_view(backend_ctx.render_cmd_view, {storage_buffer = {buffer = backend_ctx.render_cmd_buffer}})
-}
+update_buffers :: proc(backend_ctx: ^Backend_Context) {
+	if len(backend_ctx.render_commands) != 0 {
+		size := size_of(Render_Cmd) * len(backend_ctx.render_commands)
+		if size > int(sgfx.query_buffer_size(backend_ctx.render_cmd_buffer)) {
+			sgfx.uninit_buffer(backend_ctx.render_cmd_buffer)
+			sgfx.init_buffer(backend_ctx.render_cmd_buffer, {usage = {dynamic_update = true, storage_buffer = true}, size = uint(2 * size)})
+			sgfx.uninit_view(backend_ctx.render_cmd_view)
+			sgfx.init_view(backend_ctx.render_cmd_view, {storage_buffer = {buffer = backend_ctx.render_cmd_buffer}})
+		}
+	}
 
-resize_clip_buffer :: proc(backend_ctx: ^Backend_Context) {
-	if len(backend_ctx.clips) == 0 { return }
-	sgfx.uninit_buffer(backend_ctx.clip_buffer)
-	sgfx.init_buffer(backend_ctx.clip_buffer, {usage = {dynamic_update = true, storage_buffer = true}, size = 2 * size_of(Clip) * len(backend_ctx.clips)})
-	sgfx.uninit_view(backend_ctx.clip_view)
-	sgfx.init_view(backend_ctx.clip_view, {storage_buffer = {buffer = backend_ctx.clip_buffer}})
-}
+	if len(backend_ctx.clips) != 0 {
+		size := size_of(Clip) * len(backend_ctx.clips)
+		if size > int(sgfx.query_buffer_size(backend_ctx.clip_buffer)) {
+			sgfx.uninit_buffer(backend_ctx.clip_buffer)
+			sgfx.init_buffer(backend_ctx.clip_buffer, {usage = {dynamic_update = true, storage_buffer = true}, size = uint(2 * size)})
+			sgfx.uninit_view(backend_ctx.clip_view)
+			sgfx.init_view(backend_ctx.clip_view, {storage_buffer = {buffer = backend_ctx.clip_buffer}})
+		}
+	}
 
-resize_clip_idx_buffer :: proc(backend_ctx: ^Backend_Context) {
-	if len(backend_ctx.clip_indices) == 0 { return }
-	sgfx.uninit_buffer(backend_ctx.clip_idx_buffer)
-	sgfx.init_buffer(backend_ctx.clip_idx_buffer, {usage = {dynamic_update = true, storage_buffer = true}, size = 2 * size_of(i32) * len(backend_ctx.clip_indices)})
-	sgfx.uninit_view(backend_ctx.clip_idx_view)
-	sgfx.init_view(backend_ctx.clip_idx_view, {storage_buffer = {buffer = backend_ctx.clip_idx_buffer}})
+	if len(backend_ctx.clip_indices) != 0 {
+		size := size_of(i32) * len(backend_ctx.clip_indices)
+		if size > int(sgfx.query_buffer_size(backend_ctx.clip_idx_buffer)) {
+			sgfx.uninit_buffer(backend_ctx.clip_idx_buffer)
+			sgfx.init_buffer(backend_ctx.clip_idx_buffer, {usage = {dynamic_update = true, storage_buffer = true}, size = uint(2 * size)})
+			sgfx.uninit_view(backend_ctx.clip_idx_view)
+			sgfx.init_view(backend_ctx.clip_idx_view, {storage_buffer = {buffer = backend_ctx.clip_idx_buffer}})
+		}
+	}
+
+	if len(backend_ctx.render_commands) > 0 {
+		sgfx.update_buffer(backend_ctx.render_cmd_buffer, { ptr = raw_data(backend_ctx.render_commands), size = size_of(Render_Cmd) * len(backend_ctx.render_commands) })
+	}
+	if len(backend_ctx.clips) > 0 {
+		sgfx.update_buffer(backend_ctx.clip_buffer, { ptr = raw_data(backend_ctx.clips), size = size_of(Clip) * len(backend_ctx.clips) })
+	}
+	if len(backend_ctx.clip_indices) > 0 {
+		sgfx.update_buffer(backend_ctx.clip_idx_buffer, { ptr = raw_data(backend_ctx.clip_indices), size = size_of(i32) * len(backend_ctx.clip_indices) })
+	}
 }
 
 resize_target :: proc(backend_ctx: ^Backend_Context, width, height: i32) {
@@ -205,29 +223,9 @@ render :: proc(core_ctx: ^lui.Core_Context, backend_ctx: ^Backend_Context) {
 		backend_ctx.font.dirty = false
 	}
 
-	if sgfx.query_buffer_size(backend_ctx.render_cmd_buffer) < size_of(Render_Cmd) * len(backend_ctx.render_commands) {
-		resize_cmd_buffer(backend_ctx)
-	}
-
-	if sgfx.query_buffer_size(backend_ctx.clip_buffer) < size_of(Clip) * len(backend_ctx.clips) {
-		resize_clip_buffer(backend_ctx)
-	}
-
-	if sgfx.query_buffer_size(backend_ctx.clip_idx_buffer) < size_of(i32) * len(backend_ctx.clip_indices) {
-		resize_clip_idx_buffer(backend_ctx)
-	}
+	update_buffers(backend_ctx)
 
 	width, height := i32(core_ctx.window_size.x), i32(core_ctx.window_size.y)
-
-	if len(backend_ctx.render_commands) > 0 {
-		sgfx.update_buffer(backend_ctx.render_cmd_buffer, { ptr = raw_data(backend_ctx.render_commands), size = size_of(Render_Cmd) * len(backend_ctx.render_commands) })
-	}
-	if len(backend_ctx.clips) > 0 {
-		sgfx.update_buffer(backend_ctx.clip_buffer, { ptr = raw_data(backend_ctx.clips), size = size_of(Clip) * len(backend_ctx.clips) })
-	}
-	if len(backend_ctx.clip_indices) > 0 {
-		sgfx.update_buffer(backend_ctx.clip_idx_buffer, { ptr = raw_data(backend_ctx.clip_indices), size = size_of(i32) * len(backend_ctx.clip_indices) })
-	}
 
 	view := matrix[4, 4]f32{
 		2.0 / f32(width), 0, 0, -1,
@@ -328,7 +326,7 @@ feed_backend :: proc(core_ctx: ^lui.Core_Context, backend_ctx: ^Backend_Context)
 		        }
 		    }
 
-		    fs.EndState(&backend_ctx.font.fs_ctx) // triggers callbackUpdate if new glyphs were baked
+		    fs.EndState(&backend_ctx.font.fs_ctx)
 		case lui.Command_Image:
 		case lui.Command_Custom:
 		}
