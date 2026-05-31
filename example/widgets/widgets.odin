@@ -162,6 +162,8 @@ Theme :: struct {
       	indicator: Interaction_Style,
     },
 
+    _debug_focus_style : lui.Style_Index,
+
     control_animation: lui.Animation_Index,
 
     binded_text:   lui.Text_Index,
@@ -632,6 +634,8 @@ build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spa
     theme.text_box.style = si(text_box, text_box, text_box)
     theme.tooltip.style = si(tooltip, tooltip, tooltip)
 
+    theme._debug_focus_style = lui.create_style(ctx, {border = {color = p.warning, radius = 0, thickness = 4}, color = p.success, text = make_text_style(p.fg_primary, f.f_md)})
+
     anim := lui.ANIM_COLOR
     anim.on_destroyed = proc(info: lui.Widget_Info, style: lui.Style, text_position: lui.Vec2f32) -> (end: lui.Animation_Data) {
         return {}
@@ -862,11 +866,12 @@ end_inline_container :: proc(ctx: ^lui.Core_Context) {
     lui.pop_parent(ctx)
 }
 
-button :: proc(ctx: ^lui.Core_Context, key: lui.Key, label: string) -> lui.Mouse_Events {
+button :: proc(ctx: ^lui.Core_Context, key: lui.Key, label: string) -> (lui.Mouse_Events) {
 	button := lui.reserve_widget(ctx, key)
 	buttonf := lui.Form{}
 	buttonf.layout.sizing = lui.sizing()
 	buttonf.layout.placement = {.Center, .Center}
+	buttonf.event_flags = {.Focusable}
 	buttonf.text = lui.create_text(ctx, lui.text(label, .None))
 	buttonf.style = resolve_style(ctx, button, theme.button.style)
 	buttonf.layout.padding = theme.spacing.md

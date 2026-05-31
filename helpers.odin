@@ -154,6 +154,34 @@ is_widget_active :: proc(ctx: ^Core_Context, info: Widget_Info) -> bool {
 	return info.hash == ctx.mouse.active
 }
 
+is_widget_focused :: proc(ctx: ^Core_Context, info: Widget_Info) -> bool {
+	return info.hash == ctx.keyboard.focused
+}
+
+focus_clear :: proc(ctx: ^Core_Context) {
+	ctx.keyboard.focus_to = 0
+}
+
+focus_set :: proc(ctx: ^Core_Context, info: Widget_Info) {
+	ctx.keyboard.focus_to = info.hash
+}
+
+focus_next :: proc(ctx: ^Core_Context) {
+	if ctx.keyboard.focused == ctx.keyboard.focus_last || ctx.keyboard.focused == 0 {
+		ctx.keyboard.focus_to = ctx.keyboard.focus_first
+		return
+	}
+	ctx.keyboard.focus_to = ctx.keyboard.focus_next
+}
+
+focus_prev :: proc(ctx: ^Core_Context) {
+	if ctx.keyboard.focused == ctx.keyboard.focus_first {
+		ctx.keyboard.focus_to = ctx.keyboard.focus_last
+		return
+	}
+	ctx.keyboard.focus_to = ctx.keyboard.focus_prev
+}
+
 get_widget_mouse_events_all :: proc(ctx: ^Core_Context, info: Widget_Info) -> Mouse_Events {
 	if is_widget_active(ctx, info) {
 		return ctx.mouse.events

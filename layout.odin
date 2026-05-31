@@ -123,9 +123,27 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 
 	hovered_widget := (^Widget)(nil)
 
+	ctx.keyboard.focus_first = 0
+	ctx.keyboard.focus_last = 0
+	ctx.keyboard.focus_prev = 0
+	ctx.keyboard.focus_next = 0
+
+	set_prev, set_next := false, true
+
 	positioning_loop: for &widget in ctx.widgets {
 		_position_layout_widget_children(ctx, &widget)
 		_write_widget_persistant_data(ctx, &widget)
+
+		if .Focusable in widget.form.event_flags {
+			if ctx.keyboard.focus_first == 0 { ctx.keyboard.focus_first = widget.info.hash }
+			ctx.keyboard.focus_last = widget.info.hash
+
+			if !set_next { ctx.keyboard.focus_next = widget.info.hash; set_next = true }
+			if ctx.keyboard.focused == widget.info.hash { set_prev = true; set_next = false }
+
+			if !set_prev { ctx.keyboard.focus_prev = widget.info.hash }
+		}
+
 		widget_style := get_style(ctx, widget.form.style)
 		if is_point_in_rect(widget.rect, ctx.mouse.position, widget_style.border) &&
 		   .Disable_Hover not_in widget.form.event_flags &&

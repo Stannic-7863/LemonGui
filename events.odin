@@ -1,5 +1,6 @@
 package core_ui
 
+import "core:hash"
 import "core:time"
 
 Mouse_Button :: enum u8 {
@@ -161,7 +162,7 @@ Event_Flag :: enum u8 {
 	Disable_Hover,
 	Lock_Active,
 	Lock_Hover,
-	// Focusable, NOTE: Impl later
+	Focusable,
 	// Occlude_Clip,
 }
 
@@ -184,9 +185,9 @@ Mouse_Context :: struct {
 	delta:                   Vec2f32,
 	scroll_v:                Vec2f32,
 	scroll:                  f32,
+	active:                  Hash,
 	hovered:                 Hash,
 	hovered_clip:            Hash,
-	active:                  Hash,
 	can_lock_active:         bool,
 	can_lock_hover:          bool,
 	active_is_locked:        bool,
@@ -202,11 +203,16 @@ Keyboard_Context :: struct {
 	repeat_last:          [Keyboard_Key]time.Time,
 	mapped_events:        [Keyboard_Key]bit_set[Key_Event],
 	events:               Keyboard_Events,
+	pressed_char:         []rune,
 	double_click_timeout: time.Duration,
 	long_down_timeout:    time.Duration,
 	repeat_timeout:       time.Duration,
 	focused:              Hash,
-	pressed_char:         []rune,
+	focus_to:             Hash,
+	focus_prev:           Hash,
+	focus_next:           Hash,
+	focus_last:           Hash,
+	focus_first:          Hash,
 }
 
 _resolve_events :: proc(ctx: ^Core_Context) {
@@ -232,6 +238,8 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 			}
 		}
 	}
+
+	ctx.keyboard.focused = ctx.keyboard.focus_to
 }
 
 _handle_mouse_event_locking :: proc(ctx: ^Core_Context) {

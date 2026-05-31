@@ -1,5 +1,6 @@
 package example
 
+import "core:fmt"
 import "core:reflect"
 import "core:time"
 
@@ -265,16 +266,24 @@ main :: proc() {
 			reference := Vec2f32{10, 10}
 			bounds := Vec2f32{10, 10}
 
-		    widgets.display_struct(ctp, "__theme_editor", "Theme", widgets.DEFAULT_PALETTES[selected_palette])
-		    widgets.spinbox(ctp, "__text_spin_box", "Spin Box", &spinbox_value, -10, 10, 1)
+		    // widgets.display_struct(ctp, "__theme_editor", "Theme", widgets.DEFAULT_PALETTES[selected_palette])
+		    // widgets.spinbox(ctp, "__text_spin_box", "Spin Box", &spinbox_value, -10, 10, 1)
 
-			widgets.mouse_indicator(ctp, "__test_mouse_indicator", "Mouse Indicator")
-			widgets.track_region(ctp, "__test_drag_region", "Drag", &dragval, reference, bounds)
+			// widgets.mouse_indicator(ctp, "__test_mouse_indicator", "Mouse Indicator")
+			// widgets.track_region(ctp, "__test_drag_region", "Drag", &dragval, reference, bounds)
 			// inline_container container has no clip and can't be undocked.
 		    // end_inline_container must be called inside the same if block.
 		    if widgets.inline_container(ctp, "__test_inline_container", "Inline Contaienr") {
-				widgets.button(ctp, "__test_button", "Button! Press Me!")
-				widgets.slider(ctp, "__test_slider", "Slideer", &slider_val, -5, 5)
+
+				fmt.println(ctx.keyboard.focus_prev, ctx.keyboard.focused, ctx.keyboard.focus_next, ctx.keyboard.focus_first, ctx.keyboard.focus_last)
+
+				widgets.button(ctp, "__test_button1", "Button! Press Me!");
+				widgets.button(ctp, "__test_button2", "Button! Press Me!")
+				widgets.button(ctp, "__test_button3", "Button! Press Me!")
+				widgets.button(ctp, "__test_button4", "Button! Press Me!")
+				widgets.button(ctp, "__test_button5", "Button! Press Me!")
+				widgets.button(ctp, "__test_button6", "Button! Press Me!")
+				// widgets.slider(ctp, "__test_slider", "Slideer", &slider_val, -5, 5)
 
 				widgets.begin_radio(ctp, "__test_radio", "Radio Buttons. Only one can be selected at a time")
 				widgets.radio_item(ctp, "Item 1")
@@ -374,7 +383,13 @@ handle_events :: proc(ctx: ^lui.Core_Context, window: ^sdl.Window) -> (bool, boo
 	for sdl.PollEvent(&event) {
 		#partial switch event.type {
 		case .KEY_DOWN:
-			if event.key.scancode == .ESCAPE {return false, false}
+			#partial switch event.key.scancode {
+			case .ESCAPE:
+				return false, false
+			case .TAB:
+				if .LSHIFT in event.key.mod { lui.focus_prev(ctx) }
+				else { lui.focus_next(ctx) }
+			}
 		case .QUIT:
 			return false, false
 		case .MOUSE_WHEEL:
