@@ -4,9 +4,7 @@ import "base:runtime"
 import lui "./../../"
 import "vendor:sdl3/ttf"
 
-import "core:fmt"
 import "core:mem"
-import "core:os"
 import sdl "vendor:sdl3"
 
 Vec2f32 :: [2]f32
@@ -59,9 +57,12 @@ Backend_Context :: struct {
 	batch:               [dynamic]Gpu_Batch,
 }
 
-init :: proc(window: ^sdl.Window, gpu: ^sdl.GPUDevice, vert_path, frag_path: string, allocator: runtime.Allocator) -> Backend_Context {
-	vert_shader := load_shader(gpu, vert_path, .VERTEX, {.SPIRV}, 1, 0, 1)
-	frag_shader := load_shader(gpu, frag_path, .FRAGMENT, {.SPIRV}, 0, 1, 2)
+vert_shader_source := #load("./shaders/compiled/main.vert.sprv")
+frag_shader_source := #load("./shaders/compiled/main.frag.sprv")
+
+init :: proc(window: ^sdl.Window, gpu: ^sdl.GPUDevice, allocator: runtime.Allocator) -> Backend_Context {
+	vert_shader := load_shader(gpu, vert_shader_source, .VERTEX, {.SPIRV}, 1, 0, 1)
+	frag_shader := load_shader(gpu, frag_shader_source, .FRAGMENT, {.SPIRV}, 0, 1, 2)
 	pipeline := sdl.CreateGPUGraphicsPipeline(
 		gpu,
 		{
@@ -70,7 +71,7 @@ init :: proc(window: ^sdl.Window, gpu: ^sdl.GPUDevice, vert_path, frag_path: str
 			target_info = {
 				num_color_targets = 1,
 				color_target_descriptions = &sdl.GPUColorTargetDescription {
-					format = sdl.GetGPUSwapchainTextureFormat(gpu, window),
+					format = .R8G8B8A8_UNORM,
 					blend_state = {
 						alpha_blend_op = .ADD,
 						src_alpha_blendfactor = .ONE,
@@ -108,18 +109,25 @@ init :: proc(window: ^sdl.Window, gpu: ^sdl.GPUDevice, vert_path, frag_path: str
 	backend_ctx.clip_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.clip_idx_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.dummy_texture = sdl.CreateGPUTexture(gpu, {height = 1, width = 1, format = .R8G8B8A8_UNORM, usage = {.SAMPLER}, layer_count_or_depth = 1, num_levels = 1})
-	return backend_ctx
-}
+	backend_ctx.render_texture = sdl.CreateGPUTexture(gpu, {width = u32(window_width), height = u32(window_height), format = .R8G8B8A8_UNORM, usage = {.COLOR_TARGET, .SAMPLER}, layer_count_or_depth = 1, num_levels = 1, type = .D2})
 
-init_font :: proc(backend_ctx: ^Backend_Context) {
 	assert(ttf.Init())
-	engine := ttf.CreateGPUTextEngine(backend_ctx.gpu)
-
 	backend_ctx.font_sampler = sdl.CreateGPUSampler(
 		backend_ctx.gpu,
 		{address_mode_u = .REPEAT, address_mode_v = .REPEAT, address_mode_w = .REPEAT, mag_filter = .LINEAR, min_filter = .LINEAR, mipmap_mode = .LINEAR},
 	)
-	backend_ctx.font_engine = engine
+	backend_ctx.font_engine = ttf.CreateGPUTextEngine(backend_ctx.gpu)
+
+	return backend_ctx
+}
+
+get_default_text_init_parameters :: proc(backend_ctx: ^Backend_Context) -> lui.Text_Init_Parameters {
+	return {
+		measure_text_height = measure_text_height,
+		measure_text_hover_index = measure_text_hover_index,
+		measure_text_width = measure_text_width,
+		text_user_data = backend_ctx.font_engine
+	}
 }
 
 add_font :: proc(backend_ctx: ^Backend_Context, path: cstring, size: f32) -> ^ttf.Font {
@@ -142,7 +150,13 @@ init_gpu_dynamic_buffer :: proc(backend_ctx: ^Backend_Context) -> Gpu_Dynamic_Bu
 	return dyn_buf
 }
 
-de_init :: proc(backend_ctx: ^Backend_Context) {
+deinit :: proc(backend_ctx: ^Backend_Context) {
+	for font in backend_ctx.fonts {
+		ttf.CloseFont(font)
+	}
+	ttf.DestroyGPUTextEngine(backend_ctx.font_engine)
+	sdl.ReleaseGPUSampler(backend_ctx.gpu, backend_ctx.font_sampler)
+
 	delete(backend_ctx.render_commands)
 	delete(backend_ctx.batch)
 	delete(backend_ctx.fonts)
@@ -156,14 +170,7 @@ de_init :: proc(backend_ctx: ^Backend_Context) {
 
 	sdl.ReleaseGPUTexture(backend_ctx.gpu, backend_ctx.dummy_texture)
 	sdl.ReleaseGPUGraphicsPipeline(backend_ctx.gpu, backend_ctx.pipeline)
-}
-
-de_init_font :: proc(backend_ctx: ^Backend_Context) {
-	for font in backend_ctx.fonts {
-		ttf.CloseFont(font)
-	}
-	ttf.DestroyGPUTextEngine(backend_ctx.font_engine)
-	sdl.ReleaseGPUSampler(backend_ctx.gpu, backend_ctx.font_sampler)
+	sdl.ReleaseGPUTexture(backend_ctx.gpu, backend_ctx.render_texture)
 	ttf.Quit()
 }
 
@@ -193,7 +200,14 @@ update_dynamic_buffer :: proc(backend_ctx: ^Backend_Context, buf: ^Gpu_Dynamic_B
 	}
 }
 
-render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^lui.Core_Context) {
+resize_target :: proc(backend_ctx: ^Backend_Context, width: u32, height: u32) {
+	sdl.ReleaseGPUTexture(backend_ctx.gpu, backend_ctx.render_texture)
+	backend_ctx.render_texture = sdl.CreateGPUTexture(backend_ctx.gpu, {width = width, height = height, format = .R8G8B8A8_UNORM, usage = {.COLOR_TARGET, .SAMPLER}, layer_count_or_depth = 1, num_levels = 1, type = .D2})
+	assert(sdl.WaitForGPUIdle(backend_ctx.gpu))
+}
+
+render :: proc(backend_ctx: ^Backend_Context, core_ctx: ^lui.Core_Context, command_buffer: ^sdl.GPUCommandBuffer) {
+	backend_ctx.cmd_buf = command_buffer
 	clear(&backend_ctx.render_commands)
 	clear(&backend_ctx.batch)
 	clear(&backend_ctx.clips)
@@ -369,14 +383,7 @@ feed_backend :: proc(backend_ctx: ^Backend_Context, core_ctx: ^lui.Core_Context)
 	}
 }
 
-load_shader :: proc(gpu: ^sdl.GPUDevice, path: string, stage: sdl.GPUShaderStage, format: sdl.GPUShaderFormat, num_ubo, num_samplers, num_storage_buffers: u32) -> ^sdl.GPUShader {
-	source, read_err := os.read_entire_file_from_path(path, context.allocator)
-	defer delete(source, context.allocator)
-
-	if read_err != nil {
-		panic(fmt.tprint(read_err))
-	}
-
+load_shader :: proc(gpu: ^sdl.GPUDevice, source: []byte, stage: sdl.GPUShaderStage, format: sdl.GPUShaderFormat, num_ubo, num_samplers, num_storage_buffers: u32) -> ^sdl.GPUShader {
 	shader := sdl.CreateGPUShader(
 		gpu,
 		{

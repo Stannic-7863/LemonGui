@@ -4,3 +4,4 @@
 *.o
 *.so
 ui_shader.odin
+swap_shader.odin

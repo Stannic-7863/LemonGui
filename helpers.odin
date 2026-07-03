@@ -106,12 +106,12 @@ vec4f32_from_axis :: proc "contextless" (vec: [2]Vec2f32) -> Vec4f32 {
 }
 
 color_from_hex :: proc "contextless" (hex: u32) -> Color {
-    return {
-        f32((hex >> 24) & 0xFF),
-        f32((hex >> 16) & 0xFF),
-        f32((hex >>  8) & 0xFF),
-        f32((hex      ) & 0xFF),
-    }
+	return {
+		f32((hex >> 24) & 0xFF),
+		f32((hex >> 16) & 0xFF),
+		f32((hex >>  8) & 0xFF),
+		f32((hex      ) & 0xFF),
+	}
 }
 
 selection :: proc (hash: Hash) -> Text_Selection {
@@ -191,6 +191,33 @@ get_widget_mouse_events_all :: proc(ctx: ^Core_Context, info: Widget_Info) -> Mo
 
 get_widget_mouse_events :: proc(ctx: ^Core_Context, info: Widget_Info, button: Mouse_Button) -> bit_set[Widget_Key_Event] {
 	return get_widget_mouse_events_all(ctx, info)[button]
+}
+
+get_widget_keyboard_events_all :: proc(ctx: ^Core_Context, info: Widget_Info) -> Keyboard_Events {
+	if is_widget_focused(ctx, info) {
+		return ctx.keyboard.events
+	}
+	return {}
+}
+
+get_widget_keyboard_events :: proc(ctx: ^Core_Context, info: Widget_Info, key: Keyboard_Key) -> bit_set[Widget_Key_Event] {
+	return get_widget_keyboard_events_all(ctx, info)[key]
+}
+
+is_keyboard_mod_shift :: proc(ctx: ^Core_Context) -> bool {
+	return .Left_Shift in ctx.keyboard.mod || .Right_Shift in ctx.keyboard.mod
+}
+
+is_keyboard_mod_alt :: proc(ctx: ^Core_Context) -> bool {
+	return .Left_Alt in ctx.keyboard.mod || .Right_Alt in ctx.keyboard.mod
+}
+
+is_keyboard_mod_control :: proc(ctx: ^Core_Context) -> bool {
+	return .Left_Control in ctx.keyboard.mod || .Right_Control in ctx.keyboard.mod
+}
+
+is_keyboard_mod_super :: proc(ctx: ^Core_Context) -> bool {
+	return .Left_Super in ctx.keyboard.mod || .Right_Super in ctx.keyboard.mod
 }
 
 is_widget_on_screen :: proc(ctx: ^Core_Context, widget: ^Widget) -> bool {

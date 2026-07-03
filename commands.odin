@@ -77,6 +77,15 @@ _emit_render_commands :: proc(ctx: ^Core_Context) {
 
 		border := style.border
 		for &r in border.radius { r = min(min(widget.rect.size.x, widget.rect.size.y) / 2, r) }
+
+		if style.underlay != {} {
+			b := style.underlay.border
+			for &r in b.radius { r = min(min(widget.rect.size.x, widget.rect.size.y) / 2, r) }
+			r := rect
+			r.position += style.underlay.offset
+			_add_render_command(ctx, r, hash, Command_Rect{color = style.underlay.color, border = b}, &z, widget.form.z_offset)
+		}
+
 		_add_render_command(ctx, rect, hash, Command_Rect{color = style.color, border = border, custom = style.rect_custom}, &z, widget.form.z_offset)
 
 		if widget.form.image != nil {
@@ -96,7 +105,6 @@ _emit_render_commands :: proc(ctx: ^Core_Context) {
 
 		selection := get_selection(ctx, widget.form.selection)
 
-		if selection.cursor == selection.anchor { continue }
 
 		line_height := ctx.measure_text_height(style.text, ctx.text_user_data)
 		s_kind := Command_Rect{color = style.text.selection_background, border = style.text.selection_border}
@@ -104,18 +112,30 @@ _emit_render_commands :: proc(ctx: ^Core_Context) {
 		selection_start, selection_end := min(selection.anchor, selection.cursor), max(selection.anchor, selection.cursor)
 		start_line := i32(0)
 		end_line := i32(0)
+		cursor_line := i32(0)
+
 		for line, i in lines {
+			if selection.cursor >= line.range.start && selection.cursor <= line.range.end { cursor_line = i32(i) }
 			if selection_end >= line.range.start && selection_end <= line.range.end { end_line = i32(i) }
 			if selection_start >= line.range.start && selection_start <= line.range.end { start_line = i32(i) }
 		}
 
+		// emit cursor blinker
+		defer if selection.cursor >= 0 && len(lines) > 0 && len(lines[cursor_line].line) > 0 {
+			line := lines[cursor_line]
+			x_offset := ctx.measure_text_width(line.line[:selection.cursor - line.range.start], style.text, ctx.text_user_data)
+			c_rect := Render_Rect{position = line.position + {x_offset,  0}, size = style.text.cursor_size}
+			_add_render_command(ctx, c_rect, hash, Command_Rect{border = style.text.cursor_border, color = style.text.cursor_color}, &z, widget.form.z_offset)
+		}
+
+		if selection.cursor == selection.anchor { continue }
 		// Two cases: Either the selection start and end exist on same line or on different lines.
 		if start_line == end_line {
 			// For a single line emit rectangle from selection start (size_of_text(text[:selection_start]))) to selection end.
 		 	line := lines[start_line]
 			rel_start := max(0, selection_start - line.range.start)
 			rel_end := max(0, selection_end - line.range.start)
-			if rel_end < i32(len(line.line)) {
+			if rel_end <= i32(len(line.line)) {
 				w := ctx.measure_text_width(line.line[min(rel_start, rel_end):max(rel_start, rel_end)], style.text, ctx.text_user_data)
 				s := ctx.measure_text_width(line.line[:rel_start], style.text, ctx.text_user_data) if rel_start > 0 else 0
 				s_rect := Render_Rect{position = line.position + {s, 0}, size = {w, line_height}}

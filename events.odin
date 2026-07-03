@@ -1,12 +1,22 @@
 package core_ui
 
-import "core:hash"
 import "core:time"
 
 Mouse_Button :: enum u8 {
 	Left,
 	Middle,
 	Right,
+}
+
+Keyboard_Mod :: enum {
+	Left_Shift,
+	Right_Shift,
+	Left_Control,
+	Right_Control,
+	Left_Alt,
+	Right_Alt,
+	Right_Super,
+	Left_Super,
 }
 
 Keyboard_Key :: enum u8 {
@@ -202,8 +212,9 @@ Keyboard_Context :: struct {
 	down_start:           [Keyboard_Key]time.Time,
 	repeat_last:          [Keyboard_Key]time.Time,
 	mapped_events:        [Keyboard_Key]bit_set[Key_Event],
+	mod:               bit_set[Keyboard_Mod],
 	events:               Keyboard_Events,
-	pressed_char:         []rune,
+	input:                []rune,
 	double_click_timeout: time.Duration,
 	long_down_timeout:    time.Duration,
 	repeat_timeout:       time.Duration,
@@ -218,6 +229,7 @@ Keyboard_Context :: struct {
 _resolve_events :: proc(ctx: ^Core_Context) {
 	ctx.mouse.events = {}
 	ctx.keyboard.events = {}
+	ctx.keyboard.mod = {}
 
 	for mouse_events, mouse_button in ctx.mouse.mapped_events {
 		for mouse_event in mouse_events {
@@ -238,6 +250,15 @@ _resolve_events :: proc(ctx: ^Core_Context) {
 			}
 		}
 	}
+
+	ctx.keyboard.mod += {.Left_Alt} if .Down in ctx.keyboard.mapped_events[.Left_Alt] else {}
+	ctx.keyboard.mod += {.Right_Alt} if .Down in ctx.keyboard.mapped_events[.Right_Alt] else {}
+	ctx.keyboard.mod += {.Left_Super} if .Down in ctx.keyboard.mapped_events[.Left_Super] else {}
+	ctx.keyboard.mod += {.Right_Super} if .Down in ctx.keyboard.mapped_events[.Right_Super] else {}
+	ctx.keyboard.mod += {.Left_Shift} if .Down in ctx.keyboard.mapped_events[.Left_Shift] else {}
+	ctx.keyboard.mod += {.Right_Shift} if .Down in ctx.keyboard.mapped_events[.Right_Shift] else {}
+	ctx.keyboard.mod += {.Left_Control} if .Down in ctx.keyboard.mapped_events[.Left_Control] else {}
+	ctx.keyboard.mod += {.Right_Control} if .Down in ctx.keyboard.mapped_events[.Right_Control] else {}
 
 	ctx.keyboard.focused = ctx.keyboard.focus_to
 }
@@ -263,7 +284,7 @@ _handle_mouse_down :: proc(ctx: ^Core_Context, button: Mouse_Button, event: Key_
 	if time.since(ctx.mouse.down_start[button]) > ctx.mouse.long_down_timeout {
 		ctx.mouse.events[button] += {.Long_Down}
 		if time.since(ctx.mouse.repeat_last[button]) > ctx.mouse.repeat_timeout {
-		    ctx.mouse.events[button] += {.Repeat}
+			ctx.mouse.events[button] += {.Repeat}
 			ctx.mouse.repeat_last[button] = time.now()
 		}
 	}
@@ -290,7 +311,7 @@ _handle_keyboard_down :: proc(ctx: ^Core_Context, key: Keyboard_Key, event: Key_
 	if time.since(ctx.keyboard.down_start[key]) > ctx.keyboard.long_down_timeout {
 		ctx.keyboard.events[key] += {.Long_Down}
 		if time.since(ctx.keyboard.repeat_last[key]) > ctx.keyboard.repeat_timeout {
-		    ctx.keyboard.events[key] += {.Repeat}
+			ctx.keyboard.events[key] += {.Repeat}
 			ctx.keyboard.repeat_last[key] = time.now()
 		}
 	}

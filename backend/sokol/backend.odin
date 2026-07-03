@@ -14,14 +14,12 @@ Font_Context :: struct {
 	atlas_view: sgfx.View,
 	atlas:      sgfx.Image,
 	sampler:    sgfx.Sampler,
-	binding:    sgfx.Bindings,
 	dirty:      bool,
 }
 
 Backend_Context :: struct {
 	pipeline:          sgfx.Pipeline,
 	shader:            sgfx.Shader,
-	action:            sgfx.Pass_Action,
 	target:            sgfx.Image,
 	target_view:       sgfx.View,
 
@@ -30,6 +28,12 @@ Backend_Context :: struct {
 
 	render_cmd_view:   sgfx.View,
 	render_cmd_buffer: sgfx.Buffer,
+
+	swap_shader:       sgfx.Shader,
+	swap_pipeline:     sgfx.Pipeline,
+	swap_texture_view: sgfx.View,
+	swap_sampler:      sgfx.Sampler,
+	swap_bindings:     sgfx.Bindings,
 
 	clip_buffer:       sgfx.Buffer,
 	clip_view:         sgfx.View,
@@ -44,6 +48,15 @@ Backend_Context :: struct {
 	render_commands:   [dynamic]Render_Cmd,
 
 	font:              Font_Context,
+}
+
+get_default_text_init_parameters :: proc(backend_ctx: ^Backend_Context) -> lui.Text_Init_Parameters {
+	return lui.Text_Init_Parameters{
+		measure_text_height      = measure_text_height,
+		measure_text_hover_index = measure_text_hover_index,
+		measure_text_width       = measure_text_width,
+		text_user_data           = &backend_ctx.font
+	}
 }
 
 fs_render_update :: proc (user_data: rawptr, rect: [4]f32, texture_data: rawptr) {
@@ -69,16 +82,24 @@ fs_render_resize :: proc(user_data: rawptr, width, height: int) {
     ctx.dirty = true
 }
 
-init :: proc(width, height: i32, initial_cmds: int, allocator := context.allocator) -> Backend_Context {
-	backend_ctx := Backend_Context{}
+init :: proc(backend_ctx: ^Backend_Context, width, height: i32, initial_cmds: int, allocator := context.allocator) {
+	backend_ctx.shader = sgfx.make_shader(ui_shader_desc(sgfx.query_backend()))
 
-	backend_ctx.action.colors[0] = {clear_value = {0, 0, 0, 0}, load_action = .CLEAR, store_action = .STORE}
-
-	shader_desc := ui_shader_desc(sgfx.query_backend())
-
-	backend_ctx.shader = sgfx.make_shader(shader_desc)
-
-	backend_ctx.pipeline = sgfx.make_pipeline({shader = backend_ctx.shader, depth = {pixel_format = .NONE}, colors = {0 = { blend = { enabled = true, src_factor_rgb = .ONE, dst_factor_rgb = .ONE_MINUS_SRC_ALPHA, src_factor_alpha = .ONE, dst_factor_alpha = .ONE_MINUS_SRC_ALPHA, } }}})
+	backend_ctx.pipeline = sgfx.make_pipeline({
+		shader = backend_ctx.shader,
+		depth = {pixel_format = .NONE},
+		colors = {
+			0 = {
+				blend = {
+					enabled = true,
+					src_factor_rgb = .ONE,
+					dst_factor_rgb = .ONE_MINUS_SRC_ALPHA,
+					src_factor_alpha = .ONE,
+					dst_factor_alpha = .ONE_MINUS_SRC_ALPHA,
+				}
+			}
+		}
+	})
 	backend_ctx.target = sgfx.make_image({width = width, height = height, pixel_format = .RGBA8, usage = {color_attachment = true}, sample_count = 1})
 	backend_ctx.target_view = sgfx.make_view({color_attachment = {image = backend_ctx.target}})
 	backend_ctx.target_attachment.colors[0] = backend_ctx.target_view
@@ -121,7 +142,28 @@ init :: proc(width, height: i32, initial_cmds: int, allocator := context.allocat
 	backend_ctx.binding.views[VIEW_font_tex] = backend_ctx.font.atlas_view
 	backend_ctx.binding.samplers[SMP_font_smp] = backend_ctx.font.sampler
 
-	return backend_ctx
+	backend_ctx.swap_shader = sgfx.make_shader(swap_shader_desc(sgfx.query_backend()))
+	backend_ctx.swap_pipeline = sgfx.make_pipeline({
+		shader = backend_ctx.swap_shader,
+		colors = {0 = {
+			blend = {
+				enabled          = true,
+				dst_factor_rgb   = .ONE_MINUS_SRC_ALPHA,
+				src_factor_rgb   = .ONE,
+				dst_factor_alpha = .ONE_MINUS_SRC_ALPHA,
+				src_factor_alpha = .ONE,
+			},
+		}},
+	})
+
+	backend_ctx.swap_sampler = sgfx.make_sampler({min_filter = .NEAREST, mag_filter = .NEAREST, wrap_u = .CLAMP_TO_EDGE, wrap_v = .CLAMP_TO_EDGE})
+	backend_ctx.swap_texture_view = sgfx.make_view({texture = {image = backend_ctx.target}})
+	backend_ctx.swap_bindings = sgfx.Bindings{
+		samplers = {SMP_swap_smp = backend_ctx.swap_sampler},
+		views    = {VIEW_swap_tex = backend_ctx.swap_texture_view},
+	}
+
+	backend_ctx.font.fs_ctx.userData = &backend_ctx.font
 }
 
 deinit :: proc(backend_ctx: ^Backend_Context) {
@@ -151,6 +193,11 @@ deinit :: proc(backend_ctx: ^Backend_Context) {
 	sgfx.destroy_image(backend_ctx.font.atlas)
 	sgfx.destroy_view(backend_ctx.font.atlas_view)
 	sgfx.destroy_sampler(backend_ctx.font.sampler)
+
+	sgfx.destroy_pipeline(backend_ctx.swap_pipeline)
+	sgfx.destroy_view(backend_ctx.swap_texture_view)
+	sgfx.destroy_shader(backend_ctx.swap_shader)
+	sgfx.destroy_sampler(backend_ctx.swap_sampler)
 }
 
 add_font :: proc(backend_ctx: ^Backend_Context, name: string, path: string) -> (font_id: int) {
@@ -212,6 +259,19 @@ resize_target :: proc(backend_ctx: ^Backend_Context, width, height: i32) {
 
 	sgfx.uninit_view(backend_ctx.target_view)
 	sgfx.init_view(backend_ctx.target_view, {color_attachment = {image = backend_ctx.target}})
+	sgfx.uninit_view(backend_ctx.swap_texture_view)
+	sgfx.init_view(backend_ctx.swap_texture_view, {texture = {image = backend_ctx.target}})
+	backend_ctx.target_attachment.colors[0] = backend_ctx.target_view
+}
+
+blit_on_swapchain :: proc(backend_ctx: ^Backend_Context, swapchain: sgfx.Swapchain) {
+	sgfx.begin_pass({ action = {colors = {0 = {load_action = .CLEAR}}}, swapchain = swapchain})
+
+	sgfx.apply_pipeline(backend_ctx.swap_pipeline)
+	sgfx.apply_bindings(backend_ctx.swap_bindings)
+	sgfx.draw(0, 6, 1)
+
+	sgfx.end_pass()
 }
 
 render :: proc(core_ctx: ^lui.Core_Context, backend_ctx: ^Backend_Context) {
@@ -234,7 +294,9 @@ render :: proc(core_ctx: ^lui.Core_Context, backend_ctx: ^Backend_Context) {
 		0, 0, 0, 1,
 	}
 
-	sgfx.begin_pass({ action = backend_ctx.action, attachments = backend_ctx.target_attachment })
+	action := sgfx.Pass_Action{}
+	action.colors[0] = {clear_value = {0, 0, 0, 0}, load_action = .CLEAR, store_action = .STORE}
+	sgfx.begin_pass({ action = action, attachments = backend_ctx.target_attachment })
 	sgfx.apply_viewport(0, 0, width, height, true)
 	sgfx.apply_pipeline(backend_ctx.pipeline)
 	sgfx.apply_bindings(backend_ctx.binding)

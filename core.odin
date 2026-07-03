@@ -82,6 +82,9 @@ Text_Style :: struct {
 	letter_spacing:         f32,
 	line_spacing:           f32,
 	selection_border:       Border_Style,
+	cursor_border:          Border_Style,
+	cursor_color:           Color,
+	cursor_size:            Vec2f32,
 }
 
 Border_Style :: struct {
@@ -90,7 +93,14 @@ Border_Style :: struct {
 	radius:    Vec4f32,
 }
 
+Underlay_Style :: struct {
+	offset: Vec2f32,
+	color:  Color,
+	border: Border_Style,
+}
+
 Style :: struct {
+	underlay:    Underlay_Style,
 	text:        Text_Style,
 	border:      Border_Style,
 	color:       Color,
@@ -220,16 +230,63 @@ Persistent_Data :: struct {
 	cached_words: lru.Cache(Text_Cache_Key, f32),
 }
 
-init_context :: proc(size: int, words_to_cache: int, allocator: runtime.Allocator) -> Core_Context {
-	ctx: Core_Context
-	lru.init(&ctx.persistent.cached_words, words_to_cache, allocator, allocator)
+Text_Init_Parameters :: struct {
+	measure_text_hover_index:      proc(text: string, point: Vec2f32, style: Text_Style, user_data: rawptr) -> (int, bool),
+	measure_text_width:            proc(text: string, style: Text_Style, user_data: rawptr) -> f32,
+	measure_text_height:           proc(style: Text_Style, user_data: rawptr) -> f32,
+	text_user_data:                rawptr
+}
 
+Core_Init_Parameters :: struct {
+	word_cache_count:              int,
+	allocator:                     runtime.Allocator,
+	mouse_repeat_timeout:          time.Duration,
+	mouse_long_down_timeout:       time.Duration,
+	mouse_double_click_timeout:    time.Duration,
+	keyboard_repeat_timeout:       time.Duration,
+	keyboard_long_down_timeout:    time.Duration,
+	keyboard_double_click_timeout: time.Duration,
+	text_parameters:               Text_Init_Parameters,
+}
+
+get_default_init_parameters :: proc() -> Core_Init_Parameters {
+	return {
+		word_cache_count              = 2048,
+		allocator                     = context.allocator,
+		keyboard_double_click_timeout = time.Millisecond * 200,
+		keyboard_long_down_timeout    = time.Millisecond * 300,
+		keyboard_repeat_timeout       = time.Millisecond * 300,
+		mouse_double_click_timeout    = time.Millisecond * 200,
+		mouse_long_down_timeout       = time.Millisecond * 300,
+		mouse_repeat_timeout          = time.Millisecond * 300,
+	}
+}
+
+init_context :: proc(init_parameters: Core_Init_Parameters) -> Core_Context {
+	allocator := init_parameters.allocator
+
+	ctx: Core_Context
+	lru.init(&ctx.persistent.cached_words, init_parameters.word_cache_count, allocator, allocator)
+
+	ctx.mouse.double_click_timeout = init_parameters.mouse_double_click_timeout
+	ctx.mouse.long_down_timeout    = init_parameters.mouse_long_down_timeout
+	ctx.mouse.repeat_timeout       = init_parameters.mouse_repeat_timeout
+
+	ctx.keyboard.double_click_timeout = init_parameters.keyboard_double_click_timeout
+	ctx.keyboard.long_down_timeout    = init_parameters.keyboard_long_down_timeout
+	ctx.keyboard.repeat_timeout       = init_parameters.mouse_repeat_timeout
+
+	ctx.measure_text_height =      init_parameters.text_parameters.measure_text_height
+	ctx.measure_text_hover_index = init_parameters.text_parameters.measure_text_hover_index
+	ctx.measure_text_width =       init_parameters.text_parameters.measure_text_width
+	ctx.text_user_data =           init_parameters.text_parameters.text_user_data
+
+	ctx.widgets = make([dynamic]Widget, allocator)
 	ctx.text = make([dynamic]Text, allocator)
 	ctx.clips = make([dynamic]Clip, allocator)
 	ctx.anims = make([dynamic]Animation, allocator)
 	ctx.lines = make([dynamic]Text_Line, allocator)
 	ctx.styles = make([dynamic]Style, allocator)
-	ctx.widgets = make([dynamic]Widget, allocator)
 	ctx.growable = make([dynamic]Growable, allocator)
 	ctx.overrides = make([dynamic]Override, allocator)
 	ctx.clip_stack = make([dynamic]Widget_Index, allocator)

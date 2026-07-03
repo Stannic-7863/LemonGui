@@ -204,7 +204,7 @@ _positioning_pass :: proc(ctx: ^Core_Context) {
 				break
 			}
 			accumulated_width += w.width + f32(w.spaces) * space_width
-	 	}
+		}
 	}
 }
 

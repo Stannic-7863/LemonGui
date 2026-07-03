@@ -9,31 +9,33 @@ import "base:runtime"
 import "core:reflect"
 import "core:fmt"
 import "core:time"
-import lui "../../"
+import "core:text/edit"
+import lui "../"
+
 
 Color_Palette :: struct {
-    bg_elevated:   lui.Color `lui:"row,labels=rgba,min=0,max=255,color,bind"`,
-    bg_base:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    bg_sunken:     lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    fg_primary:    lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    fg_secondary:  lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    fg_muted:      lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    accent:        lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    accent_hover:  lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    accent_press:  lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    border_subtle: lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    border_strong: lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    danger:        lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    warning:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
-    success:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	bg_elevated:   lui.Color `lui:"row,labels=rgba,min=0,max=255,color,bind"`,
+	bg_base:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	bg_sunken:     lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	fg_primary:    lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	fg_secondary:  lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	fg_muted:      lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	accent:        lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	accent_hover:  lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	accent_press:  lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	border_subtle: lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	border_strong: lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	danger:        lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	warning:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
+	success:       lui.Color `lui:"row,labels=rgba,min=0,max=255,color"`,
 }
 
 Spacing :: struct {
-    xs: f32,
-    sm: f32,
-    md: f32,
-    lg: f32,
-    xl: f32,
+	xs: f32,
+	sm: f32,
+	md: f32,
+	lg: f32,
+	xl: f32,
 }
 
 Font_Info :: struct {
@@ -66,108 +68,108 @@ Varient :: enum {
 Interaction_Style :: [Interaction_State]lui.Style_Index
 
 Theme :: struct {
-    palette: Color_Palette,
-    spacing: Spacing,
-    font:    Font,
+	palette: Color_Palette,
+	spacing: Spacing,
+	font:    Font,
 
-    container: struct {
-    	body:          Interaction_Style,
-    	title:         Interaction_Style,
-    	title_bar:     Interaction_Style,
-    	scroll_track:  Interaction_Style,
-    	scroll_thumb:  Interaction_Style,
-    	inline_body:   Interaction_Style,
-        inline_title:  Interaction_Style,
-        docked_text:      lui.Text_Index,
-        resize_text:      lui.Text_Index,
-        undocked_text:    lui.Text_Index,
-     	collapsed_text:   lui.Text_Index,
-      	uncollapsed_text: lui.Text_Index,
-        scroll_thumb_width: f32,
-    },
+	container: struct {
+		body:          Interaction_Style,
+		title:         Interaction_Style,
+		title_bar:     Interaction_Style,
+		scroll_track:  Interaction_Style,
+		scroll_thumb:  Interaction_Style,
+		inline_body:   Interaction_Style,
+		inline_title:  Interaction_Style,
+		docked_text:      lui.Text_Index,
+		resize_text:      lui.Text_Index,
+		undocked_text:    lui.Text_Index,
+		collapsed_text:   lui.Text_Index,
+		uncollapsed_text: lui.Text_Index,
+		scroll_thumb_width: f32,
+	},
 
-    button: struct {
-    	style: Interaction_Style,
-    },
+	button: struct {
+		style: Interaction_Style,
+	},
 
-    mini_button: struct {
-    	style: Interaction_Style,
-    },
+	mini_button: struct {
+		style: Interaction_Style,
+	},
 
-    slider: struct {
-    	thumb:      Interaction_Style,
-     	track:      Interaction_Style,
-       	track_fill: Interaction_Style,
-        thumb_size:   lui.Vec2f32,
-      	track_height: f32,
-    },
+	slider: struct {
+		thumb:      Interaction_Style,
+		track:      Interaction_Style,
+		track_fill: Interaction_Style,
+		thumb_size:   lui.Vec2f32,
+		track_height: f32,
+	},
 
-    checkbox: struct {
-    	size:         lui.Vec2f32,
-    	check_on:  	  Interaction_Style,
-     	check_off:    Interaction_Style,
-    },
+	checkbox: struct {
+		size:         lui.Vec2f32,
+		check_on:  	  Interaction_Style,
+		check_off:    Interaction_Style,
+	},
 
-    toggle: struct {
-     	thumb:     Interaction_Style,
-    	track_on:  Interaction_Style,
-      	track_off: Interaction_Style,
-        size: lui.Vec2f32,
-    },
+	toggle: struct {
+		thumb:     Interaction_Style,
+		track_on:  Interaction_Style,
+		track_off: Interaction_Style,
+		size: lui.Vec2f32,
+	},
 
-    radio: struct {
-    	size: lui.Vec2f32,
-    	item_toggle_on:  Interaction_Style,
-     	item_toggle_off: Interaction_Style,
-     },
+	radio: struct {
+		size: lui.Vec2f32,
+		item_toggle_on:  Interaction_Style,
+		item_toggle_off: Interaction_Style,
+	 },
 
-    label: struct {
-    	md: Interaction_Style,
-     	sm: Interaction_Style,
-    },
+	label: struct {
+		md: Interaction_Style,
+		sm: Interaction_Style,
+	},
 
-    progress_bar: struct {
-   	    track:  Interaction_Style,
-        fill:   Interaction_Style,
-        track_height: f32,
-    },
+	progress_bar: struct {
+		track:  Interaction_Style,
+		fill:   Interaction_Style,
+		track_height: f32,
+	},
 
-    text_box: struct {
-    	style: Interaction_Style,
-    },
+	text_box: struct {
+		style: Interaction_Style,
+	},
 
-    tooltip: struct {
-    	style: Interaction_Style,
-    },
+	tooltip: struct {
+		style: Interaction_Style,
+	},
 
-    dropdown: struct {
-    	label:    Interaction_Style,
-    	item_on:  Interaction_Style,
-     	item_off: Interaction_Style,
-      	body:     Interaction_Style,
-    },
+	dropdown: struct {
+		label:    Interaction_Style,
+		item_on:  Interaction_Style,
+		item_off: Interaction_Style,
+		body:     Interaction_Style,
+	},
 
-    spinbox: struct {
-        dec:    Interaction_Style,
-        inc:    Interaction_Style,
-        input:  Interaction_Style,
-        inc_text: lui.Text_Index,
-        dec_text: lui.Text_Index,
-    },
+	spinbox: struct {
+		dec:    Interaction_Style,
+		inc:    Interaction_Style,
+		input:  Interaction_Style,
+		inc_text: lui.Text_Index,
+		dec_text: lui.Text_Index,
+	},
 
-    drag: struct {
-    	area_size:      lui.Vec2f32,
-     	indicator_size: lui.Vec2f32,
-     	area:      Interaction_Style,
-      	indicator: Interaction_Style,
-    },
+	drag: struct {
+		area_size:      lui.Vec2f32,
+		indicator_size: lui.Vec2f32,
+		area:      Interaction_Style,
+		indicator: Interaction_Style,
+	},
 
-    _debug_focus_style : lui.Style_Index,
+	_debug_focus_style : lui.Style_Index,
 
-    control_animation: lui.Animation_Index,
+	control_animation: lui.Animation_Index,
 
-    binded_text:   lui.Text_Index,
-    unbinded_text: lui.Text_Index,
+	binded_text:   lui.Text_Index,
+	unbinded_text: lui.Text_Index,
 }
 
 Container_State_Flag :: enum {
@@ -205,6 +207,7 @@ State :: struct {
 	container_stack:            [dynamic]Container_Stack_Item,
 	active_radio_state:         ^Radio_State,
 	active_dropdown_state:      ^Dropdown_State,
+	input_state : map[lui.Hash]struct{builder: strings.Builder, edit_state: edit.State},
 }
 
 theme := Theme{}
@@ -225,426 +228,427 @@ Default_Palette :: enum {
 }
 
 DEFAULT_SPACING :: Spacing {
-    xs = 2,
-    sm = 4,
-    md = 8,
-    lg = 16,
-    xl = 24,
+	xs = 2,
+	sm = 4,
+	md = 8,
+	lg = 16,
+	xl = 24,
 }
 
 DEFAULT_PALETTES := [Default_Palette]Color_Palette {
-    .Kanagawa = {
-        bg_base       = { 31,  31,  40, 255 },
-        bg_elevated   = { 39,  39,  48, 255 },
-        bg_sunken     = { 37,  37,  46, 255 },
+	.Kanagawa = {
+		bg_base       = { 31,  31,  40, 255 },
+		bg_elevated   = { 39,  39,  48, 255 },
+		bg_sunken     = { 37,  37,  46, 255 },
 
-        fg_primary    = { 220, 215, 186, 255 },
-        fg_secondary  = { 200, 195, 166, 255 },
-        fg_muted      = {  76,  76,  85, 255 },
+		fg_primary    = { 220, 215, 186, 255 },
+		fg_secondary  = { 200, 195, 166, 255 },
+		fg_muted      = {  76,  76,  85, 255 },
 
-        accent        = { 122, 168, 159, 255 },
-        accent_hover  = { 152, 187, 108, 255 },
-        accent_press  = { 126, 156, 216, 255 },
+		accent        = { 122, 168, 159, 255 },
+		accent_hover  = { 152, 187, 108, 255 },
+		accent_press  = { 126, 156, 216, 255 },
 
-        border_subtle = {  49,  49,  58, 255 },
-        border_strong = {  76,  76,  85, 255 },
+		border_subtle = {  49,  49,  58, 255 },
+		border_strong = {  76,  76,  85, 255 },
 
-        danger        = { 216,  97, 107, 255 },
-        warning       = { 220, 165,  97, 255 },
-        success       = { 152, 187, 108, 255 },
-    },
+		danger        = { 216,  97, 107, 255 },
+		warning       = { 220, 165,  97, 255 },
+		success       = { 152, 187, 108, 255 },
+	},
 
-    .Mono_Dark = {
-        bg_base       = {  18,  18,  18, 255 },
-        bg_elevated   = {  30,  30,  30, 255 },
-        bg_sunken     = {  24,  24,  24, 255 },
+	.Mono_Dark = {
+		bg_base       = {  18,  18,  18, 255 },
+		bg_elevated   = {  30,  30,  30, 255 },
+		bg_sunken     = {  24,  24,  24, 255 },
 
-        fg_primary    = { 230, 230, 230, 255 },
-        fg_secondary  = { 189, 189, 189, 255 },
-        fg_muted      = { 122, 122, 122, 255 },
+		fg_primary    = { 230, 230, 230, 255 },
+		fg_secondary  = { 189, 189, 189, 255 },
+		fg_muted      = { 122, 122, 122, 255 },
 
-        accent        = { 154, 154, 154, 255 },
-        accent_hover  = { 168, 168, 168, 255 },
-        accent_press  = { 128, 128, 128, 255 },
+		accent        = { 154, 154, 154, 255 },
+		accent_hover  = { 168, 168, 168, 255 },
+		accent_press  = { 128, 128, 128, 255 },
 
-        border_subtle = {  47,  47,  47, 255 },
-        border_strong = { 122, 122, 122, 255 },
+		border_subtle = {  47,  47,  47, 255 },
+		border_strong = { 122, 122, 122, 255 },
 
-        danger        = { 208, 208, 208, 255 },
-        warning       = { 181, 181, 181, 255 },
-        success       = { 168, 168, 168, 255 },
-    },
+		danger        = { 208, 208, 208, 255 },
+		warning       = { 181, 181, 181, 255 },
+		success       = { 168, 168, 168, 255 },
+	},
 
-    .Mono_Light = {
-        bg_base       = { 250, 250, 250, 255 },
-        bg_elevated   = { 235, 235, 235, 255 },
-        bg_sunken     = { 242, 242, 242, 255 },
+	.Mono_Light = {
+		bg_base       = { 250, 250, 250, 255 },
+		bg_elevated   = { 235, 235, 235, 255 },
+		bg_sunken     = { 242, 242, 242, 255 },
 
-        fg_primary    = {  26,  26,  26, 255 },
-        fg_secondary  = {  68,  68,  68, 255 },
-        fg_muted      = { 122, 122, 122, 255 },
+		fg_primary    = {  26,  26,  26, 255 },
+		fg_secondary  = {  68,  68,  68, 255 },
+		fg_muted      = { 122, 122, 122, 255 },
 
-        accent        = { 106, 106, 106, 255 },
-        accent_hover  = {  74,  74,  74, 255 },
-        accent_press  = { 138, 138, 138, 255 },
+		accent        = { 106, 106, 106, 255 },
+		accent_hover  = {  74,  74,  74, 255 },
+		accent_press  = { 138, 138, 138, 255 },
 
-        border_subtle = { 207, 207, 207, 255 },
-        border_strong = { 122, 122, 122, 255 },
+		border_subtle = { 207, 207, 207, 255 },
+		border_strong = { 122, 122, 122, 255 },
 
-        danger        = {  42,  42,  42, 255 },
-        warning       = {  90,  90,  90, 255 },
-        success       = { 106, 106, 106, 255 },
-    },
+		danger        = {  42,  42,  42, 255 },
+		warning       = {  90,  90,  90, 255 },
+		success       = { 106, 106, 106, 255 },
+	},
 
    .Gruvbox_Dark = {
-    	bg_base       = {  29,  32,  33, 255 },
-    	bg_elevated   = {  50,  48,  47, 255 },
-    	bg_sunken     = {  40,  40,  40, 255 },
+		bg_base       = {  29,  32,  33, 255 },
+		bg_elevated   = {  50,  48,  47, 255 },
+		bg_sunken     = {  40,  40,  40, 255 },
 
-    	fg_primary    = { 235, 219, 178, 255 },
-    	fg_secondary  = { 213, 196, 161, 255 },
-    	fg_muted      = { 146, 131, 116, 255 },
+		fg_primary    = { 235, 219, 178, 255 },
+		fg_secondary  = { 213, 196, 161, 255 },
+		fg_muted      = { 146, 131, 116, 255 },
 
-    	accent        = { 131, 165, 152, 255 },
-    	accent_hover  = { 184, 187,  38, 255 },
-    	accent_press  = { 131, 165, 152, 255 },
+		accent        = { 131, 165, 152, 255 },
+		accent_hover  = { 184, 187,  38, 255 },
+		accent_press  = { 131, 165, 152, 255 },
 
-    	border_subtle = {  60,  56,  54, 255 },
-    	border_strong = { 102,  92,  84, 255 },
+		border_subtle = {  60,  56,  54, 255 },
+		border_strong = { 102,  92,  84, 255 },
 
-    	danger        = { 251,  73,  52, 255 },
-    	warning       = { 250, 189,  47, 255 },
-    	success       = { 184, 187,  38, 255 },
-   	},
+		danger        = { 251,  73,  52, 255 },
+		warning       = { 250, 189,  47, 255 },
+		success       = { 184, 187,  38, 255 },
+	},
 
-    .Gruvbox_Light = {
-        bg_base       = { 242, 229, 188, 255 },
-        bg_elevated   = { 229, 216, 175, 255 },
-        bg_sunken     = { 227, 214, 173, 255 },
+	.Gruvbox_Light = {
+		bg_base       = { 242, 229, 188, 255 },
+		bg_elevated   = { 229, 216, 175, 255 },
+		bg_sunken     = { 227, 214, 173, 255 },
 
-        fg_primary    = {  80,  73,  69, 255 },
-        fg_secondary  = { 102,  92,  84, 255 },
-        fg_muted      = { 162, 149, 108, 255 },
+		fg_primary    = {  80,  73,  69, 255 },
+		fg_secondary  = { 102,  92,  84, 255 },
+		fg_muted      = { 162, 149, 108, 255 },
 
-        accent        = {  66, 123,  88, 255 },
-        accent_hover  = { 121, 116,  14, 255 },
-        accent_press  = {  69, 133, 136, 255 },
+		accent        = {  66, 123,  88, 255 },
+		accent_hover  = { 121, 116,  14, 255 },
+		accent_press  = {  69, 133, 136, 255 },
 
-        border_subtle = { 160, 149, 108, 255 },
-        border_strong = { 102,  92,  84, 255 },
+		border_subtle = { 160, 149, 108, 255 },
+		border_strong = { 102,  92,  84, 255 },
 
-        danger        = { 157,   0,   6, 255 },
-        warning       = { 215, 153,  33, 255 },
-        success       = { 121, 116,  14, 255 },
-    },
+		danger        = { 157,   0,   6, 255 },
+		warning       = { 215, 153,  33, 255 },
+		success       = { 121, 116,  14, 255 },
+	},
 
-    .Everforest_Dark = {
-        bg_base       = {  35,  42,  46, 255 },
-        bg_elevated   = {  52,  63,  68, 255 },
-        bg_sunken     = {  45,  53,  59, 255 },
+	.Everforest_Dark = {
+		bg_base       = {  35,  42,  46, 255 },
+		bg_elevated   = {  52,  63,  68, 255 },
+		bg_sunken     = {  45,  53,  59, 255 },
 
-        fg_primary    = { 211, 198, 170, 255 },
-        fg_secondary  = { 133, 146, 137, 255 },
-        fg_muted      = { 122, 132, 120, 255 },
+		fg_primary    = { 211, 198, 170, 255 },
+		fg_secondary  = { 133, 146, 137, 255 },
+		fg_muted      = { 122, 132, 120, 255 },
 
-        accent        = { 167, 192, 128, 255 },
-        accent_hover  = { 127, 187, 179, 255 },
-        accent_press  = { 214, 153, 182, 255 },
+		accent        = { 167, 192, 128, 255 },
+		accent_hover  = { 127, 187, 179, 255 },
+		accent_press  = { 214, 153, 182, 255 },
 
-        border_subtle = {  79,  88,  94, 255 },
-        border_strong = { 133, 146, 137, 255 },
+		border_subtle = {  79,  88,  94, 255 },
+		border_strong = { 133, 146, 137, 255 },
 
-        danger        = { 230, 126, 128, 255 },
-        warning       = { 219, 188, 127, 255 },
-        success       = { 167, 192, 128, 255 },
-    },
+		danger        = { 230, 126, 128, 255 },
+		warning       = { 219, 188, 127, 255 },
+		success       = { 167, 192, 128, 255 },
+	},
 
-    .Everforest_Light = {
-        bg_base       = { 239, 235, 212, 255 },
-        bg_elevated   = { 244, 240, 217, 255 },
-        bg_sunken     = { 253, 246, 227, 255 },
+	.Everforest_Light = {
+		bg_base       = { 239, 235, 212, 255 },
+		bg_elevated   = { 244, 240, 217, 255 },
+		bg_sunken     = { 253, 246, 227, 255 },
 
-        fg_primary    = {  76,  86,  92, 255 },
-        fg_secondary  = { 110, 122, 118, 255 },
-        fg_muted      = { 140, 148, 138, 255 },
+		fg_primary    = {  76,  86,  92, 255 },
+		fg_secondary  = { 110, 122, 118, 255 },
+		fg_muted      = { 140, 148, 138, 255 },
 
-        accent        = { 114, 138,   0, 255 },
-        accent_hover  = {  42, 145, 104, 255 },
-        accent_press  = {  46, 120, 168, 255 },
+		accent        = { 114, 138,   0, 255 },
+		accent_hover  = {  42, 145, 104, 255 },
+		accent_press  = {  46, 120, 168, 255 },
 
-        border_subtle = { 191, 184, 158, 255 },
-        border_strong = { 140, 148, 138, 255 },
+		border_subtle = { 191, 184, 158, 255 },
+		border_strong = { 140, 148, 138, 255 },
 
-        danger        = { 214,  69,  65, 255 },
-        warning       = { 191, 136,   0, 255 },
-        success       = { 114, 138,   0, 255 },
-    },
+		danger        = { 214,  69,  65, 255 },
+		warning       = { 191, 136,   0, 255 },
+		success       = { 114, 138,   0, 255 },
+	},
 
-    .Everblush = {
-        bg_base       = {  20,  27,  30, 255 },
-        bg_elevated   = {  35,  42,  45, 255 },
-        bg_sunken     = {  16,  22,  24, 255 },
+	.Everblush = {
+		bg_base       = {  20,  27,  30, 255 },
+		bg_elevated   = {  35,  42,  45, 255 },
+		bg_sunken     = {  16,  22,  24, 255 },
 
-        fg_primary    = { 218, 218, 218, 255 },
-        fg_secondary  = { 179, 185, 184, 255 },
-        fg_muted      = { 107, 111, 114, 255 },
+		fg_primary    = { 218, 218, 218, 255 },
+		fg_secondary  = { 179, 185, 184, 255 },
+		fg_muted      = { 107, 111, 114, 255 },
 
-        accent        = { 108, 191, 191, 255 },
-        accent_hover  = { 103, 176, 232, 255 },
-        accent_press  = { 196, 127, 213, 255 },
+		accent        = { 108, 191, 191, 255 },
+		accent_hover  = { 103, 176, 232, 255 },
+		accent_press  = { 196, 127, 213, 255 },
 
-        border_subtle = {  48,  56,  59, 255 },
-        border_strong = { 107, 111, 114, 255 },
+		border_subtle = {  48,  56,  59, 255 },
+		border_strong = { 107, 111, 114, 255 },
 
-        danger        = { 229, 116, 116, 255 },
-        warning       = { 229, 199, 107, 255 },
-        success       = { 140, 207, 126, 255 },
-    },
+		danger        = { 229, 116, 116, 255 },
+		warning       = { 229, 199, 107, 255 },
+		success       = { 140, 207, 126, 255 },
+	},
 
-    .Catppuccin_Dark = {
-        bg_base       = {  30,  30,  46, 255 },
-        bg_elevated   = {  36,  39,  58, 255 },
-        bg_sunken     = {  24,  24,  37, 255 },
+	.Catppuccin_Dark = {
+		bg_base       = {  30,  30,  46, 255 },
+		bg_elevated   = {  36,  39,  58, 255 },
+		bg_sunken     = {  24,  24,  37, 255 },
 
-        fg_primary    = { 205, 214, 244, 255 },
-        fg_secondary  = { 186, 194, 222, 255 },
-        fg_muted      = { 108, 112, 134, 255 },
+		fg_primary    = { 205, 214, 244, 255 },
+		fg_secondary  = { 186, 194, 222, 255 },
+		fg_muted      = { 108, 112, 134, 255 },
 
-        accent        = { 148, 226, 213, 255 },
-        accent_hover  = { 137, 180, 250, 255 },
-        accent_press  = { 203, 166, 247, 255 },
+		accent        = { 148, 226, 213, 255 },
+		accent_hover  = { 137, 180, 250, 255 },
+		accent_press  = { 203, 166, 247, 255 },
 
-        border_subtle = {  59,  63,  90, 255 },
-        border_strong = { 108, 112, 134, 255 },
+		border_subtle = {  59,  63,  90, 255 },
+		border_strong = { 108, 112, 134, 255 },
 
-        danger        = { 243, 139, 168, 255 },
-        warning       = { 249, 226, 175, 255 },
-        success       = { 166, 227, 161, 255 },
-    },
+		danger        = { 243, 139, 168, 255 },
+		warning       = { 249, 226, 175, 255 },
+		success       = { 166, 227, 161, 255 },
+	},
 
-    .Catppuccin_Light = {
-        bg_base       = { 239, 241, 245, 255 },
-        bg_elevated   = { 226, 230, 238, 255 },
-        bg_sunken     = { 233, 236, 242, 255 },
+	.Catppuccin_Light = {
+		bg_base       = { 239, 241, 245, 255 },
+		bg_elevated   = { 226, 230, 238, 255 },
+		bg_sunken     = { 233, 236, 242, 255 },
 
-        fg_primary    = {  76,  79, 105, 255 },
-        fg_secondary  = {  92,  95, 119, 255 },
-        fg_muted      = { 156, 160, 176, 255 },
+		fg_primary    = {  76,  79, 105, 255 },
+		fg_secondary  = {  92,  95, 119, 255 },
+		fg_muted      = { 156, 160, 176, 255 },
 
-        accent        = {  23, 146, 153, 255 },
-        accent_hover  = {  30, 102, 245, 255 },
-        accent_press  = { 136,  57, 239, 255 },
+		accent        = {  23, 146, 153, 255 },
+		accent_hover  = {  30, 102, 245, 255 },
+		accent_press  = { 136,  57, 239, 255 },
 
-        border_subtle = { 191, 198, 212, 255 },
-        border_strong = { 156, 160, 176, 255 },
+		border_subtle = { 191, 198, 212, 255 },
+		border_strong = { 156, 160, 176, 255 },
 
-        danger        = { 210,  15,  57, 255 },
-        warning       = { 223, 142,  29, 255 },
-        success       = {  64, 160,  43, 255 },
-    },
+		danger        = { 210,  15,  57, 255 },
+		warning       = { 223, 142,  29, 255 },
+		success       = {  64, 160,  43, 255 },
+	},
 
-    .Tokyo_Night = {
-        bg_base       = {  36,  40,  59, 255 },
-        bg_elevated   = {  41,  46,  66, 255 },
-        bg_sunken     = {  31,  35,  53, 255 },
+	.Tokyo_Night = {
+		bg_base       = {  36,  40,  59, 255 },
+		bg_elevated   = {  41,  46,  66, 255 },
+		bg_sunken     = {  31,  35,  53, 255 },
 
-        fg_primary    = { 192, 202, 245, 255 },
-        fg_secondary  = { 169, 177, 214, 255 },
-        fg_muted      = {  86,  95, 137, 255 },
+		fg_primary    = { 192, 202, 245, 255 },
+		fg_secondary  = { 169, 177, 214, 255 },
+		fg_muted      = {  86,  95, 137, 255 },
 
-        accent        = { 115, 218, 202, 255 },
-        accent_hover  = { 122, 162, 247, 255 },
-        accent_press  = { 187, 154, 247, 255 },
+		accent        = { 115, 218, 202, 255 },
+		accent_hover  = { 122, 162, 247, 255 },
+		accent_press  = { 187, 154, 247, 255 },
 
-        border_subtle = {  65,  72, 104, 255 },
-        border_strong = {  86,  95, 137, 255 },
+		border_subtle = {  65,  72, 104, 255 },
+		border_strong = {  86,  95, 137, 255 },
 
-        danger        = { 247, 118, 142, 255 },
-        warning       = { 224, 175, 104, 255 },
-        success       = { 158, 206, 106, 255 },
-    },
+		danger        = { 247, 118, 142, 255 },
+		warning       = { 224, 175, 104, 255 },
+		success       = { 158, 206, 106, 255 },
+	},
 }
 
 build_theme :: proc(ctx: ^lui.Core_Context, palette: Color_Palette, spacing: Spacing, font: Font) {
 
-	make_text_style :: proc(color: lui.Color, font: Font_Info) -> lui.Text_Style {
-    	return {
-        	color = color,
-        	font = font.font,
-        	font_id = font.font_id,
-        	font_name = font.font_name,
-        	font_size = font.font_size,
-    	}
+	make_text_style :: proc(color: lui.Color, font: Font_Info, selection: lui.Color = {}) -> lui.Text_Style {
+		return {
+			color = color,
+			font = font.font,
+			font_id = font.font_id,
+			font_name = font.font_name,
+			font_size = font.font_size,
+			selection_background = selection
+		}
 	}
 
 	theme.font = font
 	theme.palette = palette
 	theme.spacing = spacing
 
-    p := &theme.palette
-    f := &theme.font
+	p := &theme.palette
+	f := &theme.font
 
-    accent := lui.create_style(ctx, {
-        color  = p.accent,
-        border = {color = p.accent, thickness = 1, radius = 6},
-        text   = {color = p.bg_sunken, font = f.f_md.font, font_id = f.f_md.font_id, font_name = f.f_md.font_name, font_size = f.f_md.font_size},
-    })
+	accent := lui.create_style(ctx, {
+		color  = p.accent,
+		border = {color = p.accent, thickness = 1, radius = 6},
+		text   = {color = p.bg_sunken, font = f.f_md.font, font_id = f.f_md.font_id, font_name = f.f_md.font_name, font_size = f.f_md.font_size},
+	})
 
-    accent_hover := lui.create_style(ctx, {
-        color  = p.accent_hover,
-        border = {color = p.accent_hover, thickness = 1, radius = 6},
-        text   = make_text_style(p.bg_sunken, f.f_md),
-    })
+	accent_hover := lui.create_style(ctx, {
+		color  = p.accent_hover,
+		border = {color = p.accent_hover, thickness = 1, radius = 6},
+		text   = make_text_style(p.bg_sunken, f.f_md),
+	})
 
-    accent_press := lui.create_style(ctx, {
-        color  = p.accent_press,
-        border = {color = p.accent_press, thickness = 1, radius = 6},
-        text   = make_text_style(p.bg_sunken, f.f_md),
-    })
+	accent_press := lui.create_style(ctx, {
+		color  = p.accent_press,
+		border = {color = p.accent_press, thickness = 1, radius = 6},
+		text   = make_text_style(p.bg_sunken, f.f_md),
+	})
 
-    text_md := lui.create_style(ctx, {color = 0, text = make_text_style(p.fg_primary, f.f_md)})
-    text_sm := lui.create_style(ctx, {color = 0, text = make_text_style(p.fg_secondary, f.f_sm)})
+	text_md := lui.create_style(ctx, {color = 0, text = make_text_style(p.fg_primary, f.f_md)})
+	text_sm := lui.create_style(ctx, {color = 0, text = make_text_style(p.fg_secondary, f.f_sm)})
 
-    track := lui.create_style(ctx, {color  = p.bg_sunken, border = {color = p.border_subtle, thickness = 1, radius = 999}})
-    track_fill := lui.create_style(ctx, {color  = p.accent, border = {color = p.border_subtle, thickness = 1, radius = 999}})
+	track := lui.create_style(ctx, {color  = p.bg_sunken, border = {color = p.border_subtle, thickness = 1, radius = 999}})
+	track_fill := lui.create_style(ctx, {color  = p.accent, border = {color = p.border_subtle, thickness = 1, radius = 999}})
 
-    thumb := lui.create_style(ctx, {color  = p.bg_base, border = {color = p.border_strong, thickness = 1, radius = 999}})
-    thumb_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_strong, thickness = 1, radius = 999}})
-    thumb_p := lui.create_style(ctx, {color = p.accent, border = {color = p.border_strong, thickness = 1, radius = 999}})
+	thumb := lui.create_style(ctx, {color  = p.bg_base, border = {color = p.border_strong, thickness = 1, radius = 999}})
+	thumb_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_strong, thickness = 1, radius = 999}})
+	thumb_p := lui.create_style(ctx, {color = p.accent, border = {color = p.border_strong, thickness = 1, radius = 999}})
 
-    text_box := lui.create_style(ctx, {
-        color  = p.bg_sunken,
-        border = {color = p.border_subtle, thickness = 1, radius = 6},
-        text = make_text_style(p.fg_primary, f.f_md),
-    })
+	text_box := lui.create_style(ctx, {
+		color  = p.bg_sunken,
+		border = {color = p.border_subtle, thickness = 1, radius = 6},
+		text = make_text_style(p.fg_primary, f.f_md, p.accent),
+	})
 
-    tooltip := lui.create_style(ctx, {
-        color  = p.bg_base,
-        border = {color = p.border_subtle, thickness = 1, radius = 6},
-        text   = make_text_style(p.fg_primary, f.f_sm),
-    })
+	tooltip := lui.create_style(ctx, {
+		color  = p.bg_base,
+		border = {color = p.border_subtle, thickness = 1, radius = 6},
+		text   = make_text_style(p.fg_primary, f.f_sm),
+	})
 
-    si :: proc(normal, hover, press: lui.Style_Index) -> Interaction_Style {
-        return {.Normal = normal, .Hover = hover, .Press = press}
-    }
+	si :: proc(normal, hover, press: lui.Style_Index) -> Interaction_Style {
+		return {.Normal = normal, .Hover = hover, .Press = press}
+	}
 
-    mini_button := lui.create_style(ctx, {color = p.bg_base, border = {radius = 4}, text = make_text_style(p.fg_primary, f.f_md)})
-    mini_button_h := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 4}, text = make_text_style(p.fg_primary, f.f_md)})
-    mini_button_p := lui.create_style(ctx, {color = p.accent, border = {radius = 4}, text = make_text_style(p.bg_base, f.f_md)})
+	mini_button := lui.create_style(ctx, {color = p.bg_base, border = {radius = 4}, text = make_text_style(p.fg_primary, f.f_md)})
+	mini_button_h := lui.create_style(ctx, {color = p.bg_elevated, border = {radius = 4}, text = make_text_style(p.fg_primary, f.f_md)})
+	mini_button_p := lui.create_style(ctx, {color = p.accent, border = {radius = 4}, text = make_text_style(p.bg_base, f.f_md)})
 
-    theme.mini_button.style = si(mini_button, mini_button_h, mini_button_p)
+	theme.mini_button.style = si(mini_button, mini_button_h, mini_button_p)
 
-    {
-	    body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {2, {0, 2}}, radius = {0, 0, 6, 6}}})
-	   	title_bar := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = {2, {2, 0}}, radius = {6, 6, 0, 0}}})
-	    title := lui.create_style(ctx, {text = make_text_style(p.fg_primary, f.f_md)})
+	{
+		body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {2, {0, 2}}, radius = {0, 0, 6, 6}}})
+		title_bar := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = {2, {2, 0}}, radius = {6, 6, 0, 0}}})
+		title := lui.create_style(ctx, {text = make_text_style(p.fg_primary, f.f_md)})
 
-	    inline_body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_strong, thickness = {{2, 0}, {0, 0}}}})
+		inline_body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_strong, thickness = {{2, 0}, {0, 0}}}})
 
 		scroll_track := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = {{1, 0}, 0}}})
 		scroll_thumb := lui.create_style(ctx, {color = p.accent, border = {radius = 999}})
 
-	   	theme.container.body = si(body, body, body)
-	   	theme.container.title = si(title, title, title)
-	   	theme.container.title_bar = si(title_bar, title_bar, title_bar)
+		theme.container.body = si(body, body, body)
+		theme.container.title = si(title, title, title)
+		theme.container.title_bar = si(title_bar, title_bar, title_bar)
 		theme.container.scroll_track = si(scroll_track, scroll_track, scroll_track)
 		theme.container.scroll_thumb = si(scroll_thumb, scroll_thumb, scroll_thumb)
 
 		theme.container.inline_title = si(title, title, title)
 		theme.container.inline_body = si(inline_body, inline_body, inline_body)
 
-	   	theme.container.collapsed_text   = lui.create_text(ctx, lui.text("▶", .None))
-	   	theme.container.uncollapsed_text = lui.create_text(ctx, lui.text("▼", .None))
-	   	theme.container.docked_text      = lui.create_text(ctx, lui.text("■", .None))
-	   	theme.container.undocked_text    = lui.create_text(ctx, lui.text("□", .None))
-	   	theme.container.resize_text      = lui.create_text(ctx, lui.text("󰑝", .None))
+		theme.container.collapsed_text   = lui.create_text(ctx, lui.text("▶", .None))
+		theme.container.uncollapsed_text = lui.create_text(ctx, lui.text("▼", .None))
+		theme.container.docked_text      = lui.create_text(ctx, lui.text("■", .None))
+		theme.container.undocked_text    = lui.create_text(ctx, lui.text("□", .None))
+		theme.container.resize_text      = lui.create_text(ctx, lui.text("󰑝", .None))
 		theme.container.scroll_thumb_width = 4
-    }
+	}
 
-    {
-        inc_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, radius = {0, 4, 4, 0}, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
-	    inc_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {0, 4, 4, 0}}, text = make_text_style(p.bg_elevated, f.f_md)})
-	    inc_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {0, 4, 4, 0}}, text = make_text_style(p.bg_elevated, f.f_md)})
+	{
+		inc_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, radius = {0, 4, 4, 0}, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
+		inc_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {0, 4, 4, 0}}, text = make_text_style(p.bg_elevated, f.f_md)})
+		inc_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {0, 4, 4, 0}}, text = make_text_style(p.bg_elevated, f.f_md)})
 
-        dec_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, radius = {4, 0, 0, 4}, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
-	    dec_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {4, 0, 0, 4}}, text = make_text_style(p.bg_elevated, f.f_md)})
-	    dec_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {4, 0, 0, 4}}, text = make_text_style(p.bg_elevated, f.f_md)})
+		dec_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, radius = {4, 0, 0, 4}, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
+		dec_h := lui.create_style(ctx, {color = p.accent_hover, border = {radius = {4, 0, 0, 4}}, text = make_text_style(p.bg_elevated, f.f_md)})
+		dec_p := lui.create_style(ctx, {color = p.accent_press, border = {radius = {4, 0, 0, 4}}, text = make_text_style(p.bg_elevated, f.f_md)})
 
-        theme.spinbox.inc = si(inc_n, inc_h, inc_p)
-        theme.spinbox.dec = si(dec_n, dec_h, dec_p)
-        theme.spinbox.input = si(text_box, text_box, text_box)
+		theme.spinbox.inc = si(inc_n, inc_h, inc_p)
+		theme.spinbox.dec = si(dec_n, dec_h, dec_p)
+		theme.spinbox.input = si(text_box, text_box, text_box)
 
-        theme.spinbox.inc_text = lui.create_text(ctx, lui.text(">", .None))
-        theme.spinbox.dec_text = lui.create_text(ctx, lui.text("<", .None))
-    }
+		theme.spinbox.inc_text = lui.create_text(ctx, lui.text(">", .None))
+		theme.spinbox.dec_text = lui.create_text(ctx, lui.text("<", .None))
+	}
 
-    theme.button.style = si(accent, accent_hover, accent_press)
+	theme.button.style = si(accent, accent_hover, accent_press)
 
-    theme.slider.thumb = si(thumb, thumb_h, thumb_p)
-    theme.slider.track = si(track, track, track)
-    theme.slider.track_fill = si(track_fill, track_fill, track_fill)
-    theme.slider.thumb_size = {14, 18}
-    theme.slider.track_height = 8
+	theme.slider.thumb = si(thumb, thumb_h, thumb_p)
+	theme.slider.track = si(track, track, track)
+	theme.slider.track_fill = si(track_fill, track_fill, track_fill)
+	theme.slider.thumb_size = {14, 18}
+	theme.slider.track_height = 8
 
-    theme.checkbox.size = {18, 18}
-    theme.checkbox.check_off = si(thumb, thumb_h, thumb_p)
-    theme.checkbox.check_on = si(thumb_p, thumb_p, thumb_p)
+	theme.checkbox.size = {18, 18}
+	theme.checkbox.check_off = si(thumb, thumb_h, thumb_p)
+	theme.checkbox.check_on = si(thumb_p, thumb_p, thumb_p)
 
-    theme.toggle.track_off = si(track, track, track)
-    theme.toggle.track_on = si(track_fill, track_fill, track_fill)
-    theme.toggle.thumb = si(thumb, thumb_h, thumb_p)
-    theme.toggle.size = {18, 18}
+	theme.toggle.track_off = si(track, track, track)
+	theme.toggle.track_on = si(track_fill, track_fill, track_fill)
+	theme.toggle.thumb = si(thumb, thumb_h, thumb_p)
+	theme.toggle.size = {18, 18}
 
-    theme.radio.size = {18, 18}
-    theme.radio.item_toggle_on = si(thumb_p, thumb_p, thumb_p)
-    theme.radio.item_toggle_off = si(thumb, thumb_h, thumb_p)
+	theme.radio.size = {18, 18}
+	theme.radio.item_toggle_on = si(thumb_p, thumb_p, thumb_p)
+	theme.radio.item_toggle_off = si(thumb, thumb_h, thumb_p)
 
-    {
-        dropdown_label := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1, radius = 6}, text = make_text_style(p.fg_primary, f.f_md)})
-        dropdown_label_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1, radius = 6}, text = make_text_style(p.fg_primary, f.f_md)})
-        dropdown_body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1, radius = 6}})
-        dropdown_item := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
-        dropdown_item_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
-        dropdown_item_p := lui.create_style(ctx, {color = p.accent, border = {color = p.border_subtle, thickness = 1}, text = make_text_style(p.bg_base, f.f_md)})
+	{
+		dropdown_label := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1, radius = 6}, text = make_text_style(p.fg_primary, f.f_md)})
+		dropdown_label_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1, radius = 6}, text = make_text_style(p.fg_primary, f.f_md)})
+		dropdown_body := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1, radius = 6}})
+		dropdown_item := lui.create_style(ctx, {color = p.bg_base, border = {color = p.border_subtle, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
+		dropdown_item_h := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1}, text = make_text_style(p.fg_primary, f.f_md)})
+		dropdown_item_p := lui.create_style(ctx, {color = p.accent, border = {color = p.border_subtle, thickness = 1}, text = make_text_style(p.bg_base, f.f_md)})
 
-	    theme.dropdown.label = si(dropdown_label, dropdown_label_h, dropdown_label_h)
-	    theme.dropdown.body = si(dropdown_body, dropdown_body, dropdown_body)
-	    theme.dropdown.item_on = si(dropdown_item_p, dropdown_item_p, dropdown_item_p)
-	    theme.dropdown.item_off = si(dropdown_item, dropdown_item_h, dropdown_item_p)
-    }
+		theme.dropdown.label = si(dropdown_label, dropdown_label_h, dropdown_label_h)
+		theme.dropdown.body = si(dropdown_body, dropdown_body, dropdown_body)
+		theme.dropdown.item_on = si(dropdown_item_p, dropdown_item_p, dropdown_item_p)
+		theme.dropdown.item_off = si(dropdown_item, dropdown_item_h, dropdown_item_p)
+	}
 
-    {
-    	drag_area_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1}})
-     	drag_area_p := lui.create_style(ctx, {color = p.accent_press, border = {color = p.border_subtle, thickness = 1}})
-      	drag_indicator := lui.create_style(ctx, {color = p.success})
+	{
+		drag_area_n := lui.create_style(ctx, {color = p.bg_elevated, border = {color = p.border_subtle, thickness = 1}})
+		drag_area_p := lui.create_style(ctx, {color = p.accent_press, border = {color = p.border_subtle, thickness = 1}})
+		drag_indicator := lui.create_style(ctx, {color = p.success})
 
-      	theme.drag.area = si(drag_area_n, drag_area_n, drag_area_p)
-     	theme.drag.indicator = si(drag_indicator, drag_indicator, drag_indicator)
-      	theme.drag.indicator_size = {4, 4}
-     	theme.drag.area_size = {48, 48}
-    }
+		theme.drag.area = si(drag_area_n, drag_area_n, drag_area_p)
+		theme.drag.indicator = si(drag_indicator, drag_indicator, drag_indicator)
+		theme.drag.indicator_size = {4, 4}
+		theme.drag.area_size = {48, 48}
+	}
 
-    theme.label.md = si(text_md, text_md, text_md)
-    theme.label.sm = si(text_sm, text_sm, text_sm)
+	theme.label.md = si(text_md, text_md, text_md)
+	theme.label.sm = si(text_sm, text_sm, text_sm)
 
-    theme.progress_bar.track = si(track, track, track)
-    theme.progress_bar.fill = si(track_fill, track_fill, track_fill)
-    theme.progress_bar.track_height = 8
+	theme.progress_bar.track = si(track, track, track)
+	theme.progress_bar.fill = si(track_fill, track_fill, track_fill)
+	theme.progress_bar.track_height = 8
 
-    theme.text_box.style = si(text_box, text_box, text_box)
-    theme.tooltip.style = si(tooltip, tooltip, tooltip)
+	theme.text_box.style = si(text_box, text_box, text_box)
+	theme.tooltip.style = si(tooltip, tooltip, tooltip)
 
-    theme._debug_focus_style = lui.create_style(ctx, {border = {color = p.warning, radius = 0, thickness = 4}, color = p.success, text = make_text_style(p.fg_primary, f.f_md)})
+	theme._debug_focus_style = lui.create_style(ctx, {border = {color = p.warning, radius = 0, thickness = 4}, color = p.success, text = make_text_style(p.fg_primary, f.f_md)})
 
-    anim := lui.ANIM_COLOR
-    anim.on_destroyed = proc(info: lui.Widget_Info, style: lui.Style, text_position: lui.Vec2f32) -> (end: lui.Animation_Data) {
-        return {}
-    }
+	anim := lui.ANIM_COLOR
+	anim.on_destroyed = proc(info: lui.Widget_Info, style: lui.Style, text_position: lui.Vec2f32) -> (end: lui.Animation_Data) {
+		return {}
+	}
 
-    theme.control_animation = lui.create_animation(ctx, anim, duration = time.Millisecond * 1)
+	theme.control_animation = lui.create_animation(ctx, anim, duration = time.Millisecond * 1)
 
-    theme.binded_text = lui.create_text(ctx, lui.text(" ", .None))
-    theme.unbinded_text = lui.create_text(ctx, lui.text(" ", .None))
+	theme.binded_text = lui.create_text(ctx, lui.text(" ", .None))
+	theme.unbinded_text = lui.create_text(ctx, lui.text(" ", .None))
 }
 
 init_state :: proc(allocator := context.allocator) {
@@ -653,10 +657,16 @@ init_state :: proc(allocator := context.allocator) {
 	state.dropdown_state = make(map[lui.Hash]Dropdown_State, allocator)
 	state.radio_state = make(map[lui.Hash]Radio_State, allocator)
 	state.display_struct_slider_bind = make(map[lui.Hash]bool, allocator)
+	state.input_state = make(map[lui.Hash]struct{builder: strings.Builder, edit_state: edit.State}, allocator)
 }
 
 deinit_state :: proc() {
 	delete(state.container_stack)
+	for k, &v in state.input_state {
+		delete(v.builder.buf)
+		edit.destroy(&v.edit_state)
+	}
+	delete(state.input_state)
 	delete(state.container_state)
 	delete(state.dropdown_state)
 	delete(state.radio_state)
@@ -665,8 +675,8 @@ deinit_state :: proc() {
 
 resolve_style :: proc(ctx: ^lui.Core_Context, info: lui.Widget_Info, style: Interaction_Style) -> lui.Style_Index {
 	if lui.is_widget_active(ctx, info) { return style[.Press]}
-    if lui.is_widget_hovered(ctx, info)  { return style[.Hover]}
-    return style[.Normal]
+	if lui.is_widget_hovered(ctx, info)  { return style[.Hover]}
+	return style[.Normal]
 }
 
 container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string) -> bool {
@@ -784,7 +794,7 @@ end_container :: proc(ctx: ^lui.Core_Context) {
 		cont_state.size += ctx.mouse.delta
 	} else {
 		cont_state.size.x = max(cont_state.size.x, cont.rect.size.x)
-	 	cont_state.size.y = max(cont_state.size.y, cont.rect.size.y)
+		cont_state.size.y = max(cont_state.size.y, cont.rect.size.y)
 	}
 
 	resizewf := lui.Form{}
@@ -843,8 +853,8 @@ inline_container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: stri
 	lui.pop_parent(ctx)
 
 	if .Collapsed in cont_state.flags {
-	    lui.pop_parent(ctx)
-	    return false
+		lui.pop_parent(ctx)
+		return false
 	}
 
 	conti := lui.reserve_widget(ctx, "__internal_inline_cont_content_holder")
@@ -862,8 +872,8 @@ inline_container :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: stri
 }
 
 end_inline_container :: proc(ctx: ^lui.Core_Context) {
-    lui.pop_parent(ctx)
-    lui.pop_parent(ctx)
+	lui.pop_parent(ctx)
+	lui.pop_parent(ctx)
 }
 
 button :: proc(ctx: ^lui.Core_Context, key: lui.Key, label: string) -> (lui.Mouse_Events) {
@@ -932,7 +942,7 @@ checkbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, checkbox_label: string, s
 	events := lui.get_widget_mouse_events(ctx, checkc, .Left)
 	if .Clicked in events {
 		state^ = !state^
-	 	return true
+		return true
 	}
 
 	return false
@@ -990,111 +1000,111 @@ slider :: proc(ctx: ^lui.Core_Context, key: lui.Key, slider_label: string, value
 	{
 		t := clamp((value^ - min) / (max - min), 0, 1)
 
-	    track := lui.reserve_widget(ctx, "__internal_slider_track")
-	    track_events := lui.get_widget_mouse_events(ctx, track, .Left)
+		track := lui.reserve_widget(ctx, "__internal_slider_track")
+		track_events := lui.get_widget_mouse_events(ctx, track, .Left)
 
-	    usable_w := T(track.rect.size.x - theme.slider.thumb_size.x)
+		usable_w := T(track.rect.size.x - theme.slider.thumb_size.x)
 
-	    if .Pressed in track_events && usable_w > 0 {
-	        t = clamp(T(ctx.mouse.position.x - track.rect.position.x - theme.slider.thumb_size.x * 0.5) / usable_w, 0, 1)
-	        value^ = min + t * (max - min)
-	        changed = true
-	    }
+		if .Pressed in track_events && usable_w > 0 {
+			t = clamp(T(ctx.mouse.position.x - track.rect.position.x - theme.slider.thumb_size.x * 0.5) / usable_w, 0, 1)
+			value^ = min + t * (max - min)
+			changed = true
+		}
 
-	    trackf := lui.Form{}
-	    trackf.layout.sizing = {lui.grow(), lui.fixed(theme.slider.track_height)}
-	    trackf.layout.placement = {.Negative, .Center}
-	    trackf.style = resolve_style(ctx, track, theme.slider.track)
-	    lui.submit_widget(ctx, track, trackf)
+		trackf := lui.Form{}
+		trackf.layout.sizing = {lui.grow(), lui.fixed(theme.slider.track_height)}
+		trackf.layout.placement = {.Negative, .Center}
+		trackf.style = resolve_style(ctx, track, theme.slider.track)
+		lui.submit_widget(ctx, track, trackf)
 
-	    lui.push_parent(ctx, track)
+		lui.push_parent(ctx, track)
 
-	    fill  := lui.reserve_widget(ctx, "__internal_slider_fill")
-	    fillf := lui.Form{}
-	    fillf.event_flags = {.Disable_Hover}
-	    fillf.layout.sizing = {lui.percent(f32(t) * (f32(usable_w) / track.rect.size.x)), lui.fixed(theme.slider.track_height)}
-	    fillf.layout.placement = {.Negative, .Center}
-	    fillf.style = resolve_style(ctx, track, theme.slider.track_fill)
-	    fillf.animation = theme.control_animation
-	    lui.submit_widget(ctx, fill, fillf)
+		fill  := lui.reserve_widget(ctx, "__internal_slider_fill")
+		fillf := lui.Form{}
+		fillf.event_flags = {.Disable_Hover}
+		fillf.layout.sizing = {lui.percent(f32(t) * (f32(usable_w) / track.rect.size.x)), lui.fixed(theme.slider.track_height)}
+		fillf.layout.placement = {.Negative, .Center}
+		fillf.style = resolve_style(ctx, track, theme.slider.track_fill)
+		fillf.animation = theme.control_animation
+		lui.submit_widget(ctx, fill, fillf)
 
-	    control := lui.reserve_widget(ctx, "__internal_slider_control")
+		control := lui.reserve_widget(ctx, "__internal_slider_control")
 
-	    if lui.is_widget_active(ctx, control) && usable_w > 0 {
-	        t = clamp(t + T(ctx.mouse.delta.x) / usable_w, 0, 1)
-	        value^ = min + t * (max - min)
-	        changed = true
-	    }
+		if lui.is_widget_active(ctx, control) && usable_w > 0 {
+			t = clamp(t + T(ctx.mouse.delta.x) / usable_w, 0, 1)
+			value^ = min + t * (max - min)
+			changed = true
+		}
 
-	    controlf := lui.Form{}
-	    controlf.event_flags = {.Lock_Active, .Lock_Hover}
-	    controlf.layout.sizing = {lui.fixed(theme.slider.thumb_size.x), lui.fixed(theme.slider.thumb_size.y)}
-	    controlf.style = resolve_style(ctx, control, theme.slider.thumb)
-	    controlf.animation = theme.control_animation
-	    lui.submit_widget(ctx, control, controlf)
+		controlf := lui.Form{}
+		controlf.event_flags = {.Lock_Active, .Lock_Hover}
+		controlf.layout.sizing = {lui.fixed(theme.slider.thumb_size.x), lui.fixed(theme.slider.thumb_size.y)}
+		controlf.style = resolve_style(ctx, control, theme.slider.thumb)
+		controlf.animation = theme.control_animation
+		lui.submit_widget(ctx, control, controlf)
 
 		lui.push_parent(ctx, control)
 		tooltip(ctx, "__internal_slider_thumb_tooltip", control, fmt.aprintf("%0.2f", value^, allocator = temp_alloc))
 		lui.pop_parent(ctx)
 
-	    lui.pop_parent(ctx)
+		lui.pop_parent(ctx)
 	}
 
 	lui.pop_parent(ctx)
 
-    return changed
+	return changed
 }
 
 spinbox :: proc(ctx: ^lui.Core_Context, key: lui.Key, spinbox_label: string, value: ^$T, min, max: T, step: T, temp_alloc := context.temp_allocator) -> bool where intrinsics.type_is_integer(T) {
-    cont := lui.reserve_widget(ctx, key)
-    contf := lui.Form{}
-    contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
-    contf.layout.child_gap = theme.spacing.sm
-    contf.layout.placement = {.Negative, .Center}
-    lui.submit_widget(ctx, cont, contf)
+	cont := lui.reserve_widget(ctx, key)
+	contf := lui.Form{}
+	contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
+	contf.layout.child_gap = theme.spacing.sm
+	contf.layout.placement = {.Negative, .Center}
+	lui.submit_widget(ctx, cont, contf)
 
-    lui.push_parent(ctx, cont)
+	lui.push_parent(ctx, cont)
 
-    label(ctx, "__internal_spinbox_label", spinbox_label)
+	label(ctx, "__internal_spinbox_label", spinbox_label)
 
-    changed := false
+	changed := false
 
-    button_dec := lui.reserve_widget(ctx, "__internal_spinbox_decrement")
-    button_decf := lui.Form{}
-    button_decf.layout.sizing = {lui.fit(), lui.fit()}
-    button_decf.layout.padding = theme.spacing.sm
-    button_decf.text = theme.spinbox.dec_text
-    button_decf.style = resolve_style(ctx, button_dec, theme.spinbox.dec)
-    lui.submit_widget(ctx, button_dec, button_decf)
+	button_dec := lui.reserve_widget(ctx, "__internal_spinbox_decrement")
+	button_decf := lui.Form{}
+	button_decf.layout.sizing = {lui.fit(), lui.fit()}
+	button_decf.layout.padding = theme.spacing.sm
+	button_decf.text = theme.spinbox.dec_text
+	button_decf.style = resolve_style(ctx, button_dec, theme.spinbox.dec)
+	lui.submit_widget(ctx, button_dec, button_decf)
 
-    input := lui.reserve_widget(ctx, "__internal_spinbox_val")
-    inputf := lui.Form{}
-    inputf.layout.sizing = {lui.fit(), lui.fit()}
-    inputf.layout.placement = {.Center, .Center}
-    inputf.layout.padding = {theme.spacing.lg, theme.spacing.sm}
-    inputf.text = lui.create_text(ctx, lui.text(fmt.aprintf("%v", value^, allocator = temp_alloc), .None))
-    inputf.style = resolve_style(ctx, input, theme.spinbox.input)
-    lui.submit_widget(ctx, input, inputf)
+	input := lui.reserve_widget(ctx, "__internal_spinbox_val")
+	inputf := lui.Form{}
+	inputf.layout.sizing = {lui.fit(), lui.fit()}
+	inputf.layout.placement = {.Center, .Center}
+	inputf.layout.padding = {theme.spacing.lg, theme.spacing.sm}
+	inputf.text = lui.create_text(ctx, lui.text(fmt.aprintf("%v", value^, allocator = temp_alloc), .None))
+	inputf.style = resolve_style(ctx, input, theme.spinbox.input)
+	lui.submit_widget(ctx, input, inputf)
 
-    button_inc := lui.reserve_widget(ctx, "__internal_spinbox_increment")
-    button_incf := lui.Form{}
-    button_incf.layout.sizing = {lui.fit(), lui.fit()}
-    button_incf.layout.padding = theme.spacing.sm
-    button_incf.text = theme.spinbox.inc_text
-    button_incf.style = resolve_style(ctx, button_inc, theme.spinbox.inc)
-    lui.submit_widget(ctx, button_inc, button_incf)
+	button_inc := lui.reserve_widget(ctx, "__internal_spinbox_increment")
+	button_incf := lui.Form{}
+	button_incf.layout.sizing = {lui.fit(), lui.fit()}
+	button_incf.layout.padding = theme.spacing.sm
+	button_incf.text = theme.spinbox.inc_text
+	button_incf.style = resolve_style(ctx, button_inc, theme.spinbox.inc)
+	lui.submit_widget(ctx, button_inc, button_incf)
 
-    event_dec := lui.get_widget_mouse_events(ctx, button_dec, .Left)
-    event_inc := lui.get_widget_mouse_events(ctx, button_inc, .Left)
+	event_dec := lui.get_widget_mouse_events(ctx, button_dec, .Left)
+	event_inc := lui.get_widget_mouse_events(ctx, button_inc, .Left)
 
-    if .Clicked in event_dec || (.Long_Down in event_dec && .Repeat in event_dec) { value^ -= step }
-    if .Clicked in event_inc || (.Long_Down in event_inc && .Repeat in event_inc) { value^ += step }
+	if .Clicked in event_dec || (.Long_Down in event_dec && .Repeat in event_dec) { value^ -= step }
+	if .Clicked in event_inc || (.Long_Down in event_inc && .Repeat in event_inc) { value^ += step }
 
-    value^ = clamp(value^, min, max)
+	value^ = clamp(value^, min, max)
 
-    lui.pop_parent(ctx)
+	lui.pop_parent(ctx)
 
-    return changed
+	return changed
 }
 
 progress_bar :: proc(ctx: ^lui.Core_Context, key: lui.Key, progress_label: string, value: f32, min: f32 = 0, max: f32 = 1) {
@@ -1146,6 +1156,7 @@ text_box :: proc(ctx: ^lui.Core_Context, key: lui.Key, text: string, wrap: lui.T
 
 	if .Pressed in events {
 		lui.set_selection_anchor(ctx, contf.selection, ctx.mouse.hovered_character_index)
+		lui.set_selection_cursor(ctx, contf.selection, ctx.mouse.hovered_character_index)
 	}
 	if .Down in events {
 		lui.set_selection_cursor(ctx, contf.selection, ctx.mouse.hovered_character_index)
@@ -1154,28 +1165,141 @@ text_box :: proc(ctx: ^lui.Core_Context, key: lui.Key, text: string, wrap: lui.T
 	lui.submit_widget(ctx, cont, contf)
 }
 
-tooltip :: proc(ctx: ^lui.Core_Context, key: lui.Key, parent: lui.Widget_Info, tooltip_label: string) {
-    if !lui.is_widget_hovered(ctx, parent) do return
-    cont := lui.reserve_widget(ctx, key)
-    contf := lui.Form{}
-    contf.layout.sizing = {lui.fit(), lui.fit()}
-    contf.layout.placement = {.Center, .Center}
-    contf.layout.padding = theme.spacing.md
-    contf.layout.flags = {{.No_Positioning_Relative, .No_Size_Propagation}, {.No_Positioning_Relative, .No_Size_Propagation}}
-    contf.event_flags = {.Disable_Hover}
-    contf.text = lui.create_text(ctx, lui.text(tooltip_label, .None))
-    contf.style = resolve_style(ctx, cont, theme.tooltip.style)
-    contf.animation = theme.control_animation
-    contf.z_offset = 5000
+input_box :: proc(ctx: ^lui.Core_Context, key: lui.Key, wrap: lui.Text_Wrap_Mode = .Words, input_alloc := context.allocator) -> (gain_focus, lose_focus: bool){
+	cont := lui.reserve_widget(ctx, key)
+	contf := lui.Form{}
 
-    tw := cont.rect.size.x
-    th := cont.rect.size.y
-    px := parent.rect.position.x
-    py := parent.rect.position.y
-    pw := parent.rect.size.x
-    ph := parent.rect.size.y
-    ww := ctx.window_size.x
-    wh := ctx.window_size.y
+	es, ok := &state.input_state[cont.hash]
+	if !ok {
+		state.input_state[cont.hash] = {}
+		es = &state.input_state[cont.hash]
+		es.builder = strings.builder_init_none(&es.builder, input_alloc)^
+		edit.setup_once(&es.edit_state, &es.builder)
+	}
+
+	es.edit_state.builder = &es.builder
+
+	contf.layout.sizing = lui.sizing(lui.grow(), lui.fit())
+	contf.layout.padding = theme.spacing.md
+	contf.text = lui.create_text(ctx, lui.text(strings.to_string(es.builder), wrap))
+	contf.style = resolve_style(ctx, cont, theme.text_box.style)
+	contf.selection = lui.create_selection(ctx, lui.selection(cont.hash))
+	events := lui.get_widget_mouse_events(ctx, cont, .Left)
+
+	if .Clicked in events {
+		lui.focus_set(ctx, cont)
+		lui.set_selection(ctx, contf.selection, 0, 0)
+		gain_focus = true
+	}
+
+	if lui.is_widget_focused(ctx, cont) {
+		if .Pressed in events {
+			lui.set_selection_anchor(ctx, contf.selection, ctx.mouse.hovered_character_index)
+			lui.set_selection_cursor(ctx, contf.selection, ctx.mouse.hovered_character_index)
+		}
+		if .Down in events {
+			lui.set_selection_cursor(ctx, contf.selection, ctx.mouse.hovered_character_index)
+		} else {
+			kevents := lui.get_widget_keyboard_events_all(ctx, cont)
+
+			lui.set_selection(ctx, contf.selection, i32(es.edit_state.selection.x), i32(es.edit_state.selection.y))
+
+			if len(ctx.keyboard.input) != 0 {
+				edit.input_runes(&es.edit_state, ctx.keyboard.input)
+			}
+
+			control := lui.is_keyboard_mod_control(ctx)
+			shift := lui.is_keyboard_mod_shift(ctx)
+
+			for event, key in kevents {
+				if .Pressed not_in event && .Repeat not_in event { continue }
+				#partial switch key {
+				case .Left:
+					cmd: edit.Command
+					switch {
+					case shift && control: cmd = .Select_Word_Left
+					case shift:            cmd = .Select_Left
+					case control:          cmd = .Word_Left
+					case:                  cmd = .Left
+					}
+					edit.perform_command(&es.edit_state, cmd)
+				case .Right:
+					cmd: edit.Command
+					switch {
+					case shift && control: cmd = .Select_Word_Right
+					case shift:            cmd = .Select_Right
+					case control:          cmd = .Word_Right
+					case:                  cmd = .Right
+					}
+					edit.perform_command(&es.edit_state, cmd)
+				case .Up:
+					edit.perform_command(&es.edit_state, .Select_Up if shift else .Up)
+				case .Down:
+					edit.perform_command(&es.edit_state, .Select_Down if shift else .Down)
+				case .Home:
+					cmd: edit.Command
+					switch {
+					case shift && control: cmd = .Select_Start
+					case shift:            cmd = .Select_Line_Start
+					case control:          cmd = .Start
+					case:                  cmd = .Line_Start
+					}
+					edit.perform_command(&es.edit_state, cmd)
+				case .End:
+					cmd: edit.Command
+					switch {
+					case shift && control: cmd = .Select_End
+					case shift:            cmd = .Select_Line_End
+					case control:          cmd = .End
+					case:                  cmd = .Line_End
+					}
+					edit.perform_command(&es.edit_state, cmd)
+				case .Backspace:
+					edit.perform_command(&es.edit_state, .Delete_Word_Left if control else .Backspace)
+				case .Delete:
+					edit.perform_command(&es.edit_state, .Delete_Word_Right if control else .Delete)
+				case .Return, .Num_Return:
+					edit.perform_command(&es.edit_state, .New_Line)
+				case .A:
+					if control do edit.perform_command(&es.edit_state, .Select_All)
+				case .Z:
+					if control do edit.perform_command(&es.edit_state, .Redo if shift else .Undo)
+				case .Y:
+					if control do edit.perform_command(&es.edit_state, .Redo)
+				case .Escape:
+					lose_focus = true
+					lui.focus_clear(ctx)
+				}
+			}
+		}
+	}
+
+	lui.submit_widget(ctx, cont, contf)
+	return gain_focus, lose_focus
+}
+
+tooltip :: proc(ctx: ^lui.Core_Context, key: lui.Key, parent: lui.Widget_Info, tooltip_label: string) {
+	if !lui.is_widget_hovered(ctx, parent) do return
+	cont := lui.reserve_widget(ctx, key)
+	contf := lui.Form{}
+	contf.layout.sizing = {lui.fit(), lui.fit()}
+	contf.layout.placement = {.Center, .Center}
+	contf.layout.padding = theme.spacing.md
+	contf.layout.flags = {{.No_Positioning_Relative, .No_Size_Propagation}, {.No_Positioning_Relative, .No_Size_Propagation}}
+	contf.event_flags = {.Disable_Hover}
+	contf.text = lui.create_text(ctx, lui.text(tooltip_label, .None))
+	contf.style = resolve_style(ctx, cont, theme.tooltip.style)
+	contf.animation = theme.control_animation
+	contf.z_offset = 5000
+
+	tw := cont.rect.size.x
+	th := cont.rect.size.y
+	px := parent.rect.position.x
+	py := parent.rect.position.y
+	pw := parent.rect.size.x
+	ph := parent.rect.size.y
+	ww := ctx.window_size.x
+	wh := ctx.window_size.y
 
 	m  := theme.spacing.sm
 	x_off := clamp(px + pw*0.5 - tw*0.5, m, ww - tw - m) - (px + pw*0.5)
@@ -1324,35 +1448,35 @@ dropdown_item :: proc(ctx: ^lui.Core_Context, item_label: string) -> bool {
 }
 
 stack_grow :: proc(ctx: ^lui.Core_Context, key: lui.Key, stack_label: string, direction := lui.Axis.X, placement := [2]lui.Placement{.Center, .Center}) -> lui.Hash {
-    cont := lui.reserve_widget(ctx, key)
-    contf := lui.Form{}
-    contf.layout.sizing = {lui.grow(), lui.grow()}
-    contf.layout.direction = direction
-    contf.layout.placement = placement
-    contf.layout.child_gap = theme.spacing.sm
-    lui.submit_widget(ctx, cont, contf)
-    lui.push_parent(ctx, cont)
+	cont := lui.reserve_widget(ctx, key)
+	contf := lui.Form{}
+	contf.layout.sizing = {lui.grow(), lui.grow()}
+	contf.layout.direction = direction
+	contf.layout.placement = placement
+	contf.layout.child_gap = theme.spacing.sm
+	lui.submit_widget(ctx, cont, contf)
+	lui.push_parent(ctx, cont)
 
-    label(ctx, "__internal_stack_label", stack_label)
-    return cont.hash
+	label(ctx, "__internal_stack_label", stack_label)
+	return cont.hash
 }
 
 stack_fit :: proc(ctx: ^lui.Core_Context, key: lui.Key, stack_label: string, direction := lui.Axis.X, placement := [2]lui.Placement{.Center, .Center}) -> lui.Hash {
-    cont := lui.reserve_widget(ctx, key)
-    contf := lui.Form{}
-    contf.layout.sizing = {lui.fit(), lui.fit()}
-    contf.layout.direction = direction
-    contf.layout.placement = placement
-    contf.layout.child_gap = theme.spacing.sm
-    lui.submit_widget(ctx, cont, contf)
-    lui.push_parent(ctx, cont)
+	cont := lui.reserve_widget(ctx, key)
+	contf := lui.Form{}
+	contf.layout.sizing = {lui.fit(), lui.fit()}
+	contf.layout.direction = direction
+	contf.layout.placement = placement
+	contf.layout.child_gap = theme.spacing.sm
+	lui.submit_widget(ctx, cont, contf)
+	lui.push_parent(ctx, cont)
 
-    label(ctx, "__internal_stack_label", stack_label)
-    return cont.hash
+	label(ctx, "__internal_stack_label", stack_label)
+	return cont.hash
 }
 
 end_stack :: proc(ctx: ^lui.Core_Context) {
-    lui.pop_parent(ctx)
+	lui.pop_parent(ctx)
 }
 
 mouse_indicator :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string, temp_alloc := context.temp_allocator) -> (draging: bool) {
@@ -1421,29 +1545,29 @@ track_region :: proc(ctx: ^lui.Core_Context, key: lui.Key, drag_label: string, v
 }
 
 color_rect :: proc(ctx: ^lui.Core_Context, key: lui.Key, color: lui.Color, temp_alloc := context.temp_allocator) {
-    cont := lui.reserve_widget(ctx, key)
-    contf := lui.Form{}
-    contf.layout.sizing = {lui.fixed(theme.spacing.lg), lui.fixed(theme.spacing.lg)}
-    contf.style = lui.create_style(ctx, {color = color})
-    lui.submit_widget(ctx, cont, contf)
-    lui.push_parent(ctx, cont)
-    color_label := fmt.aprintf("Hex:#%X%X%X%X RGBA:%i %i %i %i", u8(color.r), u8(color.g), u8(color.b), u8(color.a), u8(color.r), u8(color.g), u8(color.b), u8(color.a), allocator = temp_alloc)
-    tooltip(ctx, "__internal_color_rect_tooltip", cont, color_label)
-    lui.pop_parent(ctx)
+	cont := lui.reserve_widget(ctx, key)
+	contf := lui.Form{}
+	contf.layout.sizing = {lui.fixed(theme.spacing.lg), lui.fixed(theme.spacing.lg)}
+	contf.style = lui.create_style(ctx, {color = color})
+	lui.submit_widget(ctx, cont, contf)
+	lui.push_parent(ctx, cont)
+	color_label := fmt.aprintf("Hex:#%X%X%X%X RGBA:%i %i %i %i", u8(color.r), u8(color.g), u8(color.b), u8(color.a), u8(color.r), u8(color.g), u8(color.b), u8(color.a), allocator = temp_alloc)
+	tooltip(ctx, "__internal_color_rect_tooltip", cont, color_label)
+	lui.pop_parent(ctx)
 }
 
 display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string, value: any, temp_alloc := context.temp_allocator) {
-    display_others :: proc(ctx: ^lui.Core_Context, type: string, info: ^runtime.Type_Info, field: reflect.Struct_Field, value: any, temp_alloc := context.temp_allocator) {
-    	tag_value := reflect.struct_tag_get(field.tag, "lui")
+	display_others :: proc(ctx: ^lui.Core_Context, type: string, info: ^runtime.Type_Info, field: reflect.Struct_Field, value: any, temp_alloc := context.temp_allocator) {
+		tag_value := reflect.struct_tag_get(field.tag, "lui")
 
-     	#partial switch v in info.variant {
+		#partial switch v in info.variant {
 		case runtime.Type_Info_Named:
-		    display_others(ctx, v.name, v.base, field, value, temp_alloc)
+			display_others(ctx, v.name, v.base, field, value, temp_alloc)
 		case runtime.Type_Info_Struct:
-		    name := fmt.aprintf("Struct|%s|%s", type, field.name, allocator = temp_alloc)
+			name := fmt.aprintf("Struct|%s|%s", type, field.name, allocator = temp_alloc)
 			display_struct(ctx, name, name, value)
 		case runtime.Type_Info_Enum:
-		    name := fmt.aprintf("Enum|%s|%s", type, field.name, allocator = temp_alloc)
+			name := fmt.aprintf("Enum|%s|%s", type, field.name, allocator = temp_alloc)
 			ok := false
 			for attr in strings.split_iterator(&tag_value, ",") {
 				if attr == "dropdown" {
@@ -1473,13 +1597,13 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 		case runtime.Type_Info_Array:
 			if v.count <= 4 && v.elem.id == f32 {
 
-			    labels := [4]string{"x", "y", "z", "w"}
+				labels := [4]string{"x", "y", "z", "w"}
 				direction := lui.Axis.X
 				min := f32(0)
 				max := f32(1)
 				add_color_rect := false
 				has_bind_state := false
- 				for attr in strings.split_iterator(&tag_value, ",") {
+				for attr in strings.split_iterator(&tag_value, ",") {
 					if attr == "row" { direction = .X }
 					if attr == "column" { direction = .Y }
 					if attr == "color" { add_color_rect = true }
@@ -1500,11 +1624,11 @@ display_struct :: proc(ctx: ^lui.Core_Context, key: lui.Key, title_label: string
 
 				val := f32(0)
 				modif := false
- 			    for i in 0..<v.count {
-   					if slider(ctx, fmt.aprint(name, labels[i], allocator = temp_alloc), labels[i], (&([^]f32)(value.data)[i]), min, max) {
-        				val = ([^]f32)(value.data)[i]
-            			modif = true
-        			}
+				for i in 0..<v.count {
+					if slider(ctx, fmt.aprint(name, labels[i], allocator = temp_alloc), labels[i], (&([^]f32)(value.data)[i]), min, max) {
+						val = ([^]f32)(value.data)[i]
+						modif = true
+					}
 				}
 
 				if binded && modif {
