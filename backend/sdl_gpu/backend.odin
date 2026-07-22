@@ -41,6 +41,7 @@ Backend_Context :: struct {
 	gpu:                 ^sdl.GPUDevice,
 	window:              ^sdl.Window,
 	font_engine:         ^ttf.TextEngine,
+	texture_format:      sdl.GPUTextureFormat,
 	font_sampler:        ^sdl.GPUSampler,
 	dummy_texture:       ^sdl.GPUTexture,
 	pipeline:            ^sdl.GPUGraphicsPipeline,
@@ -60,7 +61,7 @@ Backend_Context :: struct {
 vert_shader_source := #load("./shaders/compiled/main.vert.sprv")
 frag_shader_source := #load("./shaders/compiled/main.frag.sprv")
 
-init :: proc(window: ^sdl.Window, gpu: ^sdl.GPUDevice, allocator: runtime.Allocator) -> Backend_Context {
+init :: proc(window: ^sdl.Window, gpu: ^sdl.GPUDevice, render_format: sdl.GPUTextureFormat, allocator: runtime.Allocator) -> Backend_Context {
 	vert_shader := load_shader(gpu, vert_shader_source, .VERTEX, {.SPIRV}, 1, 0, 1)
 	frag_shader := load_shader(gpu, frag_shader_source, .FRAGMENT, {.SPIRV}, 0, 1, 2)
 	pipeline := sdl.CreateGPUGraphicsPipeline(
@@ -71,7 +72,7 @@ init :: proc(window: ^sdl.Window, gpu: ^sdl.GPUDevice, allocator: runtime.Alloca
 			target_info = {
 				num_color_targets = 1,
 				color_target_descriptions = &sdl.GPUColorTargetDescription {
-					format = .R8G8B8A8_UNORM,
+					format = render_format,
 					blend_state = {
 						alpha_blend_op = .ADD,
 						src_alpha_blendfactor = .ONE,
@@ -108,8 +109,8 @@ init :: proc(window: ^sdl.Window, gpu: ^sdl.GPUDevice, allocator: runtime.Alloca
 	backend_ctx.render_commands_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.clip_buf = init_gpu_dynamic_buffer(&backend_ctx)
 	backend_ctx.clip_idx_buf = init_gpu_dynamic_buffer(&backend_ctx)
-	backend_ctx.dummy_texture = sdl.CreateGPUTexture(gpu, {height = 1, width = 1, format = .R8G8B8A8_UNORM, usage = {.SAMPLER}, layer_count_or_depth = 1, num_levels = 1})
-	backend_ctx.render_texture = sdl.CreateGPUTexture(gpu, {width = u32(window_width), height = u32(window_height), format = .R8G8B8A8_UNORM, usage = {.COLOR_TARGET, .SAMPLER}, layer_count_or_depth = 1, num_levels = 1, type = .D2})
+	backend_ctx.dummy_texture = sdl.CreateGPUTexture(gpu, {height = 1, width = 1, format = render_format, usage = {.SAMPLER}, layer_count_or_depth = 1, num_levels = 1})
+	backend_ctx.render_texture = sdl.CreateGPUTexture(gpu, {width = u32(window_width), height = u32(window_height), format = render_format, usage = {.COLOR_TARGET, .SAMPLER}, layer_count_or_depth = 1, num_levels = 1, type = .D2})
 
 	assert(ttf.Init())
 	backend_ctx.font_sampler = sdl.CreateGPUSampler(
@@ -117,6 +118,8 @@ init :: proc(window: ^sdl.Window, gpu: ^sdl.GPUDevice, allocator: runtime.Alloca
 		{address_mode_u = .REPEAT, address_mode_v = .REPEAT, address_mode_w = .REPEAT, mag_filter = .LINEAR, min_filter = .LINEAR, mipmap_mode = .LINEAR},
 	)
 	backend_ctx.font_engine = ttf.CreateGPUTextEngine(backend_ctx.gpu)
+
+	backend_ctx.texture_format = render_format
 
 	return backend_ctx
 }
@@ -202,7 +205,7 @@ update_dynamic_buffer :: proc(backend_ctx: ^Backend_Context, buf: ^Gpu_Dynamic_B
 
 resize_target :: proc(backend_ctx: ^Backend_Context, width: u32, height: u32) {
 	sdl.ReleaseGPUTexture(backend_ctx.gpu, backend_ctx.render_texture)
-	backend_ctx.render_texture = sdl.CreateGPUTexture(backend_ctx.gpu, {width = width, height = height, format = .R8G8B8A8_UNORM, usage = {.COLOR_TARGET, .SAMPLER}, layer_count_or_depth = 1, num_levels = 1, type = .D2})
+	backend_ctx.render_texture = sdl.CreateGPUTexture(backend_ctx.gpu, {width = width, height = height, format = backend_ctx.texture_format, usage = {.COLOR_TARGET, .SAMPLER}, layer_count_or_depth = 1, num_levels = 1, type = .D2})
 	assert(sdl.WaitForGPUIdle(backend_ctx.gpu))
 }
 
